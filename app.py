@@ -27,6 +27,19 @@ SECCIONES = [
     ("inventario", "Inventario y Recurso de Información"),
 ]
 
+SECCIONES_INDICADORES = [
+    ("pnd", "Plan Nacional de Desarrollo"),
+    ("kpi-estrategicos", "KPI´s Estratégicos"),
+    ("kpi-institucionales", "KPI´s Institucionales"),
+]
+
+SECCIONES_PRINCIPALES = [
+    ("vision", "Visión Ejecutiva"),
+    ("indicadores", "Indicadores"),
+    ("presupuesto", "Ejecución Presupuestaria"),
+    ("inventario", "Inventario y Recurso de Información"),
+]
+
 # Iconografía lineal, monocromática y minimalista según el manual técnico.
 ICONOS = {
     "vision": "◎",
@@ -557,17 +570,18 @@ def version_presupuesto():
 DATA_PND, ERROR_PND = cargar_base_pnd()
 DATA_KPI, ERROR_KPI = cargar_base_kpi()
 DATA_KPI_INST, ERROR_KPI_INST = cargar_base_kpi_inst()
-DATA_VISION, ERROR_VISION = cargar_base_vision()
+# Visión Ejecutiva ahora es una infografía institucional estática y ya no
+# depende del archivo vision_ejecutiva.xlsx.
+DATA_VISION, ERROR_VISION = pd.DataFrame(), None
 DATA_PRESUPUESTO, ERROR_PRESUPUESTO = cargar_base_presupuesto()
 VERSION_PND = version_pnd()
 VERSION_KPI = version_kpi()
 VERSION_KPI_INST = version_kpi_inst()
-VERSION_VISION = version_vision()
+VERSION_VISION = "infografia-minedec-2026"
 VERSION_PRESUPUESTO = version_presupuesto()
 
 # Metadatos de las secciones que sí tienen datos tabulares (menú lateral con acordeón).
 SECCIONES_CON_DATOS = {
-    "vision": {"vice_col": "Sección", "indicador_col": "Tabla"},
     "pnd": {"vice_col": "VICEMINISTERIO", "indicador_col": "NOMBRE DEL INDICADOR"},
     "kpi-estrategicos": {"vice_col": "VICEMINISTERIO", "indicador_col": "NOMBRE DEL INDICADOR"},
     "kpi-institucionales": {"vice_col": "VICEMINISTERIO", "indicador_col": "NOMBRE DEL INDICADOR"},
@@ -577,7 +591,7 @@ SECCIONES_CON_DATOS = {
 
 def obtener_datos(seccion):
     if seccion == "vision":
-        return DATA_VISION, ERROR_VISION
+        return pd.DataFrame(), None
     if seccion == "pnd":
         return DATA_PND, ERROR_PND
     if seccion == "kpi-estrategicos":
@@ -645,27 +659,143 @@ def barra_superior():
 
 
 def portada():
-    def tarjeta(codigo, nombre, numero):
-        return html.Button([
-            html.Span(f"{numero:02d}", className="card-number"),
-            html.Span(nombre, className="card-label"), html.Span("→", className="card-arrow")
-        ], id={"type": "home-card", "index": codigo}, className=f"section-card card-{numero}", n_clicks=0)
+    # Iconos lineales, monocromáticos y minimalistas conforme a la guía visual.
+    iconos_portada = {
+        "vision": """<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64' fill='none' stroke='white' stroke-width='2.8' stroke-linecap='round' stroke-linejoin='round'><rect x='8' y='8' width='48' height='39' rx='4'/><path d='M15 39V27h8v12M28 39V20h8v19M41 39V15h8v24M18 55h28M32 47v8'/></svg>""",
+        "indicadores": """<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64' fill='none' stroke='white' stroke-width='2.8' stroke-linecap='round' stroke-linejoin='round'><rect x='10' y='8' width='44' height='48' rx='5'/><path d='M20 21l3 3 6-7M34 21h11M20 35l3 3 6-7M34 35h11M20 49l3 3 6-7M34 49h11'/></svg>""",
+        "presupuesto": """<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64' fill='none' stroke='white' stroke-width='2.8' stroke-linecap='round' stroke-linejoin='round'><path d='M9 53h46M14 48V29M25 48V37M36 48V23M47 48V14'/><path d='M14 21l11-7 11 3 14-9M43 8h7v7'/><circle cx='14' cy='21' r='2.5'/><circle cx='25' cy='14' r='2.5'/><circle cx='36' cy='17' r='2.5'/></svg>""",
+        "inventario": """<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64' fill='none' stroke='white' stroke-width='2.8' stroke-linecap='round' stroke-linejoin='round'><path d='M7 20h20l5 6h25v27H7z'/><path d='M7 20v-8h19l5 6h20v8M17 35h12M17 43h22'/><circle cx='48' cy='43' r='7'/><path d='M53 48l5 5'/></svg>""",
+    }
 
-    return html.Main(html.Section([
-        html.Div([html.P("PANEL INSTITUCIONAL", className="eyebrow"),
-                  html.H1("PANEL INTEGRADO DE GESTIÓN MINEDEC")], className="title-banner"),
-        html.P("Acceso integrado a la información estratégica, institucional y presupuestaria del Ministerio.",
-               className="intro-text"),
-        html.Div([tarjeta(c, n, i) for i, (c, n) in enumerate(SECCIONES, 1)], className="section-grid"),
-        html.Footer([html.Div(className="footer-line"),
-                     html.Img(src=app.get_asset_url("logo-minedec.png"), className="footer-logo")],
-                    className="page-footer"),
-    ], className="dashboard-card"), className="page-content")
+    def icono(codigo):
+        return html.Img(
+            src="data:image/svg+xml;utf8," + quote(iconos_portada[codigo]),
+            className="portada-boton-icono-svg",
+            alt="",
+            **{"aria-hidden": "true"},
+        )
+
+    def boton(codigo, nombre):
+        return html.Button(
+            [
+                html.Span(icono(codigo), className="portada-boton-icono"),
+                html.Span(nombre, className="portada-boton-texto"),
+                html.Span("›", className="portada-boton-flecha"),
+            ],
+            id={"type": "home-card", "index": codigo},
+            className="portada-boton",
+            n_clicks=0,
+            type="button",
+        )
+
+    return html.Main(
+        className="portada-pagina",
+        children=[
+            html.Section(
+                className="portada-contenido",
+                children=[
+                    html.Div(
+                        className="portada-ilustracion-contenedor",
+                        children=html.Img(
+                            src=app.get_asset_url("portada-minedec.png"),
+                            className="portada-ilustracion",
+                            alt="Educación, deporte y cultura en el Ecuador",
+                        ),
+                    ),
+                    html.Div(
+                        className="portada-presentacion",
+                        children=[
+                            html.H2([
+                                "Información para la", html.Br(),
+                                html.Span("gestión institucional"),
+                            ]),
+                            html.Div(className="portada-subrayado"),
+                            html.P(
+                                "Información integrada de educación, deporte y cultura "
+                                "para fortalecer la gestión y la toma de decisiones en MINEDEC."
+                            ),
+                            html.Img(
+                                src=app.get_asset_url("logo-minedec.png"),
+                                className="portada-logo",
+                                alt="Ministerio de Educación, Deporte y Cultura",
+                            ),
+                        ],
+                    ),
+                    html.Nav(
+                        [boton(codigo, nombre)
+                         for codigo, nombre in SECCIONES_PRINCIPALES],
+                        className="portada-menu",
+                        **{"aria-label": "Secciones principales"},
+                    ),
+                ],
+            ),
+            html.Div(className="portada-onda-inferior"),
+        ],
+    )
+
+
+def portada_indicadores():
+    iconos = {
+        "pnd": "⌖",
+        "kpi-estrategicos": "◇",
+        "kpi-institucionales": "◫",
+    }
+
+    def opcion(codigo, nombre):
+        return html.Button(
+            [
+                html.Span(iconos[codigo], className="portada-boton-icono"),
+                html.Span(nombre, className="portada-boton-texto"),
+                html.Span("›", className="portada-boton-flecha"),
+            ],
+            id={"type": "indicator-home-card", "index": codigo},
+            className="portada-boton indicador-portada-boton",
+            n_clicks=0,
+            type="button",
+        )
+
+    return html.Main(
+        className="indicadores-pagina",
+        children=[
+            html.Section(
+                className="indicadores-cabecera",
+                children=[
+                    html.Button(
+                        "← Volver a la portada",
+                        id="btn-volver-portada",
+                        className="btn-volver-portada",
+                        n_clicks=0,
+                    ),
+                    html.Div([
+                        html.Span("INDICADORES", className="indicadores-etiqueta"),
+                        html.H2("Seguimiento de indicadores institucionales"),
+                        html.P("Seleccione el grupo de indicadores que desea consultar."),
+                    ]),
+                    html.Img(
+                        src=app.get_asset_url("logo-minedec.png"),
+                        className="indicadores-logo",
+                        alt="MINEDEC",
+                    ),
+                ],
+            ),
+            html.Section(
+                [opcion(codigo, nombre)
+                 for codigo, nombre in SECCIONES_INDICADORES],
+                className="indicadores-opciones",
+            ),
+        ],
+    )
 
 
 def menu_lateral(seccion_activa=None, vice_activo=None, indicador_activo=None):
     items = []
-    for codigo, nombre in SECCIONES:
+    # Cada ambiente conserva únicamente su propia navegación. Al consultar
+    # indicadores no se muestran Visión Ejecutiva, Presupuesto ni Inventario.
+    secciones_menu = (SECCIONES_INDICADORES if seccion_activa in
+                      {codigo for codigo, _ in SECCIONES_INDICADORES}
+                      else [(seccion_activa, dict(SECCIONES).get(
+                          seccion_activa, "Módulo"))])
+    for codigo, nombre in secciones_menu:
         activo = codigo == seccion_activa
         items.append(html.Button([
             html.Span(ICONOS[codigo], className="side-icon"), html.Span(nombre),
@@ -842,7 +972,7 @@ def normalizar_latex(texto, ecuacion_principal=False):
 
 
 def ficha_multilinea(etiqueta, texto, clase="full"):
-    """Tarjeta fija, estilo documento, para fórmulas LaTeX extensas."""
+    """Pestaña desplegable, estilo documento, para fórmulas LaTeX extensas."""
     if texto is None or (isinstance(texto, float) and pd.isna(texto)) or not str(texto).strip():
         return html.Div(
             [html.Span(etiqueta), html.Strong("No registrada")],
@@ -897,13 +1027,15 @@ $$"""
                 dangerously_allow_html=False,
             ))
 
-    return html.Div([
-        html.Div([
+    return html.Details([
+        html.Summary([
             html.Span("∑", className="formula-accordion-icon"),
             html.Strong(etiqueta),
+            html.Span("Ver fórmula", className="formula-accordion-help"),
+            html.Span("⌄", className="formula-accordion-chevron"),
         ], className="formula-static-header"),
         html.Div(bloques, className="formula-accordion-body formula-content"),
-    ], className=f"detail-item {clase} formula-static".strip())
+    ], className=f"detail-item {clase} formula-static formula-accordion".strip())
 
 
 def ficha_metrica(etiqueta, valor, año, unidad):
@@ -1043,7 +1175,6 @@ def detalle_indicador_pnd(indicador):
         html.Div([html.P("PLAN NACIONAL DE DESARROLLO", className="content-kicker"),
                   html.H1(indicador), html.P(primer_texto(grupo, "VICEMINISTERIO"), className="content-subtitle")],
                  className="content-heading"),
-        html.Section(formula_documento, className="formula-document") if formula_documento else None,
         html.Div([
             html.Section([html.H2("Ficha del indicador"),
                           html.Div(campos, className=f"details-grid cols-{columnas_ficha}")],
@@ -1060,6 +1191,8 @@ def detalle_indicador_pnd(indicador):
                          className="observation-area"),
             ], className="chart-card"),
         ], className="indicator-workspace"),
+        html.Section(formula_documento, className="formula-document formula-document-bottom")
+        if formula_documento else None,
     ], className="pnd-content")
 
 
@@ -1238,7 +1371,6 @@ def detalle_indicador_periodo(df_fuente, indicador, kicker, obs_area_id, status_
         html.Div([html.P(kicker, className="content-kicker"),
                   html.H1(indicador), html.P(primer_texto(grupo, "VICEMINISTERIO"), className="content-subtitle")],
                  className="content-heading"),
-        html.Section(formula_documento, className="formula-document") if formula_documento else None,
         html.Div([
             html.Section([html.H2("Ficha del indicador"),
                           html.Div(campos, className=f"details-grid cols-{columnas_ficha}")],
@@ -1255,6 +1387,8 @@ def detalle_indicador_periodo(df_fuente, indicador, kicker, obs_area_id, status_
                          className="observation-area"),
             ], className="chart-card"),
         ], className="indicator-workspace"),
+        html.Section(formula_documento, className="formula-document formula-document-bottom")
+        if formula_documento else None,
     ], className="pnd-content")
 
 
@@ -1297,7 +1431,7 @@ def contenido_kpi_inst(vice=None, indicador=None):
 
 
 # ---------------------------------------------------------------------------
-# Visión Ejecutiva · tablas actualizables desde Excel
+# Visión Ejecutiva · infografía institucional estática
 # ---------------------------------------------------------------------------
 def tabla_vision(grupo):
     """Convierte el formato largo del Excel en una tabla HTML ordenada."""
@@ -1350,47 +1484,138 @@ def tarjeta_tabla_vision(grupo):
 
 
 def contenido_vision(seccion=None):
-    if ERROR_VISION:
-        return html.Div([html.H2("Base no disponible"), html.P(ERROR_VISION)], className="load-error")
-    if DATA_VISION.empty:
-        return html.Div([html.H2("Sin información"),
-                         html.P("El archivo de Visión Ejecutiva no contiene registros.")],
-                        className="load-error")
+    """Muestra la infografía institucional original sin recortes ni deformación."""
+    return html.Section(
+        className="vision-image-page",
+        children=[
+            html.Div(
+                className="vision-image-frame",
+                children=html.Img(
+                    src=app.get_asset_url("Captura de pantalla 2026-09-24 101240.png"),
+                    className="vision-image-original",
+                    alt="Infografía MINEDEC 2026",
+                ),
+            )
+        ],
+    )
 
-    tablas = []
-    if seccion:
-        datos_seccion = DATA_VISION.loc[DATA_VISION["Sección"] == seccion]
-        tabla_orden = (datos_seccion[["Tabla", "Orden tabla"]].drop_duplicates()
-                       .sort_values("Orden tabla"))
-        for _, registro_tabla in tabla_orden.iterrows():
-            nombre_tabla = registro_tabla["Tabla"]
-            tablas.append(tarjeta_tabla_vision(
-                datos_seccion.loc[datos_seccion["Tabla"] == nombre_tabla]
-            ))
 
-    introduccion_seccion = (html.P(
-        "La información corresponde a las instituciones educativas, estudiantes y docentes "
-        "que forman parte de la oferta educativa desde Educación Inicial hasta Tercero de Bachillerato.",
-        className="vision-section-intro"
-    ) if seccion == "Educación Media" else None)
+def contenido_vision_codificado_anterior(seccion=None):
+    iconos = {
+        "personas": """<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64' fill='none' stroke='white' stroke-width='2.6' stroke-linecap='round' stroke-linejoin='round'><circle cx='32' cy='17' r='8'/><circle cx='14' cy='24' r='6'/><circle cx='50' cy='24' r='6'/><path d='M18 51c0-10 6-18 14-18s14 8 14 18M4 51c0-8 4-14 11-14 3 0 6 1 8 4M60 51c0-8-4-14-11-14-3 0-6 1-8 4'/></svg>""",
+        "estudiantes": """<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64' fill='none' stroke='white' stroke-width='2.6' stroke-linecap='round' stroke-linejoin='round'><path d='M5 20l27-12 27 12-27 12zM16 26v16c8 7 24 7 32 0V26M55 23v18'/><circle cx='55' cy='45' r='3'/></svg>""",
+        "docentes": """<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64' fill='none' stroke='white' stroke-width='2.6' stroke-linecap='round' stroke-linejoin='round'><circle cx='24' cy='16' r='8'/><path d='M9 52c0-12 6-22 15-22s15 10 15 22M41 13h17v26H41M45 20h9M45 27h6M39 34l12-10'/></svg>""",
+        "instituciones": """<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64' fill='none' stroke='white' stroke-width='2.6' stroke-linecap='round' stroke-linejoin='round'><path d='M6 54h52M10 54V25l22-14 22 14v29M22 54V38h20v16M16 31h6M29 31h6M42 31h6'/><path d='M27 20h10'/></svg>""",
+    }
 
-    cuerpo = (html.Div([
-                  introduccion_seccion,
-                  html.Div(tablas, className="vision-tables-stack")
-              ], className="vision-section-body vision-selected-section")
-              if tablas else html.Div([
-                  html.H2("Seleccione una sección"),
-                  html.P("Use el menú lateral para consultar las tablas de Educación Media, "
-                         "Educación Superior, Cultura o Viceministerio de Deporte.")
-              ], className="module-welcome vision-welcome"))
+    def icono(nombre):
+        return html.Img(
+            src="data:image/svg+xml;utf8," + quote(iconos[nombre]),
+            className="vision-card-icon-svg",
+            alt="",
+            **{"aria-hidden": "true"},
+        )
 
-    return html.Div([
-        html.Div([html.P("VISIÓN EJECUTIVA", className="content-kicker"),
-                  html.H1(seccion or "Comunidad Educativa"),
-                  html.P("Información consolidada de educación, cultura y deporte.")],
-                 className="vision-banner"),
-        cuerpo,
-    ], className="vision-content")
+    def detalle(etiqueta, valor, clase=""):
+        return html.Div(
+            [html.Span(etiqueta), html.Strong(valor)],
+            className=f"vision-mini-stat {clase}".strip(),
+        )
+
+    def tarjeta(clase, icono_nombre, titulo, total, detalles):
+        return html.Article(
+            className=f"vision-exec-card {clase}",
+            children=[
+                html.Div(icono(icono_nombre), className="vision-card-icon"),
+                html.Div(
+                    [html.Span(titulo, className="vision-card-label"),
+                     html.Strong(total, className="vision-card-total")],
+                    className="vision-card-heading",
+                ),
+                html.Div(detalles, className="vision-card-details"),
+            ],
+        )
+
+    def nodo(clase, icono_nombre, titulo, total, ramas=None):
+        return html.Article(
+            className=f"vision-map-node {clase}",
+            children=[
+                html.Div(icono(icono_nombre), className="vision-map-icon"),
+                html.Div(
+                    [html.Span(titulo), html.Strong(total)],
+                    className="vision-map-main",
+                ),
+                html.Div(
+                    [detalle(nombre, valor, subclase)
+                     for nombre, valor, subclase in (ramas or [])],
+                    className="vision-map-branches",
+                ) if ramas else None,
+            ],
+        )
+
+    return html.Section(className="vision-exec-page", children=[
+        html.Header(className="vision-exec-header", children=[
+            html.Div(className="vision-title-mark"),
+            html.H1("Ministerio de Educación, Deporte y Cultura - MINEDEC 2026"),
+        ]),
+        html.Div(className="vision-map", children=[
+            nodo(
+                "administrativo", "personas", "Personal administrativo", "10.902"
+            ),
+            nodo(
+                "estudiantes", "estudiantes",
+                "Estudiantes · Inicial, Bachillerato y Superior", "5.043.825",
+                [
+                    ("Educación Media", "4.039.650", "principal"),
+                    ("Educación Superior", "1.004.175", "principal"),
+                    ("ITTS", "138.613", "secondary"),
+                    ("UEP", "865.562", "secondary"),
+                ],
+            ),
+            html.Div(className="vision-map-center", children=[
+                html.Div(className="vision-center-halo"),
+                html.Span("MINEDEC", className="vision-center-name"),
+                html.Div(className="vision-center-total", children=[
+                    html.Div([html.Strong("5.319.565"), html.Span("Actores")]),
+                    html.Div([html.Strong("16.472"), html.Span("Instituciones")]),
+                ]),
+                html.Div(className="vision-center-gender", children=[
+                    html.Div([
+                        html.Span("♀", className="vision-gender-symbol female"),
+                        html.Strong("51,85%"), html.Span("Femenino"),
+                    ]),
+                    html.Div([
+                        html.Span("♂", className="vision-gender-symbol male"),
+                        html.Strong("48,15%"), html.Span("Masculino"),
+                    ]),
+                ]),
+            ]),
+            nodo(
+                "docentes", "docentes",
+                "Docentes · Inicial, Bachillerato y Superior", "264.838",
+                [
+                    ("Educación Media", "217.693", "principal"),
+                    ("Educación Superior", "47.145", "principal"),
+                    ("ITTS", "9.320", "secondary"),
+                    ("UEP", "37.825", "secondary"),
+                ],
+            ),
+            nodo(
+                "instituciones", "instituciones",
+                "Instituciones · Inicial, Bachillerato y Superior", "16.472",
+                [
+                    ("Educación Media", "16.215", "principal"),
+                    ("Educación Superior", "257", "principal"),
+                    ("ITTS", "193", "secondary"),
+                    ("UEP", "64", "secondary"),
+                ],
+            ),
+        ]),
+        html.Footer(className="vision-exec-footer", children=[
+            html.Span("Información institucional consolidada"),
+            html.Img(src=app.get_asset_url("logo-minedec.png"), alt="MINEDEC"),
+        ]),
+    ])
 
 
 # ---------------------------------------------------------------------------
@@ -1603,15 +1828,21 @@ app.layout = html.Div([
               Output("selected-indicator", "data", allow_duplicate=True),
               Input("home-button", "n_clicks"),
               Input({"type": "home-card", "index": ALL}, "n_clicks"),
+              Input({"type": "indicator-home-card", "index": ALL}, "n_clicks"),
               Input({"type": "side-section", "index": ALL}, "n_clicks"),
               State("active-section", "data"), prevent_initial_call=True)
-def cambiar_seccion(_home, _cards, _side, actual):
+def cambiar_seccion(_home, _cards, _indicator_cards, _side, actual):
     disparador = ctx.triggered_id
     if disparador == "home-button":
         return ("home", None, None) if _home else (actual, no_update, no_update)
     if isinstance(disparador, dict):
         tipo = disparador.get("type")
-        valores = _cards if tipo == "home-card" else _side
+        if tipo == "home-card":
+            valores = _cards
+        elif tipo == "indicator-home-card":
+            valores = _indicator_cards
+        else:
+            valores = _side
         # La creación dinámica de botones produce eventos con cero clics.
         # Se ignoran para que el usuario nunca sea expulsado de la pantalla actual.
         if not valores or not any((v or 0) > 0 for v in valores):
@@ -1623,6 +1854,12 @@ def cambiar_seccion(_home, _cards, _side, actual):
         # para no arrastrar un viceministerio que no existe en la nueva sección.
         return nueva_seccion, None, None
     return actual, no_update, no_update
+
+
+@app.callback(Output("active-section", "data", allow_duplicate=True),
+              Input("btn-volver-portada", "n_clicks"), prevent_initial_call=True)
+def volver_desde_indicadores(n_clicks):
+    return "home" if n_clicks else no_update
 
 
 @app.callback(Output("active-section", "data", allow_duplicate=True),
@@ -1679,6 +1916,8 @@ def mostrar_pantalla(seccion, vice, indicador, _version):
     y Dash lanzaba 'Invalid number of output values'. Un único callback evita la carrera."""
     if seccion == "home":
         return portada()
+    if seccion == "indicadores":
+        return portada_indicadores()
     return modulo_seccion(seccion, vice, indicador)
 
 
@@ -1777,7 +2016,6 @@ def actualizar_excel(_intervalo, version_actual):
     """Recarga únicamente el Excel que cambió; no interrumpe los clics del usuario."""
     global DATA_PND, ERROR_PND, VERSION_PND, DATA_KPI, ERROR_KPI, VERSION_KPI
     global DATA_KPI_INST, ERROR_KPI_INST, VERSION_KPI_INST
-    global DATA_VISION, ERROR_VISION, VERSION_VISION
     global DATA_PRESUPUESTO, ERROR_PRESUPUESTO, VERSION_PRESUPUESTO
     version_actual = dict(version_actual or {})
     cambio = False
@@ -1804,14 +2042,6 @@ def actualizar_excel(_intervalo, version_actual):
         if not nuevo_error and not nueva_data.empty:
             DATA_KPI_INST, ERROR_KPI_INST, VERSION_KPI_INST = nueva_data, None, nueva_version_kpi_inst
             version_actual["kpi-institucionales"] = nueva_version_kpi_inst
-            cambio = True
-
-    nueva_version_vision = version_vision()
-    if nueva_version_vision and nueva_version_vision != version_actual.get("vision"):
-        nueva_data, nuevo_error = cargar_base_vision()
-        if not nuevo_error and not nueva_data.empty:
-            DATA_VISION, ERROR_VISION, VERSION_VISION = nueva_data, None, nueva_version_vision
-            version_actual["vision"] = nueva_version_vision
             cambio = True
 
     # SharePoint se consulta cada 15 minutos para evitar solicitudes innecesarias.
