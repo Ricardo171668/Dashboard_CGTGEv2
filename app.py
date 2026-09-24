@@ -1665,12 +1665,15 @@ def _millones(valor):
 def _figura_montos_presupuesto(df):
     """Barra con los montos consolidados (en millones de USD): Codificado,
     Certificado (PRECOMPROMISO), Comprometido, Devengado y Saldo disponible."""
+    # Paleta validada (dataviz: banda de luminosidad, piso de croma, separación
+    # CVD y contraste vs. fondo) — reutiliza el morado del pastel de ejecución
+    # (#5442a3 = "Devengado") para mantener coherencia visual entre ambos gráficos.
     metricas = [
-        ("Codificado", "CODIFICADO", "#172f70"),
-        ("Certificado", "PRECOMPROMISO", "#4d3a94"),
-        ("Comprometido", "COMPROMISO", "#2ca8eb"),
-        ("Devengado", "DEVENGADO", "#2fbd83"),
-        ("Saldo disponible", "SALDO_DISPONIBLE", "#efb629"),
+        ("Codificado", "CODIFICADO", "#2f6fed"),
+        ("Certificado", "PRECOMPROMISO", "#1f9e6f"),
+        ("Comprometido", "COMPROMISO", "#c9860a"),
+        ("Devengado", "DEVENGADO", "#5442a3"),
+        ("Saldo disponible", "SALDO_DISPONIBLE", "#de232d"),
     ]
     etiquetas = [nombre for nombre, _, _ in metricas]
     colores = [color for _, _, color in metricas]
@@ -1693,8 +1696,13 @@ def _figura_montos_presupuesto(df):
         font={"family": "Arial", "color": "#17245b"},
     )
     figura.update_xaxes(showgrid=False, tickfont={"size": 10.5})
+    # Se agrega un 20% de margen superior sobre el valor máximo para que la
+    # etiqueta "outside" de la barra más alta no quede recortada por el borde
+    # del gráfico.
+    tope = (max(valores) * 1.2) if valores and max(valores) > 0 else 1
     figura.update_yaxes(title="Millones de USD", gridcolor="#e4e7f0",
-                        tickformat=",.1f", tickfont={"size": 10})
+                        tickformat=",.1f", tickfont={"size": 10},
+                        range=[0, tope])
     return figura
 
 
@@ -1794,7 +1802,7 @@ def contenido_presupuesto(vice=None):
         "justifyContent": "center", "flexWrap": "wrap",
     })
 
-    agrupar_por_inicial = "gasto"
+    agrupar_por_inicial = "proyecto"
     detalle_sin_total, registros_tabla = _tabla_con_total(grupo, agrupar_por_inicial)
     columnas = list(detalle_sin_total.columns)
     etiqueta_columna_inicial = _etiqueta_columna_agrupacion(agrupar_por_inicial)
@@ -2094,7 +2102,7 @@ def mostrar_pantalla(seccion, vice, indicador, _version):
 def filtrar_tabla_presupuesto(agrupar_por, vice):
     """Reagrupa la tabla por Grupo de gasto o por Proyecto; siempre solo
     Inversión. La fila TOTAL viaja dentro de los mismos datos."""
-    agrupar_por = agrupar_por or "gasto"
+    agrupar_por = agrupar_por or "proyecto"
     if not vice or DATA_PRESUPUESTO.empty:
         detalle_vacio, registros_vacios = _tabla_con_total(pd.DataFrame(), agrupar_por)
         columnas_vacias = [{"name": c, "id": c} for c in detalle_vacio.columns]
