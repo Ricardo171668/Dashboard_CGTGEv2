@@ -66,17 +66,17 @@
 
 .portada-contenido {
   position: relative;
-  width: min(1900px, 100%);
+  width: min(1700px, 100%);
   min-height: calc(100vh - 109px);
   margin: 0 auto;
-  padding: clamp(28px, 3vw, 54px) clamp(18px, 2.2vw, 44px) 115px;
+  padding: clamp(18px, 2vw, 32px) clamp(24px, 3vw, 58px) 60px;
   display: grid;
   grid-template-columns: minmax(0, 1fr);
   grid-template-areas:
     "menu"
     "ilustracion";
   align-items: center;
-  gap: clamp(18px, 2vw, 34px);
+  gap: clamp(12px, 1.4vw, 22px);
   box-sizing: border-box;
 }
 
@@ -91,9 +91,9 @@
 
 .portada-ilustracion {
   display: block;
-  width: min(1220px, 84vw);
+  width: min(1300px, 88vw);
   max-width: 100%;
-  max-height: calc(100vh - 330px);
+  max-height: calc(100vh - 260px);
   height: auto;
   object-fit: contain;
   filter: drop-shadow(0 16px 24px rgba(25, 30, 74, .13));
@@ -133,7 +133,7 @@
 
 .portada-logo {
   position: absolute;
-  right: calc(min(0px, (1900px - 100vw) / 2) + 18px);
+  right: calc(min(0px, (1700px - 100vw) / 2) + 18px);
   bottom: 72px;
   display: block;
   width: clamp(150px, 13vw, 245px);
@@ -1473,4 +1473,3 @@
     max-height: 100% !important;
   }
 }
-
