@@ -23,7 +23,7 @@ SECCIONES = [
     ("pnd", "Plan Nacional de Desarrollo"),
     ("kpi-estrategicos", "KPI´s Estratégicos"),
     ("kpi-institucionales", "KPI´s Institucionales"),
-    ("presupuesto", "Ejecución Presupuestaria"),
+    ("presupuesto", "Ejecución Presupuestaria - Inversión"),
     ("inventario", "Inventario y Recurso de Información"),
 ]
 
@@ -36,7 +36,7 @@ SECCIONES_INDICADORES = [
 SECCIONES_PRINCIPALES = [
     ("vision", "Visión Ejecutiva"),
     ("indicadores", "Indicadores"),
-    ("presupuesto", "Ejecución Presupuestaria"),
+    ("presupuesto", "Ejecución Presupuestaria - Inversión"),
     ("inventario", "Inventario y Recurso de Información"),
 ]
 
@@ -588,6 +588,10 @@ SECCIONES_CON_DATOS = {
     "presupuesto": {"vice_col": "Viceministerio", "indicador_col": "Viceministerio"},
 }
 
+# Secciones cuyos indicadores son pocos y se listan directamente en el menú
+# lateral, sin agruparlos primero por viceministerio.
+SECCIONES_INDICADORES_PLANOS = {"kpi-estrategicos", "kpi-institucionales"}
+
 
 def obtener_datos(seccion):
     if seccion == "vision":
@@ -791,7 +795,18 @@ def menu_lateral(seccion_activa=None, vice_activo=None, indicador_activo=None):
         if activo and codigo in SECCIONES_CON_DATOS:
             df, _ = obtener_datos(codigo)
             cfg = SECCIONES_CON_DATOS[codigo]
-            if not df.empty:
+            if not df.empty and codigo in SECCIONES_INDICADORES_PLANOS:
+                # Pocos indicadores: se listan directo, sin el paso intermedio
+                # de escoger primero un viceministerio.
+                indicadores = df[cfg["indicador_col"]].dropna().unique()
+                items.append(html.Div([
+                    html.Button([
+                            html.Span(f"{j+1:02d}", className="indicator-index"), html.Span(indicador)
+                        ], id={"type": "indicator-button", "index": indicador}, n_clicks=0, title=indicador,
+                           className="indicator-button selected" if indicador == indicador_activo else "indicator-button")
+                    for j, indicador in enumerate(indicadores)
+                ], className="indicator-group open"))
+            elif not df.empty:
                 if codigo == "vision":
                     opciones_vice = (df[[cfg["vice_col"], "Orden sección"]].drop_duplicates()
                                      .sort_values("Orden sección")[cfg["vice_col"]].tolist())
@@ -1399,7 +1414,7 @@ def contenido_kpi(vice=None, indicador=None):
                         className="module-welcome")
     return html.Div([html.P("PANEL INSTITUCIONAL", className="content-kicker"),
                      html.H1("KPI´s Estratégicos"),
-                     html.P("Seleccione un viceministerio y luego el indicador que desea consultar.")],
+                     html.P("Seleccione el indicador que desea consultar en el menú lateral.")],
                     className="module-welcome")
 
 
@@ -1418,7 +1433,7 @@ def contenido_kpi_inst(vice=None, indicador=None):
                         className="module-welcome")
     return html.Div([html.P("PANEL INSTITUCIONAL", className="content-kicker"),
                      html.H1("KPI´s Institucionales"),
-                     html.P("Seleccione un viceministerio y luego el indicador que desea consultar.")],
+                     html.P("Seleccione el indicador que desea consultar en el menú lateral.")],
                     className="module-welcome")
 
 
@@ -2067,11 +2082,15 @@ def seleccionar_vice(_clicks, actual, seccion):
 def seleccionar_indicador(_clicks, vice, actual, seccion):
     cfg = SECCIONES_CON_DATOS.get(seccion)
     df, _ = obtener_datos(seccion)
-    if (not isinstance(ctx.triggered_id, dict) or not cfg or not vice or not _clicks
+    plano = seccion in SECCIONES_INDICADORES_PLANOS
+    if (not isinstance(ctx.triggered_id, dict) or not cfg or (not vice and not plano) or not _clicks
             or not any((v or 0) > 0 for v in _clicks)):
         return actual
     indicador = ctx.triggered_id["index"]
-    indicadores_validos = set(df.loc[df[cfg["vice_col"]] == vice, cfg["indicador_col"]].dropna().unique())
+    if plano:
+        indicadores_validos = set(df[cfg["indicador_col"]].dropna().unique())
+    else:
+        indicadores_validos = set(df.loc[df[cfg["vice_col"]] == vice, cfg["indicador_col"]].dropna().unique())
     return indicador if indicador in indicadores_validos else actual
 
 
