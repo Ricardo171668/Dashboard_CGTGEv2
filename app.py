@@ -1476,7 +1476,7 @@ def tarjeta_tabla_vision(grupo):
 
 
 def contenido_vision(seccion=None):
-    """Muestra la infografía institucional original sin recortes ni deformación."""
+    """Muestra la infografía institucional (imagen) sin recortes ni deformación."""
     return html.Section(
         className="vision-image-page",
         children=[
@@ -1486,136 +1486,11 @@ def contenido_vision(seccion=None):
                     src=app.get_asset_url("vision-ejecutiva-moderna.png"),
                     className="vision-image-original",
                     alt="Infografía MINEDEC 2026",
-                ),
-            ),
-            html.Div(
-                className="vision-image-logo-row",
-                children=html.Img(
-                    src=app.get_asset_url("logo-minedec.png"),
-                    className="vision-image-logo",
-                    alt="Ministerio de Educación, Deporte y Cultura",
+                    style={"width": "100%", "height": "auto", "display": "block"},
                 ),
             ),
         ],
     )
-
-
-def contenido_vision_codificado_anterior(seccion=None):
-    iconos = {
-        "personas": """<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64' fill='none' stroke='white' stroke-width='2.6' stroke-linecap='round' stroke-linejoin='round'><circle cx='32' cy='17' r='8'/><circle cx='14' cy='24' r='6'/><circle cx='50' cy='24' r='6'/><path d='M18 51c0-10 6-18 14-18s14 8 14 18M4 51c0-8 4-14 11-14 3 0 6 1 8 4M60 51c0-8-4-14-11-14-3 0-6 1-8 4'/></svg>""",
-        "estudiantes": """<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64' fill='none' stroke='white' stroke-width='2.6' stroke-linecap='round' stroke-linejoin='round'><path d='M5 20l27-12 27 12-27 12zM16 26v16c8 7 24 7 32 0V26M55 23v18'/><circle cx='55' cy='45' r='3'/></svg>""",
-        "docentes": """<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64' fill='none' stroke='white' stroke-width='2.6' stroke-linecap='round' stroke-linejoin='round'><circle cx='24' cy='16' r='8'/><path d='M9 52c0-12 6-22 15-22s15 10 15 22M41 13h17v26H41M45 20h9M45 27h6M39 34l12-10'/></svg>""",
-        "instituciones": """<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64' fill='none' stroke='white' stroke-width='2.6' stroke-linecap='round' stroke-linejoin='round'><path d='M6 54h52M10 54V25l22-14 22 14v29M22 54V38h20v16M16 31h6M29 31h6M42 31h6'/><path d='M27 20h10'/></svg>""",
-    }
-
-    def icono(nombre):
-        return html.Img(
-            src="data:image/svg+xml;utf8," + quote(iconos[nombre]),
-            className="vision-card-icon-svg",
-            alt="",
-            **{"aria-hidden": "true"},
-        )
-
-    def detalle(etiqueta, valor, clase=""):
-        return html.Div(
-            [html.Span(etiqueta), html.Strong(valor)],
-            className=f"vision-mini-stat {clase}".strip(),
-        )
-
-    def tarjeta(clase, icono_nombre, titulo, total, detalles):
-        return html.Article(
-            className=f"vision-exec-card {clase}",
-            children=[
-                html.Div(icono(icono_nombre), className="vision-card-icon"),
-                html.Div(
-                    [html.Span(titulo, className="vision-card-label"),
-                     html.Strong(total, className="vision-card-total")],
-                    className="vision-card-heading",
-                ),
-                html.Div(detalles, className="vision-card-details"),
-            ],
-        )
-
-    def nodo(clase, icono_nombre, titulo, total, ramas=None):
-        return html.Article(
-            className=f"vision-map-node {clase}",
-            children=[
-                html.Div(icono(icono_nombre), className="vision-map-icon"),
-                html.Div(
-                    [html.Span(titulo), html.Strong(total)],
-                    className="vision-map-main",
-                ),
-                html.Div(
-                    [detalle(nombre, valor, subclase)
-                     for nombre, valor, subclase in (ramas or [])],
-                    className="vision-map-branches",
-                ) if ramas else None,
-            ],
-        )
-
-    return html.Section(className="vision-exec-page", children=[
-        html.Header(className="vision-exec-header", children=[
-            html.Div(className="vision-title-mark"),
-            html.H1("Ministerio de Educación, Deporte y Cultura - MINEDEC 2026"),
-        ]),
-        html.Div(className="vision-map", children=[
-            nodo(
-                "administrativo", "personas", "Personal administrativo", "10.902"
-            ),
-            nodo(
-                "estudiantes", "estudiantes",
-                "Estudiantes · Inicial, Bachillerato y Superior", "5.043.825",
-                [
-                    ("Educación Media", "4.039.650", "principal"),
-                    ("Educación Superior", "1.004.175", "principal"),
-                    ("ITTS", "138.613", "secondary"),
-                    ("UEP", "865.562", "secondary"),
-                ],
-            ),
-            html.Div(className="vision-map-center", children=[
-                html.Div(className="vision-center-halo"),
-                html.Span("MINEDEC", className="vision-center-name"),
-                html.Div(className="vision-center-total", children=[
-                    html.Div([html.Strong("5.319.565"), html.Span("Actores")]),
-                    html.Div([html.Strong("16.472"), html.Span("Instituciones")]),
-                ]),
-                html.Div(className="vision-center-gender", children=[
-                    html.Div([
-                        html.Span("♀", className="vision-gender-symbol female"),
-                        html.Strong("51,85%"), html.Span("Femenino"),
-                    ]),
-                    html.Div([
-                        html.Span("♂", className="vision-gender-symbol male"),
-                        html.Strong("48,15%"), html.Span("Masculino"),
-                    ]),
-                ]),
-            ]),
-            nodo(
-                "docentes", "docentes",
-                "Docentes · Inicial, Bachillerato y Superior", "264.838",
-                [
-                    ("Educación Media", "217.693", "principal"),
-                    ("Educación Superior", "47.145", "principal"),
-                    ("ITTS", "9.320", "secondary"),
-                    ("UEP", "37.825", "secondary"),
-                ],
-            ),
-            nodo(
-                "instituciones", "instituciones",
-                "Instituciones · Inicial, Bachillerato y Superior", "16.472",
-                [
-                    ("Educación Media", "16.215", "principal"),
-                    ("Educación Superior", "257", "principal"),
-                    ("ITTS", "193", "secondary"),
-                    ("UEP", "64", "secondary"),
-                ],
-            ),
-        ]),
-        html.Footer(className="vision-exec-footer", children=[
-            html.Span("Información institucional consolidada"),
-            html.Img(src=app.get_asset_url("logo-minedec.png"), alt="MINEDEC"),
-        ]),
-    ])
 
 
 # ---------------------------------------------------------------------------
@@ -1647,12 +1522,16 @@ def _formatear_fecha_actualizacion():
     return crudo
 
 
-def _columna_grupo_presupuesto(df):
-    """Escoge la mejor clasificación disponible para resumir ESIGEF."""
-    candidatas = [
-        "NOM_GRUPO", "GRUPO", "GRUPO_GASTO", "NOMBRE_GRUPO",
-        "NOM_ITEM", "ITEM", "NOM_PROGRAMA", "TIPO",
-    ]
+def _columna_agrupacion_presupuesto(df, agrupar_por="gasto"):
+    """Escoge la mejor columna disponible para agrupar el detalle: por grupo de
+    gasto (por defecto) o por proyecto, según lo que exista en el Excel ESIGEF."""
+    if agrupar_por == "proyecto":
+        candidatas = ["NOM_PROYECTO", "PROYECTO", "NOMBRE_PROYECTO", "DESCRIPCION_PROYECTO"]
+    else:
+        candidatas = [
+            "NOM_GRUPO", "GRUPO", "GRUPO_GASTO", "NOMBRE_GRUPO",
+            "NOM_ITEM", "ITEM", "NOM_PROGRAMA", "TIPO",
+        ]
     return next((col for col in candidatas if col in df.columns), "Viceministerio")
 
 
@@ -1666,20 +1545,26 @@ def _filtrar_alcance_presupuesto(df, alcance="Total"):
     return df.loc[tipo_normalizado.str.contains(patron, na=False)].copy()
 
 
-def _resumen_grupos_presupuesto(df):
-    """Consolida partidas individuales y calcula ejecución y semáforo."""
+def _etiqueta_columna_agrupacion(agrupar_por="gasto"):
+    return "Proyecto" if agrupar_por == "proyecto" else "Grupo de gasto"
+
+
+def _resumen_grupos_presupuesto(df, agrupar_por="gasto"):
+    """Consolida partidas individuales y calcula ejecución y semáforo, agrupando
+    por grupo de gasto o por proyecto según `agrupar_por`."""
+    etiqueta_columna = _etiqueta_columna_agrupacion(agrupar_por)
     if df.empty:
         return pd.DataFrame(columns=[
-            "POA/PAI", "Grupo de gasto", "CODIFICADO", "COMPROMISO",
+            "POA/PAI", etiqueta_columna, "CODIFICADO", "COMPROMISO",
             "DEVENGADO", "SALDO_DISPONIBLE", "EJECUCION", "SEMAFORO",
         ])
-    columna_grupo = _columna_grupo_presupuesto(df)
+    columna = _columna_agrupacion_presupuesto(df, agrupar_por)
     trabajo = df.copy()
-    trabajo["Grupo de gasto"] = (trabajo[columna_grupo].fillna("No especificado")
+    trabajo[etiqueta_columna] = (trabajo[columna].fillna("No especificado")
                                   .astype(str).str.strip().replace("", "No especificado"))
     trabajo["POA/PAI"] = (trabajo["TIPO"].fillna("No especificado").astype(str).str.strip()
                            if "TIPO" in trabajo.columns else "No especificado")
-    resumen = (trabajo.groupby(["POA/PAI", "Grupo de gasto"], dropna=False)[
+    resumen = (trabajo.groupby(["POA/PAI", etiqueta_columna], dropna=False)[
         ["CODIFICADO", "COMPROMISO", "DEVENGADO", "SALDO_DISPONIBLE"]
     ].sum().reset_index())
     resumen = resumen.loc[(resumen[["CODIFICADO", "COMPROMISO", "DEVENGADO"]]
@@ -1697,8 +1582,8 @@ def _resumen_grupos_presupuesto(df):
 _PUNTO_SEMAFORO = {"Verde": "🟢", "Amarillo": "🟡", "Rojo": "🔴"}
 
 
-def _tabla_resumen_presupuesto(df):
-    resumen = _resumen_grupos_presupuesto(df)
+def _tabla_resumen_presupuesto(df, agrupar_por="gasto"):
+    resumen = _resumen_grupos_presupuesto(df, agrupar_por)
     salida = resumen.copy()
     for col in ["CODIFICADO", "COMPROMISO", "DEVENGADO", "SALDO_DISPONIBLE"]:
         salida[col] = salida[col].map(_moneda)
@@ -1718,8 +1603,9 @@ def _tabla_resumen_presupuesto(df):
     return salida
 
 
-def _fila_total_presupuesto(df):
+def _fila_total_presupuesto(df, agrupar_por="gasto"):
     """Construye la fila TOTAL como un registro más de la tabla (mismas columnas)."""
+    etiqueta_columna = _etiqueta_columna_agrupacion(agrupar_por)
     codificado = float(df["CODIFICADO"].sum()) if not df.empty else 0.0
     compromiso = float(df["COMPROMISO"].sum()) if not df.empty else 0.0
     devengado = float(df["DEVENGADO"].sum()) if not df.empty else 0.0
@@ -1728,7 +1614,7 @@ def _fila_total_presupuesto(df):
     semaforo = "Verde" if ejecucion >= 70 else "Amarillo" if ejecucion >= 40 else "Rojo"
     return {
         "POA/PAI": "TOTAL",
-        "Grupo de gasto": "",
+        etiqueta_columna: "",
         "Codificado": _moneda(codificado),
         "Comprometido": _moneda(compromiso),
         "Devengado": _moneda(devengado),
@@ -1738,11 +1624,11 @@ def _fila_total_presupuesto(df):
     }
 
 
-def _tabla_con_total(df):
-    """Detalle por grupo + una fila TOTAL final, lista para el DataTable."""
-    detalle = _tabla_resumen_presupuesto(df)
+def _tabla_con_total(df, agrupar_por="gasto"):
+    """Detalle por grupo/proyecto + una fila TOTAL final, lista para el DataTable."""
+    detalle = _tabla_resumen_presupuesto(df, agrupar_por)
     registros = detalle.to_dict("records")
-    registros.append(_fila_total_presupuesto(df))
+    registros.append(_fila_total_presupuesto(df, agrupar_por))
     return detalle, registros
 
 
@@ -1772,80 +1658,43 @@ def _figura_ejecucion_general(df):
     return figura
 
 
-def _figura_tipo_general(df):
-    """Compara el porcentaje ejecutado de Corriente e Inversión."""
-    etiquetas, valores = [], []
-    for etiqueta in ("Corriente", "Inversión"):
-        parte = _filtrar_alcance_presupuesto(df, etiqueta)
-        codificado = float(parte["CODIFICADO"].sum()) if not parte.empty else 0.0
-        devengado = float(parte["DEVENGADO"].sum()) if not parte.empty else 0.0
-        etiquetas.append(etiqueta.upper())
-        valores.append((devengado / codificado * 100) if codificado else 0.0)
+def _millones(valor):
+    return f"{valor:,.2f}".replace(",", "X").replace(".", ",").replace("X", ".")
+
+
+def _figura_montos_presupuesto(df):
+    """Barra con los montos consolidados (en millones de USD): Codificado,
+    Certificado (PRECOMPROMISO), Comprometido, Devengado y Saldo disponible."""
+    metricas = [
+        ("Codificado", "CODIFICADO", "#172f70"),
+        ("Certificado", "PRECOMPROMISO", "#4d3a94"),
+        ("Comprometido", "COMPROMISO", "#2ca8eb"),
+        ("Devengado", "DEVENGADO", "#2fbd83"),
+        ("Saldo disponible", "SALDO_DISPONIBLE", "#efb629"),
+    ]
+    etiquetas = [nombre for nombre, _, _ in metricas]
+    colores = [color for _, _, color in metricas]
+    valores = [
+        (float(df[col].sum()) / 1_000_000) if (not df.empty and col in df.columns) else 0.0
+        for _, col, _ in metricas
+    ]
+    montos = [v * 1_000_000 for v in valores]
     figura = go.Figure(go.Bar(
-        x=valores, y=etiquetas, orientation="h",
-        marker={"color": ["#f5ba24", "#5442a3"]},
-        text=[f"{v:.1f}%" for v in valores], textposition="outside",
-        hovertemplate="%{y}: %{x:.2f}%<extra></extra>",
+        x=etiquetas, y=valores, marker={"color": colores},
+        text=[f"{_millones(v)} M" for v in valores], textposition="outside",
+        customdata=[_moneda(m) for m in montos],
+        hovertemplate="<b>%{x}</b><br>%{customdata}<extra></extra>",
     ))
     figura.update_layout(
-        title={"text": "Porcentaje ejecutado por tipo de gasto", "x": .5,
+        title={"text": "Montos presupuestarios (millones de USD) · Inversión", "x": .5,
                "font": {"size": 16, "color": "#17245b"}},
-        height=300, margin=dict(l=115, r=45, t=55, b=45),
+        height=300, margin=dict(l=55, r=25, t=55, b=45),
         paper_bgcolor="white", plot_bgcolor="white", showlegend=False,
         font={"family": "Arial", "color": "#17245b"},
     )
-    figura.update_xaxes(range=[0, max(100, max(valores, default=0) * 1.12)],
-                        ticksuffix="%", gridcolor="#e4e7f0", title="Devengado / Codificado",
-                        tickfont={"size": 10}, title_font={"size": 11})
-    figura.update_yaxes(showgrid=False, autorange="reversed", tickfont={"size": 10})
-    return figura
-
-
-def _figura_grupos_presupuesto(df):
-    """Muestra cada etapa presupuestaria apilada en Corriente e Inversión."""
-    if df.empty:
-        figura = go.Figure()
-        figura.add_annotation(text="No existen datos para la selección", showarrow=False,
-                              font={"size": 14, "color": "#6c748b"})
-    else:
-        metricas = [
-            ("Codificado", "CODIFICADO"), ("Comprometido", "COMPROMISO"),
-            ("Devengado", "DEVENGADO"), ("Pagado", "PAGADO"),
-            ("Disponible", "SALDO_DISPONIBLE"),
-        ]
-        corriente = _filtrar_alcance_presupuesto(df, "Corriente")
-        inversion = _filtrar_alcance_presupuesto(df, "Inversión")
-        etiquetas = [etiqueta for etiqueta, _ in metricas]
-        valores_corriente = [float(corriente[col].sum()) for _, col in metricas]
-        valores_inversion = [float(inversion[col].sum()) for _, col in metricas]
-        figura = go.Figure()
-
-        def millones(valor):
-            return f"USD {valor / 1_000_000:,.2f} mill.".replace(",", "X").replace(".", ",").replace("X", ".")
-
-        figura.add_bar(
-            name="Corriente", x=etiquetas, y=valores_corriente,
-            marker_color="#172f70", customdata=[_moneda(v) for v in valores_corriente],
-            text=[millones(v) for v in valores_corriente], textposition="inside",
-            hovertemplate="<b>%{x}</b><br>Corriente: %{customdata}<extra></extra>",
-        )
-        figura.add_bar(
-            name="Inversión", x=etiquetas, y=valores_inversion,
-            marker_color="#2ca8eb", customdata=[_moneda(v) for v in valores_inversion],
-            text=[millones(v) for v in valores_inversion], textposition="inside",
-            hovertemplate="<b>%{x}</b><br>Inversión: %{customdata}<extra></extra>",
-        )
-    figura.update_layout(
-        barmode="stack", height=390, margin=dict(l=55, r=18, t=58, b=48),
-        title={"text": "Composición presupuestaria: Corriente e Inversión", "x": 0.02,
-               "xanchor": "left", "font": {"size": 16, "color": "#17245b"}},
-        paper_bgcolor="white", plot_bgcolor="white",
-        legend={"orientation": "h", "y": 1.11, "x": 1, "xanchor": "right"},
-        font={"family": "Arial", "color": "#17245b"},
-    )
-    figura.update_xaxes(showgrid=False, tickfont={"size": 10})
-    figura.update_yaxes(showticklabels=True, gridcolor="#e8eaf2", zeroline=False,
-                        title="Monto en USD", tickformat="~s", tickfont={"size": 9})
+    figura.update_xaxes(showgrid=False, tickfont={"size": 10.5})
+    figura.update_yaxes(title="Millones de USD", gridcolor="#e4e7f0",
+                        tickformat=",.1f", tickfont={"size": 10})
     return figura
 
 
@@ -1882,28 +1731,27 @@ def contenido_presupuesto(vice=None):
     if es_general:
         vice_normalizado = (DATA_PRESUPUESTO["Viceministerio"].fillna("").astype(str)
                             .map(_normalizar_encabezado_presupuesto))
-        grupo = DATA_PRESUPUESTO.loc[
+        base = DATA_PRESUPUESTO.loc[
             ~vice_normalizado.isin({"SIN_CLASIFICACION", "SIN_CLASIFICAR", "NO_APLICA", ""})
         ].copy()
     else:
-        grupo = DATA_PRESUPUESTO.loc[DATA_PRESUPUESTO["Viceministerio"] == vice].copy()
-        grupo = _filtrar_alcance_presupuesto(grupo, "Inversión")
+        base = DATA_PRESUPUESTO.loc[DATA_PRESUPUESTO["Viceministerio"] == vice].copy()
+    # Todo el módulo trabaja únicamente sobre Inversión (ya no existe la vista
+    # "Corriente"): tanto en General como en cada viceministerio.
+    grupo = _filtrar_alcance_presupuesto(base, "Inversión")
     totales = grupo[PRESUPUESTO_MONETARIAS].sum()
     codificado = float(totales["CODIFICADO"])
     devengado = float(totales["DEVENGADO"])
     ejecucion = (devengado / codificado * 100) if codificado else 0.0
 
+    certificado = float(totales["PRECOMPROMISO"]) if "PRECOMPROMISO" in totales else 0.0
     compromiso = float(totales["COMPROMISO"])
-    pagado = float(totales["PAGADO"])
     saldo = float(totales["SALDO_DISPONIBLE"])
-    avance_compromiso = min((devengado / compromiso * 100) if compromiso else 0.0, 100.0)
-    avance_gestion = min((pagado / devengado * 100) if devengado else 0.0, 100.0)
     kpis = [
         ("codificado", "Codificado", _moneda(codificado), "Presupuesto vigente"),
+        ("certificado", "Certificado", _moneda(certificado), "Precompromiso"),
         ("comprometido", "Comprometido", _moneda(compromiso), "Obligaciones registradas"),
         ("devengado", "Devengado", _moneda(devengado), "Monto ejecutado"),
-        ("pagado", "Avance de gestión", f"{avance_gestion:.2f}%".replace(".", ","),
-         "Pagado / devengado"),
         ("saldo", "Saldo disponible", _moneda(saldo), "Recursos por utilizar"),
         ("ejecucion", "% de ejecución", f"{ejecucion:.2f}%".replace(".", ","),
          "Devengado / codificado"),
@@ -1912,9 +1760,9 @@ def contenido_presupuesto(vice=None):
     iconos_kpi = {
         "asignado": "<path d='M8 18h16M10 18V8h12v10M13 13h2m3 0h2M7 22h18'/>",
         "codificado": "<path d='M9 5h10l4 4v14H9zM19 5v5h4M13 14h6m-6 4h6'/>",
+        "certificado": "<path d='M15 4l2.6 5.3 5.8.9-4.2 4.1 1 5.8-5.2-2.8-5.2 2.8 1-5.8-4.2-4.1 5.8-.9z'/><path d='M12 21l1.5 4M18 21l-1.5 4'/>",
         "comprometido": "<path d='M6 13l5 5L22 7M5 4h20v20H5z'/>",
         "devengado": "<circle cx='15' cy='15' r='10'/><path d='M11 15l3 3 6-7'/>",
-        "pagado": "<circle cx='15' cy='15' r='10'/><path d='M18 11c-1-2-6-2-6 1 0 3 7 1 7 5 0 3-6 3-8 1M15 8v14'/>",
         "saldo": "<path d='M5 10h20v13H5zM8 10V7h14v3M9 16h8m4 0h1'/>",
         "ejecucion": "<path d='M8 22L22 8M10 8h.01M20 22h.01'/><circle cx='10' cy='8' r='3'/><circle cx='20' cy='22' r='3'/>",
     }
@@ -1928,53 +1776,6 @@ def contenido_presupuesto(vice=None):
         return html.Img(src="data:image/svg+xml;utf8," + quote(svg), alt="",
                         style={"width": "14px", "height": "14px", "display": "block"},
                         **{"aria-hidden": "true"})
-
-    def figura_medidor(valor):
-        """Medidor sin título interno: el título se muestra en una barra externa
-        (así el diseño no depende de que la hoja de estilos esté actualizada)."""
-        valor = max(0.0, min(float(valor), 100.0))
-        color_avance = "#2fbd83" if valor >= 70 else "#efb629" if valor >= 40 else "#df3e5b"
-        figura = go.Figure(go.Indicator(
-            mode="gauge+number",
-            value=valor,
-            number={"suffix": " %", "font": {"size": 30, "color": "#17245b"}},
-            gauge={
-                "axis": {"range": [0, 100], "tickwidth": 0, "tickfont": {"size": 10},
-                         "tickvals": [0, 100], "ticktext": ["0.00 %", "100.00 %"]},
-                "bar": {"color": color_avance, "thickness": 0.30},
-                "bgcolor": "#eef0f7", "borderwidth": 0,
-                "steps": [
-                    {"range": [0, 40], "color": "#f6d9df"},
-                    {"range": [40, 70], "color": "#fff0c2"},
-                    {"range": [70, 100], "color": "#d8efe8"},
-                ],
-                "threshold": {"line": {"color": "#17245b", "width": 3},
-                              "thickness": 0.72, "value": valor},
-            },
-        ))
-        figura.update_layout(height=175, margin=dict(l=22, r=22, t=18, b=10),
-                             paper_bgcolor="white", font={"family": "Arial"})
-        return figura
-
-    def panel_medidor(valor, titulo):
-        """Tarjeta con barra de título en azul marino + medidor, siempre en línea
-        (estilo forzado inline para que no dependa de la caché del navegador).
-        Ojo: "responsive": True dentro de un grid sin alto fijo hace que Plotly
-        colapse el gráfico a 0px (el ancho/alto del grid depende del propio
-        gráfico y el gráfico depende del grid → nunca se resuelve). Por eso el
-        alto va fijo en el contenedor y el gráfico NO es responsive aquí."""
-        return html.Div([
-            html.Div(titulo.upper(), style={
-                "background": "#17245b", "color": "#fff", "fontWeight": "800",
-                "fontSize": "11px", "letterSpacing": ".02em", "textAlign": "center",
-                "padding": "9px 8px", "borderRadius": "10px 10px 0 0",
-            }),
-            dcc.Graph(figure=figura_medidor(valor),
-                      config={"displayModeBar": False, "responsive": False},
-                      style={"height": "175px", "width": "100%"}),
-        ], className="budget-panel budget-gauge-panel", style={
-            "overflow": "hidden", "minWidth": "0", "height": "225px",
-        })
 
     def punto(color):
         return html.Span(style={
@@ -1993,59 +1794,49 @@ def contenido_presupuesto(vice=None):
         "justifyContent": "center", "flexWrap": "wrap",
     })
 
-    detalle_sin_total, registros_tabla = _tabla_con_total(grupo)
+    agrupar_por_inicial = "gasto"
+    detalle_sin_total, registros_tabla = _tabla_con_total(grupo, agrupar_por_inicial)
     columnas = list(detalle_sin_total.columns)
+    etiqueta_columna_inicial = _etiqueta_columna_agrupacion(agrupar_por_inicial)
     titulo_pagina = "Visión general de la gestión" if es_general else vice
-    subtitulo_pagina = ("Resumen consolidado de la ejecución presupuestaria."
+    subtitulo_pagina = ("Resumen consolidado de la ejecución presupuestaria de Inversión."
                         if es_general else "Ejecución presupuestaria de Inversión.")
 
     texto_explicativo_style = {"fontSize": "13px", "color": "#4a5170", "margin": "0"}
 
-    if es_general:
-        visuales = html.Section([
-            html.Div([
-                html.H2("Resumen general de ejecución"),
-                html.P("El porcentaje de ejecución corresponde a Devengado / Codificado × 100.",
-                       style=texto_explicativo_style),
-            ], className="budget-visual-header"),
-            html.Div([
-                html.Div(dcc.Graph(figure=_figura_ejecucion_general(grupo),
-                                   config={"displayModeBar": False, "responsive": False},
-                                   style={"height": "300px", "width": "100%"}),
-                         className="budget-panel", style={"height": "300px"}),
-                html.Div(dcc.Graph(figure=_figura_tipo_general(grupo),
-                                   config={"displayModeBar": False, "responsive": False},
-                                   style={"height": "300px", "width": "100%"}),
-                         className="budget-panel", style={"height": "300px"}),
-            ], className="budget-general-chart-grid", style={
-                "display": "grid", "gridTemplateColumns": "minmax(280px, .65fr) minmax(0, 1.35fr)",
-                "gap": "14px",
-            }),
-            leyenda_semaforo,
-        ], className="budget-visual-section")
-        selector_tabla = dcc.RadioItems(
+    # Misma visualización en General y en cada viceministerio: anillo de
+    # ejecución + montos consolidados (en millones), siempre solo Inversión.
+    visuales = html.Section([
+        html.Div([
+            html.H2("Resumen de ejecución"),
+            html.P("El porcentaje de ejecución corresponde a Devengado / Codificado × 100. "
+                   "Cifras de Inversión.", style=texto_explicativo_style),
+        ], className="budget-visual-header"),
+        html.Div([
+            html.Div(dcc.Graph(figure=_figura_ejecucion_general(grupo),
+                               config={"displayModeBar": False, "responsive": False},
+                               style={"height": "300px", "width": "100%"}),
+                     className="budget-panel", style={"height": "300px"}),
+            html.Div(dcc.Graph(figure=_figura_montos_presupuesto(grupo),
+                               config={"displayModeBar": False, "responsive": False},
+                               style={"height": "300px", "width": "100%"}),
+                     className="budget-panel", style={"height": "300px"}),
+        ], className="budget-general-chart-grid", style={
+            "display": "grid", "gridTemplateColumns": "minmax(280px, .65fr) minmax(0, 1.35fr)",
+            "gap": "14px",
+        }),
+        leyenda_semaforo,
+    ], className="budget-visual-section")
+
+    selector_tabla = html.Div([
+        html.Span("Solo Inversión", className="budget-investment-badge"),
+        dcc.RadioItems(
             id="budget-table-scope",
-            options=[{"label": "Total", "value": "Total"},
-                     {"label": "Corriente", "value": "Corriente"},
-                     {"label": "Inversión", "value": "Inversión"}],
-            value="Total", inline=True, className="budget-table-filter",
-        )
-    else:
-        visuales = html.Section([
-            html.Div([
-                html.H2("Indicadores de avance de Inversión"),
-                html.P("Los medidores y la tabla consideran únicamente partidas de Inversión.",
-                       style=texto_explicativo_style),
-            ], className="budget-visual-header"),
-            html.Div([
-                panel_medidor(avance_compromiso, "Avance del devengado frente al comprometido"),
-                panel_medidor(avance_gestion, "Avance de gestión frente al devengado"),
-            ], className="budget-vice-gauge-grid", style={
-                "display": "grid", "gridTemplateColumns": "1fr 1fr", "gap": "12px",
-            }),
-            leyenda_semaforo,
-        ], className="budget-visual-section")
-        selector_tabla = html.Span("Solo Inversión", className="budget-investment-badge")
+            options=[{"label": "Grupo de gasto", "value": "gasto"},
+                     {"label": "Proyecto", "value": "proyecto"}],
+            value=agrupar_por_inicial, inline=True, className="budget-table-filter",
+        ),
+    ], style={"display": "flex", "alignItems": "center", "gap": "10px", "flexWrap": "wrap"})
 
     return html.Div([
         html.Div([html.P("EJECUCIÓN PRESUPUESTARIA", className="content-kicker"),
@@ -2106,7 +1897,8 @@ def contenido_presupuesto(vice=None):
                             "textAlign": "right"},
                 style_cell_conditional=[
                     {"if": {"column_id": "POA/PAI"}, "textAlign": "left", "fontWeight": "700"},
-                    {"if": {"column_id": "Grupo de gasto"}, "textAlign": "left", "minWidth": "230px"},
+                    {"if": {"column_id": ["Grupo de gasto", "Proyecto"]}, "textAlign": "left",
+                     "minWidth": "230px"},
                     {"if": {"column_id": "Semáforo"}, "textAlign": "center", "fontSize": "15px",
                      "minWidth": "60px", "maxWidth": "60px", "padding": "0"},
                 ],
@@ -2293,31 +2085,33 @@ def mostrar_pantalla(seccion, vice, indicador, _version):
 
 @app.callback(
     Output("budget-detail-table", "data"),
+    Output("budget-detail-table", "columns"),
     Output("budget-table-count", "children"),
     Input("budget-table-scope", "value"),
     State("selected-vice", "data"),
     prevent_initial_call=True,
 )
-def filtrar_tabla_presupuesto(alcance, vice):
-    """Filtra la tabla resumida; la fila TOTAL viaja dentro de los mismos datos."""
+def filtrar_tabla_presupuesto(agrupar_por, vice):
+    """Reagrupa la tabla por Grupo de gasto o por Proyecto; siempre solo
+    Inversión. La fila TOTAL viaja dentro de los mismos datos."""
+    agrupar_por = agrupar_por or "gasto"
     if not vice or DATA_PRESUPUESTO.empty:
-        _, registros_vacios = _tabla_con_total(pd.DataFrame())
-        return registros_vacios, "0 grupos"
+        detalle_vacio, registros_vacios = _tabla_con_total(pd.DataFrame(), agrupar_por)
+        columnas_vacias = [{"name": c, "id": c} for c in detalle_vacio.columns]
+        return registros_vacios, columnas_vacias, "0 grupos"
     if vice == "General":
         vice_normalizado = (DATA_PRESUPUESTO["Viceministerio"].fillna("").astype(str)
                             .map(_normalizar_encabezado_presupuesto))
-        grupo = DATA_PRESUPUESTO.loc[
+        base = DATA_PRESUPUESTO.loc[
             ~vice_normalizado.isin({"SIN_CLASIFICACION", "SIN_CLASIFICAR", "NO_APLICA", ""})
         ].copy()
-        filtrado = _filtrar_alcance_presupuesto(grupo, alcance)
     else:
-        grupo = DATA_PRESUPUESTO.loc[
-            DATA_PRESUPUESTO["Viceministerio"] == vice
-        ].copy()
-        filtrado = _filtrar_alcance_presupuesto(grupo, "Inversión")
-    detalle, registros = _tabla_con_total(filtrado)
+        base = DATA_PRESUPUESTO.loc[DATA_PRESUPUESTO["Viceministerio"] == vice].copy()
+    filtrado = _filtrar_alcance_presupuesto(base, "Inversión")
+    detalle, registros = _tabla_con_total(filtrado, agrupar_por)
+    columnas = [{"name": c, "id": c} for c in detalle.columns]
     cantidad = f"{len(detalle):,} grupos".replace(",", ".")
-    return registros, cantidad
+    return registros, columnas, cantidad
 
 
 @app.callback(Output("observation-area", "children"),
