@@ -2106,9 +2106,7 @@ def pagina_educacion_superior():
         html.H2("Programas y servicios de Educación Superior", className="vision-eje-banner"),
         _tarjetas_programas_eje2(programas),
         html.P(aviso, className="eje2-source-note") if aviso else None,
-        html.H2("Proyectos a futuro", className="vision-eje-banner"),
-        html.P("Agenda de acciones estratégicas prevista para octubre y noviembre.", className="eje1-subtitulo"),
-        _cartera_futura_eje2(EJE2_PROYECTOS_FUTUROS)])
+    ])
 
 
 EJES_VICEMINISTERIALES = {
@@ -2243,15 +2241,6 @@ def pagina_eje_viceministerial(codigo):
             className="eje-programas-fila-unica",
         ) if programas else None,
         html.P(aviso, className="eje2-source-note") if aviso else None,
-        html.H2("Acciones estratégicas", className="vision-eje-banner"),
-        html.P("Resumen ejecutivo de actividades y acciones previstas para octubre y noviembre.",
-               className="eje1-subtitulo"),
-        html.Div([html.Div([html.Strong(v), html.Span(e)], className="eje1-stat")
-                  for v, e in eje["resumen"] if "agenda" not in e.lower()],
-                 className="eje1-stats-grid eje-summary-grid"),
-        _tarjetas_acciones_eje(eje["acciones"]),
-        html.P("Las cifras de esta sección corresponden a las diapositivas institucionales entregadas.",
-               className="eje2-source-note"),
     ])
 
 
@@ -2927,11 +2916,6 @@ def pagina_gestion_educativa():
                 className="vision-eje-banner"),
         html.Div(className="vision-exec-grid gestion-educativa-grid", children=tarjetas),
         pie,
-
-        html.H2("Proyectos que transforman la educación",
-                className="vision-eje-banner"),
-        seccion_eje1_infraestructura(),
-        seccion_pma(),
     ])
 
 
