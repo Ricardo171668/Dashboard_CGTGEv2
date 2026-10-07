@@ -2795,3 +2795,6 @@
     max-height: 100% !important;
   }
 }
+.programa-resumen-card .programa-card-resultado span.unidad-sin-mayusculas {
+  text-transform: none;
+}

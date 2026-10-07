@@ -1989,18 +1989,22 @@ def _tarjetas_programas_eje2(datos):
         es_comunidades = clave_programa.startswith("comunidades seguras")
         titulo = ("Profesionales DECE (Apoyo Psicológico)"
                   if es_dece else dato["programa"])
-        unidad = ("Comunidad Educativa"
-                  if es_comunidades else str(dato["tipo"]).strip())
+        if es_comunidades:
+            unidad = "Comunidad Educativa"
+        elif es_dece:
+            unidad = "DECEs contratados"
+        else:
+            unidad = str(dato["tipo"]).strip()
         contenido = [
             html.Span(className="vision-card-icon-mark"),
             html.Span(titulo, className="vision-card-label"),
             html.Div([
                 html.Strong(formato_valor(dato["beneficiarios"])),
-                html.Span(unidad),
-            ], className="vision-card-value-row programa-card-resultado"),
+                html.Span(unidad, className="unidad-sin-mayusculas" if es_dece else None),
+                ], className="vision-card-value-row programa-card-resultado"),
         ]
         if es_dece:
-            contenido.append(html.P("La brecha nacional se ha reducido en 45%",
+            contenido.append(html.P("La brecha nacional se ha reducido al 45%",
                                     className="programa-card-destacado"))
         tarjetas.append(html.Article(
             contenido,
