@@ -146,10 +146,193 @@
   grid-area: menu;
   grid-column: 1 / -1;
   display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
+  grid-template-columns: repeat(5, minmax(0, 1fr));
   gap: 18px;
   width: 100%;
   margin: 0 0 10px;
+}
+
+/* -------------------------------------------------------------------------
+   Documentación · entregable E-02 del Dashboard Presidencial
+   ------------------------------------------------------------------------- */
+.documentation-page {
+  width: min(1500px, 100%);
+  margin: 0 auto;
+  padding: 4px 0 36px;
+  color: var(--minedec-text);
+}
+
+.documentation-hero {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 24px;
+  padding: clamp(24px, 3vw, 42px);
+  border-radius: 22px;
+  color: #fff;
+  background: linear-gradient(120deg, #17245b 0%, #38217d 100%);
+  box-shadow: 0 15px 32px rgba(29, 35, 86, .17);
+}
+
+.documentation-kicker {
+  margin: 0 0 9px !important;
+  color: var(--minedec-yellow) !important;
+  font-size: 11px !important;
+  font-weight: 850;
+  letter-spacing: .14em;
+}
+
+.documentation-hero h1 { margin: 0 0 8px; font-size: clamp(30px, 3vw, 48px); }
+.documentation-hero p { max-width: 850px; margin: 0; color: #edf0ff; line-height: 1.55; }
+
+.documentation-deadline {
+  min-width: 150px;
+  padding: 14px 18px;
+  border: 1px solid rgba(255,255,255,.28);
+  border-radius: 14px;
+  background: rgba(255,255,255,.1);
+  text-align: center;
+}
+.documentation-deadline span,
+.documentation-deadline strong { display: block; }
+.documentation-deadline span { margin-bottom: 4px; font-size: 10px; text-transform: uppercase; letter-spacing: .08em; }
+.documentation-deadline strong { color: var(--minedec-yellow); font-size: 18px; }
+
+.documentation-section {
+  margin-top: 22px;
+  padding: clamp(18px, 2.2vw, 28px);
+  border: 1px solid #dfe3ef;
+  border-radius: 18px;
+  background: #fff;
+  box-shadow: 0 9px 24px rgba(30, 42, 92, .07);
+}
+.documentation-section-heading { margin-bottom: 18px; }
+.documentation-section-heading h2 { margin: 0 0 5px; color: #17245b; font-size: clamp(20px, 1.7vw, 27px); }
+.documentation-section-heading p { margin: 0; color: #68718a; font-size: 13px; }
+
+.document-deliverables-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 16px;
+}
+.document-deliverable-card {
+  position: relative;
+  min-width: 0;
+  padding: 20px;
+  border: 1px solid #e0e3ec;
+  border-top: 4px solid var(--minedec-yellow);
+  border-radius: 15px;
+  background: #fff;
+}
+.document-card-top { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.document-code { padding: 5px 10px; border-radius: 999px; color: #503a98; background: #f0eef9; font-size: 10px; font-weight: 900; letter-spacing: .04em; }
+.document-status { display: inline-block; width: max-content; padding: 4px 9px; border-radius: 999px; font-size: 9px; font-weight: 800; }
+.document-status.available { color: #17664f; background: #d9f1e8; }
+.document-status.template { color: #765500; background: #fff0bd; }
+.document-status.pending { color: #8a6700; background: #fff3c7; }
+.document-file-icon {
+  width: 44px;
+  height: 44px;
+  margin: 0;
+  display: grid;
+  place-items: center;
+  border-radius: 12px;
+  color: #503a98;
+  background: #f4f3fb;
+  font-size: 24px;
+  font-weight: 900;
+}
+.document-file-icon-svg {
+  display: block;
+  width: 29px;
+  height: 29px;
+}
+.document-deliverable-card h3 { min-height: 0; margin: 16px 0 7px; color: #503a98; font-size: 17px; line-height: 1.25; }
+.document-deliverable-card > p { min-height: 54px; margin: 0 0 13px; color: #626b82; font-size: 12px; line-height: 1.5; }
+.document-format { display: block; padding: 9px 0; border-top: 1px solid #e8eaf1; color: #56627e; font-size: 11px; }
+.document-format strong { color: #17245b; }
+.document-deliverable-card .document-note { display: none; }
+.document-card-actions {
+  display: grid;
+  gap: 9px;
+  align-items: start;
+}
+.document-action {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  width: 100%;
+  padding: 10px 12px;
+  border-radius: 9px;
+  color: #fff;
+  background: #503a98;
+  font-size: 11px;
+  font-weight: 800;
+  text-decoration: none;
+  box-sizing: border-box;
+}
+.document-action:hover { background: #392279; }
+.document-action.disabled { color: #7a8091; background: #eceef4; cursor: not-allowed; }
+
+.document-timeline { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 10px; }
+.document-timeline-item {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  gap: 5px 10px;
+  align-items: center;
+  padding: 13px;
+  border: 1px solid #e3e6ef;
+  border-radius: 11px;
+  background: #fafbfe;
+}
+.document-timeline-code { grid-row: 1 / 3; color: #503a98; font-weight: 900; }
+.document-timeline-item strong,
+.document-timeline-item small { display: block; }
+.document-timeline-item strong { overflow: hidden; color: #17245b; font-size: 11px; text-overflow: ellipsis; white-space: nowrap; }
+.document-timeline-item small { margin-top: 3px; color: #767e92; font-size: 9px; }
+.document-timeline-state { grid-column: 2; width: max-content; padding: 3px 7px; border-radius: 999px; font-size: 8px; font-weight: 850; text-transform: uppercase; }
+.document-timeline-state.incorporada { color: #17664f; background: #d9f1e8; }
+.document-timeline-state.en-proceso { color: #765500; background: #fff0bd; }
+.document-timeline-state.pendiente { color: #8f2941; background: #f8dce3; }
+
+.document-support-grid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 12px; }
+.document-support-card { display: flex; flex-direction: column; min-height: 145px; padding: 15px; border: 1px solid #e1e4ee; border-radius: 12px; background: #fafbfe; }
+.document-support-card > div { display: flex; justify-content: space-between; color: #503a98; font-size: 10px; font-weight: 850; text-transform: uppercase; }
+.document-support-card h3 { flex: 1; margin: 13px 0; color: #17245b; font-size: 13px; line-height: 1.35; }
+.document-support-card .document-action { padding: 8px 10px; }
+.documentation-security { margin-top: 17px; padding: 13px 16px; border-left: 5px solid var(--minedec-yellow); border-radius: 8px; color: #5d6478; background: #fff8df; font-size: 11px; line-height: 1.5; }
+.documentation-security strong { color: #17245b; }
+
+@media (max-width: 1550px) {
+  .portada-menu {
+    grid-template-columns: repeat(5, minmax(0, 1fr));
+    gap: 12px;
+  }
+  .portada-boton {
+    min-height: 100px;
+    padding: 13px 12px;
+    grid-template-columns: 48px minmax(0, 1fr) 14px;
+    gap: 9px;
+  }
+  .portada-boton-icono { width: 46px; height: 46px; }
+  .portada-boton-icono-svg { width: 27px; height: 27px; }
+  .portada-boton-texto { font-size: clamp(13px, 1.05vw, 17px); }
+  .portada-boton-flecha { font-size: 30px; }
+  .document-timeline { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+}
+
+@media (max-width: 1050px) {
+  .document-deliverables-grid { grid-template-columns: 1fr; }
+  .document-support-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .document-timeline { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+
+@media (max-width: 680px) {
+  .documentation-hero { grid-template-columns: 1fr; }
+  .documentation-deadline { justify-self: stretch; }
+  .document-support-grid,
+  .document-timeline { grid-template-columns: 1fr; }
 }
 
 .portada-boton {
@@ -484,6 +667,1084 @@
 .vision-exec-card.estudiantes { --card-accent: #2072ad; }
 .vision-exec-card.docentes { --card-accent: #68205f; }
 .vision-exec-card.instituciones { --card-accent: #c49a00; }
+
+/* Tarjetas de la pestaña "Gestión Educativa" (una por base real). */
+.vision-exec-card.alimentacion { --card-accent: #1a7f8e; }
+.vision-exec-card.uniformes { --card-accent: #2f8f4e; }
+.vision-exec-card.textos { --card-accent: #c99a12; }
+.vision-exec-card.infraestructura { --card-accent: #503a98; }
+.vision-exec-card.mobiliario {
+  --card-accent: #503a98;
+  border-top-color: #503a98 !important;
+}
+.vision-exec-card.transporte {
+  --card-accent: #287bb5;
+  border-top-color: #287bb5 !important;
+}
+.vision-exec-card.mobiliario .vision-card-icon-mark { background: #503a98 !important; }
+.vision-exec-card.transporte .vision-card-icon-mark { background: #287bb5 !important; }
+.vision-exec-card.generales { --card-accent: #287bb5; }
+.vision-exec-card.epja { --card-accent: #503a98; }
+.vision-exec-card.epja {
+  border-top-color: #503a98 !important;
+}
+.vision-exec-card.epja .vision-card-icon-mark { background: #503a98; }
+
+/* La grilla se adapta sola de 4 a 7+ tarjetas, sin puntos de quiebre fijos.
+   Letra y relleno alineados a la escala compacta ya usada en el resto del
+   panel (ver .budget-kpi-card): etiquetas ~9px, cifra principal ~18px. */
+.gestion-educativa-grid {
+  grid-template-columns: repeat(auto-fit, minmax(170px, 1fr));
+}
+
+.gestion-educativa-grid.vision-exec-grid {
+  gap: 10px;
+}
+
+.gestion-educativa-grid .vision-exec-card {
+  padding: 11px 12px;
+  border-top-width: 4px;
+}
+
+.gestion-educativa-grid .vision-card-icon-mark {
+  width: 22px;
+  height: 4px;
+  margin-bottom: 8px;
+}
+
+.gestion-educativa-grid .vision-card-label {
+  min-height: 22px;
+  font-size: 13.5px;
+  letter-spacing: .02em;
+}
+
+.gestion-educativa-grid .vision-card-total {
+  margin-top: 6px;
+  font-size: clamp(26px, 2.2vw, 34px);
+  overflow-wrap: anywhere;
+}
+
+.vision-card-value-row {
+  display: flex;
+  align-items: baseline;
+  flex-wrap: wrap;
+  gap: 5px;
+}
+
+.vision-card-unit {
+  color: #4d5877;
+  font-size: 11px;
+  font-weight: 800;
+  text-transform: uppercase;
+}
+
+.vision-card-pending {
+  display: inline-block;
+  color: #727b94;
+  font-size: 17px;
+  font-weight: 750;
+  line-height: 1.2;
+}
+
+.gestion-educativa-grid .vision-card-details {
+  margin-top: 10px;
+  gap: 6px;
+}
+
+.gestion-educativa-grid .vision-mini-stat {
+  padding: 8px 9px;
+}
+
+.gestion-educativa-grid .vision-mini-stat span {
+  font-size: 12px;
+}
+
+.gestion-educativa-grid .vision-mini-stat strong {
+  font-size: 17px;
+}
+
+.gestion-educativa-grid .vision-exec-card > p {
+  margin-top: 6px;
+  font-size: 12.5px;
+  line-height: 1.35;
+}
+
+.vision-card-filters {
+  margin-top: 10px;
+  display: grid;
+  gap: 7px;
+}
+
+.vision-card-filter > span {
+  display: block;
+  margin-bottom: 3px;
+  color: #4d5877;
+  font-size: 10px;
+  font-weight: 800;
+  text-transform: uppercase;
+}
+
+.vision-card-filter .Select-control {
+  min-height: 32px;
+  border-color: #d9deea;
+  border-radius: 8px;
+}
+
+.vision-card-filter .Select-value,
+.vision-card-filter .Select-placeholder {
+  line-height: 30px !important;
+  font-size: 11px;
+}
+
+.vision-card-filter.is-hidden { display: none; }
+
+/* "Datos generales" trae totales nacionales (más dígitos): número un poco
+   más chico que el resto para que siempre quepa dentro de la tarjeta. */
+.datos-generales-grid .vision-card-total {
+  font-size: clamp(20px, 1.7vw, 26px);
+  overflow-wrap: anywhere;
+}
+
+/* Encabezado compacto de la página de Gestión Educativa. */
+.vision-exec-header-compacta h1 {
+  font-size: clamp(14px, 1.05vw, 18px);
+  white-space: nowrap;
+  text-transform: none;
+}
+
+.vision-exec-header-compacta h1.gestion-educativa-titulo-eje {
+  max-width: 1250px;
+  font-size: clamp(13px, 1vw, 17px);
+  line-height: 1.18;
+  white-space: normal;
+}
+
+.vision-exec-header-compacta .vision-exec-kicker {
+  font-size: clamp(13px, 1.05vw, 16px);
+  font-weight: 900;
+  letter-spacing: .12em;
+}
+
+.vision-exec-header-compacta p:not(.vision-exec-kicker) {
+  max-width: 980px;
+  font-size: 11px;
+  line-height: 1.4;
+}
+
+/* Títulos de sección dentro de Gestión Educativa, estilo "banner EJE" del
+   material institucional del Ministerio — separa claramente "Datos
+   generales" de "Cobertura" con un nombre llamativo para cada una. */
+.vision-eje-banner {
+  position: relative;
+  margin: 22px 0 14px;
+  padding: 11px 20px 11px 36px;
+  display: inline-block;
+  border-radius: 999px;
+  background: linear-gradient(100deg, #4f3699 0%, #2c176f 100%);
+  color: #f8bd20;
+  font-size: 12.5px;
+  font-weight: 850;
+  letter-spacing: .02em;
+  text-transform: uppercase;
+  box-shadow: 0 8px 18px rgba(35, 25, 90, .22);
+}
+
+.vision-eje-banner::before {
+  content: "";
+  position: absolute;
+  left: 4px;
+  top: 50%;
+  width: 20px;
+  height: 20px;
+  transform: translateY(-50%);
+  border-radius: 50%;
+  background: #241259;
+  border: 2px solid #f8bd20;
+}
+
+.vision-eje-banner:first-of-type {
+  margin-top: 14px;
+}
+
+.datos-generales-grid {
+  grid-template-columns: repeat(3, minmax(170px, 1fr));
+}
+
+/* Educación Media incorpora EPJA como cuarta cifra y conserva toda la fila. */
+.datos-generales-grid.educacion-media-cifras-grid {
+  grid-template-columns: repeat(4, minmax(0, 1fr)) !important;
+  align-items: stretch;
+}
+
+.educacion-media-cifras-grid .vision-exec-card {
+  align-self: stretch !important;
+  min-height: 150px;
+}
+
+@media (max-width: 680px) {
+  .datos-generales-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .datos-generales-grid.educacion-media-cifras-grid {
+    grid-template-columns: 1fr !important;
+  }
+}
+
+/* Ajuste final: Instituciones contiene menos información y no necesita el
+   mismo ancho que las tarjetas con desglose por sexo. */
+@media (min-width: 981px) {
+  .datos-generales-grid {
+    grid-template-columns:
+      minmax(230px, .72fr) minmax(340px, 1.14fr) minmax(340px, 1.14fr) !important;
+  }
+
+  .datos-generales-grid .vision-exec-card:first-child {
+    align-self: start;
+    padding-bottom: 12px;
+  }
+
+  /* Educación Superior usa tres cifras equivalentes: ninguna tarjeta debe
+     recibir el ancho reducido reservado para Instituciones en Educación Media. */
+  .datos-generales-grid.educacion-superior-cifras-grid {
+    grid-template-columns: repeat(3, minmax(0, 1fr)) !important;
+  }
+
+  .datos-generales-grid.educacion-superior-cifras-grid .vision-exec-card:first-child {
+    align-self: stretch;
+    padding-bottom: 11px;
+  }
+}
+
+@media (min-width: 681px) and (max-width: 980px) {
+  .datos-generales-grid {
+    grid-template-columns: 1fr 1fr !important;
+  }
+
+  .datos-generales-grid .vision-exec-card:first-child {
+    grid-column: 1 / -1;
+  }
+
+  .datos-generales-grid.educacion-media-cifras-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+  }
+
+  .educacion-media-cifras-grid .vision-exec-card:first-child {
+    grid-column: auto;
+  }
+}
+
+/* Eje 1 · Infraestructura educativa: tarjetas de cifras, mapa por
+   provincia y tabla de instituciones colapsable. */
+.eje1-seccion {
+  margin-top: 4px;
+}
+
+.eje1-subtitulo {
+  margin: 0 0 12px;
+  color: #4d5877;
+  font-size: 13px;
+  font-weight: 800;
+}
+
+.eje1-stats-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+  gap: 10px;
+  margin-bottom: 14px;
+}
+
+.eje1-stat {
+  padding: 14px 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  border: 1px solid #e1e4ed;
+  border-radius: 12px;
+  background: #fff;
+  box-shadow: 0 6px 16px rgba(24, 37, 87, .05);
+}
+
+.eje1-stat strong {
+  color: #503a98;
+  font-size: clamp(20px, 1.8vw, 30px);
+  line-height: 1;
+}
+
+.eje1-stat span {
+  color: #4d5877;
+  font-size: 10.5px;
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: .02em;
+}
+
+.eje1-stats-grid .eje1-stat:first-child {
+  border-color: #4d3a94;
+  background: #4d3a94;
+}
+
+.eje1-stats-grid .eje1-stat:first-child strong { color: #f8bd20; }
+.eje1-stats-grid .eje1-stat:first-child span { color: #ffffff; }
+
+.eje1-fila-detalle {
+  display: grid;
+  grid-template-columns: minmax(390px, .72fr) minmax(700px, 1.58fr);
+  grid-template-areas: "mapa tabla";
+  gap: 14px;
+  align-items: start;
+}
+
+.eje1-col-tabla,
+.eje1-col-mapa {
+  min-width: 0;
+}
+
+.eje1-col-tabla {
+  grid-area: tabla;
+  width: 100%;
+  justify-self: stretch;
+}
+
+.eje1-col-mapa {
+  grid-area: mapa;
+  max-width: 480px;
+  justify-self: center;
+  width: 100%;
+}
+
+.eje1-mapa-wrap {
+  margin-bottom: 0;
+  padding: 8px;
+  border: 1px solid #e1e4ed;
+  border-radius: 14px;
+  background: #fff;
+  box-shadow: 0 6px 16px rgba(24, 37, 87, .05);
+}
+
+.eje1-mapa { width: 100%; }
+
+.eje1-mapa-wrap .js-plotly-plot,
+.eje1-mapa-wrap .plot-container,
+.eje1-mapa-wrap .svg-container {
+  background: #fff !important;
+}
+
+@media (max-width: 1200px) {
+  .eje1-fila-detalle {
+    grid-template-columns: 1fr;
+    grid-template-areas:
+      "mapa"
+      "tabla";
+  }
+
+  .eje1-col-mapa {
+    max-width: 680px;
+    justify-self: center;
+  }
+}
+
+.eje1-tabla-accordion {
+  border: 1px solid #e1e4ed;
+  border-radius: 12px;
+  background: #fff;
+  overflow: hidden;
+}
+
+.eje1-tabla-header {
+  padding: 12px 16px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  color: #4d3a94;
+  font-size: 12.5px;
+  font-weight: 800;
+  cursor: pointer;
+  list-style: none;
+  user-select: none;
+}
+
+.eje1-tabla-header::-webkit-details-marker { display: none; }
+
+.eje1-tabla-chevron {
+  color: #4d3a94;
+  font-size: 16px;
+  transition: transform .18s ease;
+}
+
+.eje1-tabla-accordion[open] .eje1-tabla-chevron { transform: rotate(180deg); }
+
+.eje1-tabla-body {
+  padding: 0 10px 12px;
+  overflow-x: auto;
+}
+
+.eje1-tabla {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 11.5px;
+}
+
+.eje1-tabla th {
+  padding: 9px 10px;
+  background: #17245b;
+  color: #fff;
+  font-size: 10px;
+  text-transform: uppercase;
+  text-align: left;
+  white-space: nowrap;
+}
+
+.eje1-tabla td {
+  padding: 8px 10px;
+  border-bottom: 1px solid #eceef5;
+  color: #28304f;
+}
+
+.eje1-tabla th:nth-child(1),
+.eje1-tabla td:nth-child(1) { width: 31%; }
+
+.eje1-tabla th:nth-child(2),
+.eje1-tabla td:nth-child(2) { width: 13%; }
+
+.eje1-tabla th:nth-child(3),
+.eje1-tabla td:nth-child(3) { width: 15%; }
+
+.eje1-tabla th:nth-child(4),
+.eje1-tabla td:nth-child(4) {
+  width: 23%;
+  min-width: 150px;
+  white-space: normal;
+  overflow-wrap: anywhere;
+  line-height: 1.25;
+}
+
+.eje1-tabla th:nth-child(5),
+.eje1-tabla td:nth-child(5) { width: 18%; }
+
+.eje1-tabla tr:nth-child(even) td { background: #f7f7fb; }
+
+/* Eje 2 · Educación Superior */
+.educacion-superior-page { padding-bottom: 34px; }
+.educacion-superior-cifras-grid {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  align-items: stretch;
+  margin-bottom: 22px;
+}
+.educacion-superior-cifras-grid .vision-exec-card {
+  min-height: 176px;
+  height: 100%;
+}
+.vision-exec-card.superior-estudiantes { --card-accent: #287bb5; }
+.vision-exec-card.superior-docentes { --card-accent: #68205f; }
+.vision-exec-card.superior-instituciones { --card-accent: #c49a00; }
+.eje2-stats-grid { grid-template-columns: repeat(4, minmax(150px, 1fr)); }
+.eje2-future-stats { grid-template-columns: repeat(3, minmax(180px, 1fr)); }
+.eje2-programas-tabla th:nth-child(1),
+.eje2-programas-tabla td:nth-child(1) { width: 34%; }
+.eje2-programas-tabla th:nth-child(2),
+.eje2-programas-tabla td:nth-child(2) { width: 39%; white-space: normal; }
+.eje2-programas-tabla th:nth-child(3),
+.eje2-programas-tabla td:nth-child(3) { width: 12%; text-align: right; }
+.eje2-programas-tabla th:nth-child(4),
+.eje2-programas-tabla td:nth-child(4) { width: 15%; }
+.eje2-future-section { margin-top: 2px; }
+.eje2-future-stats .eje1-stat:nth-child(4) {
+  border-color: #f0b51c;
+  background: #fff8e6;
+}
+.eje2-project-grid {
+  display: grid;
+  grid-template-columns: repeat(5, minmax(230px, 1fr));
+  gap: 10px;
+  overflow-x: auto;
+  padding-bottom: 6px;
+}
+.eje2-project-card {
+  min-width: 0;
+  padding: 13px;
+  border: 1px solid #e1e4ed;
+  border-top: 4px solid #503a98;
+  border-radius: 13px;
+  background: #fff;
+  box-shadow: 0 7px 18px rgba(24, 37, 87, .07);
+}
+.eje2-project-card:last-child {
+  border-top-color: #f4b91e;
+  background: linear-gradient(145deg, #fffdf7, #fff8e4);
+}
+.eje2-project-top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+.eje2-project-month {
+  padding: 4px 9px;
+  border-radius: 999px;
+  color: #fff;
+  background: #503a98;
+  font-size: 9px;
+  font-weight: 900;
+  letter-spacing: .08em;
+  text-transform: uppercase;
+}
+.eje2-project-card:last-child .eje2-project-month { color: #241259; background: #f4b91e; }
+.eje2-project-number {
+  color: #c9cde0;
+  font-size: 35px;
+  font-weight: 900;
+  line-height: .9;
+}
+.eje2-project-card h3 { margin: 11px 0 6px; color: #17245b; font-size: 13px; line-height: 1.2; }
+.eje2-project-card p { min-height: 42px; margin: 0 0 13px; color: #59627d; font-size: 11px; line-height: 1.45; }
+.eje2-project-meta { display: flex; flex-wrap: wrap; gap: 6px; }
+.eje2-project-meta span,
+.eje2-project-meta-single {
+  padding: 5px 8px;
+  border-radius: 7px;
+  color: #473286;
+  background: #efedf8;
+  font-size: 9.5px;
+  font-weight: 850;
+}
+.eje2-source-note { margin: 9px 2px 0; color: #69718a; font-size: 9.5px; line-height: 1.4; }
+
+/* Ejes 3, 4 y 5: consolidado del Excel seguido de acciones institucionales. */
+.eje-viceministerial-page { padding-bottom: 34px; }
+.eje-summary-grid { grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); }
+.eje-summary-grid .eje1-stat strong,
+.eje2-future-stats .eje1-stat strong {
+  font-size: clamp(24px, 2vw, 34px);
+  line-height: 1.05;
+}
+
+/* Programas y servicios: las filas de la antigua tabla se muestran como
+   tarjetas ejecutivas. Los cuadros estadísticos iniciales ya no se utilizan. */
+.programas-servicios-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 14px;
+  margin: 12px 0 22px;
+}
+
+.programa-servicio-card {
+  min-width: 0;
+  padding: 17px;
+  display: flex;
+  flex-direction: column;
+  border: 1px solid #dfe3ee;
+  border-top: 4px solid #503a98;
+  border-radius: 14px;
+  background: #ffffff;
+  box-shadow: 0 8px 20px rgba(25, 37, 87, .08);
+}
+
+.programa-servicio-card:nth-child(4n + 2) { border-top-color: #f4b91e; }
+
+.programa-card-top {
+  min-height: 26px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.programa-card-index {
+  color: #503a98;
+  font-size: 19px;
+  font-weight: 900;
+}
+
+.programa-card-tipo {
+  max-width: 62%;
+  overflow: hidden;
+  padding: 5px 9px;
+  border-radius: 999px;
+  color: #755600;
+  background: #fff1bd;
+  font-size: 8px;
+  font-weight: 850;
+  text-overflow: ellipsis;
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+
+.programa-servicio-card h3 {
+  min-height: 52px;
+  margin: 3px 0 18px;
+  flex: 1;
+  color: #17245b;
+  font-size: 15px;
+  line-height: 1.35;
+}
+
+.programa-card-resultado {
+  display: flex;
+  align-items: baseline;
+  flex-wrap: wrap;
+  gap: 7px;
+  padding: 13px 12px;
+  border-radius: 10px;
+  background: #f4f3fa;
+}
+
+.programa-card-resultado strong {
+  color: #503a98;
+  font-size: clamp(22px, 1.8vw, 30px);
+  line-height: 1;
+}
+
+.programa-card-resultado span {
+  color: #59627d;
+  font-size: 12px;
+  font-weight: 850;
+  text-transform: uppercase;
+}
+
+/* Versión final homologada con las tarjetas de cifras y recursos. */
+.programas-servicios-grid.vision-exec-grid {
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.programa-resumen-card {
+  min-height: 145px;
+  padding: 14px !important;
+}
+
+.programa-resumen-card.programa-azul { --card-accent: #287bb5; }
+.programa-resumen-card.programa-verde { --card-accent: #2f8f4e; }
+.programa-resumen-card.programa-amarillo { --card-accent: #c99a12; }
+.programa-resumen-card.programa-morado { --card-accent: #503a98; }
+
+.programa-resumen-card .vision-card-icon-mark {
+  background: var(--card-accent);
+}
+
+.programa-resumen-card .vision-card-label {
+  min-height: 44px;
+  color: #17245b;
+  font-size: 14px;
+  line-height: 1.3;
+}
+
+.programa-resumen-card .programa-card-resultado {
+  margin-top: 10px;
+  padding: 0;
+  gap: 6px;
+  background: transparent;
+}
+
+.programa-resumen-card .programa-card-resultado strong {
+  color: #17245b;
+  font-size: clamp(25px, 2vw, 32px);
+}
+
+.programa-resumen-card .programa-card-resultado span {
+  color: #4d5877;
+  font-size: 11px;
+}
+
+.programa-resumen-card > p {
+  margin-top: auto !important;
+  padding-top: 10px;
+  color: #69718a;
+  font-size: 10.5px !important;
+}
+
+.programa-card-direccion {
+  flex: 1;
+  padding: 10px 0 12px;
+  border-top: 1px solid #e8eaf1;
+}
+
+.programa-card-direccion span,
+.programa-card-metricas span {
+  display: block;
+  margin-bottom: 4px;
+  color: #747d92;
+  font-size: 8px;
+  font-weight: 800;
+  letter-spacing: .04em;
+  text-transform: uppercase;
+}
+
+.programa-card-direccion p {
+  margin: 0;
+  color: #505a74;
+  font-size: 10px;
+  line-height: 1.45;
+}
+
+.programa-card-metricas {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.programa-card-metricas > div {
+  min-width: 0;
+  padding: 9px;
+  border-radius: 9px;
+  background: #f4f3fa;
+}
+
+.programa-card-metricas strong {
+  display: block;
+  overflow: hidden;
+  color: #503a98;
+  font-size: 12px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+@media (max-width: 1450px) {
+  .programas-servicios-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+}
+
+@media (max-width: 1050px) {
+  .programas-servicios-grid,
+  .programas-servicios-grid.vision-exec-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 680px) {
+  .programas-servicios-grid,
+  .programas-servicios-grid.vision-exec-grid { grid-template-columns: 1fr; }
+}
+.eje-actions-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(255px, 1fr));
+  gap: 12px;
+}
+
+/* En los ejes viceministeriales, los cinco programas se leen como una sola
+   banda y las acciones se ordenan de cuatro en cuatro. */
+.eje-programas-fila-unica .programas-servicios-grid,
+.eje-programas-fila-unica .programas-servicios-grid.vision-exec-grid {
+  grid-template-columns: repeat(5, minmax(0, 1fr)) !important;
+}
+
+.eje-programas-fila-unica .programa-resumen-card {
+  min-height: 138px;
+  padding: 13px !important;
+}
+
+.eje-programas-fila-unica .programa-resumen-card .vision-card-label {
+  min-height: 48px;
+  font-size: clamp(11px, .82vw, 14px);
+}
+
+.eje-programas-fila-unica .programa-resumen-card .programa-card-resultado strong {
+  font-size: clamp(22px, 1.65vw, 30px);
+}
+
+.eje-actions-grid-4 {
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+}
+.eje-action-card {
+  min-width: 0;
+  padding: 14px;
+  border: 1px solid #e1e4ed;
+  border-top: 4px solid #503a98;
+  border-radius: 13px;
+  background: #fff;
+  box-shadow: 0 7px 18px rgba(24, 37, 87, .07);
+}
+.eje-action-card:nth-child(4n) { border-top-color: #f4b91e; }
+.eje-card-top {
+  display: grid;
+  grid-template-columns: 31px auto 1fr;
+  align-items: center;
+  gap: 7px;
+}
+.eje-card-icon {
+  width: 29px;
+  height: 29px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 9px;
+  color: #f8bd20;
+  background: #493492;
+  font-size: 15px;
+  font-weight: 900;
+}
+.eje-card-top .eje2-project-number { justify-self: end; }
+.eje-action-card h3 {
+  margin: 12px 0 6px;
+  color: #17245b;
+  font-size: 14px;
+  line-height: 1.25;
+}
+.eje-action-card p {
+  min-height: 38px;
+  margin: 0 0 11px;
+  color: #59627d;
+  font-size: 10.5px;
+  line-height: 1.45;
+}
+.eje-card-detail {
+  padding: 9px 10px;
+  border-radius: 8px;
+  color: #493492;
+  background: #f0eef8;
+  font-size: clamp(13px, .85vw, 15px);
+  font-weight: 850;
+  line-height: 1.3;
+}
+@media (max-width: 760px) {
+  .eje2-stats-grid,
+  .eje2-future-stats { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .eje-summary-grid,
+  .eje-actions-grid { grid-template-columns: 1fr; }
+  .eje-programas-fila-unica .programas-servicios-grid,
+  .eje-programas-fila-unica .programas-servicios-grid.vision-exec-grid {
+    grid-template-columns: 1fr !important;
+  }
+  .eje2-programas-tabla { min-width: 760px; }
+}
+
+@media (min-width: 761px) and (max-width: 1180px) {
+  .eje-actions-grid-4 { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+
+/* Eje 1 · Programa de Alimentación Escolar por provincia priorizada. */
+.pma-seccion {
+  margin-top: 34px;
+  padding-top: 0;
+}
+
+.pma-subtitulo {
+  margin: 16px 0 14px;
+  color: #17245b;
+  font-size: clamp(18px, 1.55vw, 27px);
+  font-weight: 850;
+  line-height: 1.2;
+}
+
+.pma-stats-grid .eje1-stat:first-child {
+  border-color: #4d3a94;
+  background: #4d3a94;
+}
+
+.pma-stats-grid .eje1-stat:first-child strong {
+  color: #f8bd20;
+}
+
+.pma-stats-grid .eje1-stat:first-child span {
+  color: #ffffff;
+}
+
+.pma-tabla-wrap {
+  overflow: hidden;
+  border: 1px solid #e1e4ed;
+  border-radius: 12px;
+  background: #fff;
+  box-shadow: 0 6px 16px rgba(24, 37, 87, .05);
+}
+
+.pma-tabla th,
+.pma-tabla td {
+  text-align: right;
+}
+
+.pma-tabla th:first-child,
+.pma-tabla td:first-child {
+  width: 38%;
+  text-align: left;
+  font-weight: 700;
+}
+
+.pma-tabla th:nth-child(2),
+.pma-tabla td:nth-child(2) { width: 14%; }
+
+.pma-tabla th:nth-child(3),
+.pma-tabla td:nth-child(3) { width: 20%; }
+
+.pma-tabla th:nth-child(4),
+.pma-tabla td:nth-child(4) { width: 28%; }
+
+.pma-sin-mapa {
+  min-height: 360px;
+  display: grid;
+  place-items: center;
+  color: #69738c;
+  font-size: 12px;
+}
+
+/* Sección placeholder ("próximamente"), p. ej. Metas e inauguraciones. */
+.vision-proximamente {
+  margin-top: 16px;
+  padding: 18px 20px;
+  border: 1px dashed #c7cbe0;
+  border-radius: 14px;
+  background: #fafaff;
+  color: #69738c;
+}
+
+.vision-proximamente h2 {
+  margin: 0 0 4px;
+  color: #4d5877;
+  font-size: 14px;
+}
+
+.vision-proximamente p {
+  margin: 0;
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+.vision-card-icon-mark {
+  display: block;
+  width: 30px;
+  height: 5px;
+  margin-bottom: 14px;
+  border-radius: 3px;
+  background: var(--card-accent);
+}
+
+.vision-exec-card > p {
+  margin: 10px 0 0;
+  color: #69738c;
+  font-size: 12px;
+}
+
+/* Menú de viceministerios de Visión Ejecutiva (pantalla de entrada). */
+.vision-landing {
+  min-height: calc(100vh - 92px);
+  padding: 18px clamp(16px, 2.2vw, 34px) 26px;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  align-items: start;
+  box-sizing: border-box;
+  background: #f5f6fa;
+}
+
+.vision-landing-menu {
+  width: 100%;
+  align-self: start;
+  justify-self: start;
+  margin-top: 0;
+}
+
+.vision-vice-menu {
+  display: grid;
+  grid-template-columns: repeat(5, minmax(170px, 1fr));
+  gap: 9px;
+  width: 100%;
+  max-width: none;
+  margin: 0;
+  overflow-x: auto;
+  padding-bottom: 3px;
+}
+
+.vision-vice-row {
+  min-width: 170px;
+  padding: 4px;
+  display: flex;
+  justify-content: center;
+  border: 1px solid #e1e4ed;
+  border-radius: 12px;
+  background: #fff;
+  box-shadow: 0 6px 16px rgba(24, 37, 87, .05);
+}
+
+.vision-vice-pill {
+  width: 100%;
+  min-height: 48px;
+  padding: 9px 10px;
+  border: none;
+  border-radius: 999px;
+  background: #e9ecfb;
+  color: #3b3f91;
+  font-size: 11px;
+  font-weight: 800;
+  text-align: center;
+  cursor: pointer;
+  transition: background .15s ease, color .15s ease, transform .15s ease;
+}
+
+.vision-landing-visual {
+  min-width: 0;
+  width: 100%;
+  display: flex;
+  flex: 1 1 auto;
+  align-items: center;
+  justify-content: center;
+}
+
+.vision-landing-image {
+  display: block;
+  width: 100%;
+  max-width: none;
+  max-height: calc(100vh - 205px);
+  object-fit: contain;
+  border-radius: 14px;
+  background: #fff;
+  box-shadow: 0 12px 28px rgba(24, 37, 87, .10);
+}
+
+@media (max-width: 980px) {
+  .vision-vice-menu {
+    grid-template-columns: repeat(5, minmax(165px, 1fr));
+  }
+
+  .vision-landing-image {
+    max-height: none;
+  }
+}
+
+.vision-vice-pill:hover {
+  background: #dadeff;
+  transform: translateY(-1px);
+}
+
+.vision-vice-pill.active {
+  color: #fff;
+  background: var(--minedec-purple, #503a98);
+}
+
+/* Cuando ya hay un viceministerio elegido, el menú pasa a franja superior. */
+.vision-vice-menu-compacta {
+  display: flex;
+  flex-direction: row;
+  flex-wrap: wrap;
+  max-width: none;
+  gap: 8px;
+  margin: 0;
+  padding: 10px clamp(20px, 3vw, 48px) 0;
+  background: #fff;
+  border-bottom: 1px solid #e1e4ed;
+}
+
+.vision-vice-menu-compacta .vision-vice-row {
+  padding: 0;
+  border: none;
+  box-shadow: none;
+  background: transparent;
+  width: auto;
+}
+
+.vision-vice-menu-compacta .vision-vice-pill {
+  width: auto;
+  padding: 10px 16px;
+  border-radius: 10px 10px 0 0;
+  font-size: 13px;
+}
+
+.vision-exec-footer-aviso {
+  margin-top: 16px;
+  padding: 12px 16px;
+  border-radius: 10px;
+  background: #fff6de;
+  color: #7a5d12;
+  font-size: 13px;
+  line-height: 1.5;
+}
 
 .vision-card-icon {
   width: 52px;
@@ -868,7 +2129,7 @@
 
   .portada-menu {
     grid-column: 1 / -1;
-    grid-template-columns: repeat(2, minmax(0, 1fr));
+    grid-template-columns: repeat(5, minmax(0, 1fr));
   }
 
   .indicator-workspace {
@@ -887,6 +2148,55 @@
 
   .vision-map-center {
     min-height: 360px;
+  }
+}
+
+/* Adaptación para monitores y portátiles con menor resolución.
+   Al reducirse el espacio útil (pantalla menos ancha, zoom o escalado de
+   Windows), la ficha deja de comprimir el gráfico y pasa a ocupar una fila
+   completa. De esta manera Plotly conserva separación entre barras y textos. */
+@media (max-width: 1400px) {
+  .indicator-workspace {
+    grid-template-columns: minmax(0, 1fr) !important;
+    gap: 14px !important;
+  }
+
+  .indicator-detail-card {
+    margin-top: 14px !important;
+  }
+
+  .indicator-detail-card .details-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(190px, 1fr)) !important;
+    gap: 9px !important;
+  }
+
+  .indicator-detail-card .full,
+  .indicator-detail-card .source {
+    grid-column: auto !important;
+  }
+
+  .chart-card,
+  .indicator-chart {
+    min-width: 0;
+    width: 100%;
+  }
+
+  .status-row {
+    overflow-x: auto;
+    overflow-y: hidden;
+    padding-bottom: 5px;
+  }
+}
+
+@media (max-width: 760px) {
+  .indicator-detail-card .details-grid,
+  .metric-summary-row {
+    grid-template-columns: 1fr !important;
+  }
+
+  .indicator-chart {
+    height: 350px !important;
   }
 }
 
@@ -1365,6 +2675,7 @@
 }
 
 @media (max-width: 720px) {
+  .educacion-superior-cifras-grid { grid-template-columns: 1fr; }
   .budget-kpi-grid { grid-template-columns: repeat(2, minmax(0, 1fr)) !important; }
   .budget-visual-header { align-items: flex-start; flex-direction: column; }
   .budget-scope-toggle { width: 100%; }

@@ -15,9 +15,39 @@ from urllib.request import Request, urlopen
 import pandas as pd
 import plotly.graph_objects as go
 import requests
-from dash import ALL, Dash, Input, Output, State, ctx, dash_table, dcc, html, no_update
+from dash import ALL, MATCH, Dash, Input, Output, State, ctx, dash_table, dcc, html, no_update
+from flask import abort, send_file
 
 BASE_DIR = Path(__file__).resolve().parent if "__file__" in globals() else Path.cwd()
+NOMBRES_ENTREGABLES = {
+    "E-03_Manual_de_usuario.docx",
+    "E-04_Diccionario_de_datos_e_indicadores_Anexo5.xlsx",
+    "E-05_Fichas_metodologicas.docx",
+}
+
+
+def directorios_entregables():
+    """Ubicaciones admitidas para ejecutar el proyecto desde Windows o ZIP.
+
+    En el equipo institucional, ``app.py`` está dentro de Dashboard_CGTGEv2,
+    pero Quipux se guarda en la carpeta superior Dashboard_CGTGE. El segundo
+    candidato permite también distribuir el proyecto como una sola carpeta.
+    """
+    candidatos = [
+        BASE_DIR.parent / "Quipux" / "Entregables05102026",
+        BASE_DIR / "Quipux" / "Entregables05102026",
+        Path.cwd().parent / "Quipux" / "Entregables05102026",
+        Path.cwd() / "Quipux" / "Entregables05102026",
+    ]
+    resultado = []
+    for directorio in candidatos:
+        try:
+            directorio = directorio.resolve()
+        except OSError:
+            continue
+        if directorio not in resultado:
+            resultado.append(directorio)
+    return resultado
 SECCIONES = [
     ("vision", "Visión Ejecutiva"),
     ("pnd", "Plan Nacional de Desarrollo"),
@@ -25,6 +55,7 @@ SECCIONES = [
     ("kpi-institucionales", "KPI´s Institucionales"),
     ("presupuesto", "Ejecución Presupuestaria - Inversión"),
     ("inventario", "Inventario y Recurso de Información"),
+    ("documentacion", "Documentación"),
 ]
 
 SECCIONES_INDICADORES = [
@@ -33,11 +64,45 @@ SECCIONES_INDICADORES = [
     ("kpi-institucionales", "KPI´s Institucionales"),
 ]
 
+# Al entrar a Visión Ejecutiva se presenta un menú de los 5 viceministerios
+# (igual al prototipo); solo "gestion-educativa" (bases de Alimentación/
+# Uniformes/Textos/Mobiliario) tiene datos reales hoy — el resto se muestra
+# "en construcción" hasta tener sus fuentes.
+VISION_TABS = [
+    ("educacion", "Viceministerio de Educación"),
+    ("gestion-educativa", "Viceministerio de Gestión Educativa"),
+    ("educacion-superior", "Viceministerio de Educación Superior"),
+    ("deporte", "Viceministerio del Deporte"),
+    ("cultura", "Viceministerio de Cultura"),
+]
+
+# Las 4 bases de Gestión Educativa, cada una con su propia estructura real
+# (no siguen el formato PND/KPI): tablas por Zona/Provincia/Cantón con
+# beneficiarios y, en Mobiliario y Transporte, estudiantes por institución.
+# Solo se usan conteos — nunca los montos de inversión (pedido explícito:
+# "sin mostrar dinero").
+BASES_GESTION_EDUCATIVA = [
+    # El prefijo debe ser el INICIO real del nombre de archivo que llega de
+    # OneDrive (buscar_archivo solo ignora tildes/mayúsculas, no cambia
+    # espacios ni corrige variantes). Se usa una sola palabra distintiva en
+    # vez del nombre completo para no fallar por una tilde o un plural que
+    # cambie en una próxima actualización del archivo:
+    #   Alimentación Escolar.xlsx
+    #   Uniformes Ecolares.xlsx        (tal como llega, sin la "s" de "Escolares")
+    #   Textos Escolares.xlsx
+    #   INVERSION MOBILIARIO Y TRANSPORTE.xlsx  (empieza con "Inversión", no con "Mobiliario")
+    ("alimentacion", "Alimentación Escolar"),
+    ("uniformes", "Uniformes Escolares"),
+    ("textos escolares", "Textos Escolares"),
+    ("inversion mobiliario", "Mobiliario y Transporte Escolar"),
+]
+
 SECCIONES_PRINCIPALES = [
     ("vision", "Visión Ejecutiva"),
     ("indicadores", "Indicadores"),
     ("presupuesto", "Ejecución Presupuestaria - Inversión"),
     ("inventario", "Inventario y Recurso de Información"),
+    ("documentacion", "Documentación"),
 ]
 
 # Iconografía lineal, monocromática y minimalista según el manual técnico.
@@ -48,6 +113,7 @@ ICONOS = {
     "kpi-institucionales": "◫",
     "presupuesto": "▥",
     "inventario": "▤",
+    "documentacion": "▧",
 }
 
 MESES = ["Enero", "Febrero", "Marzo", "Abril", "Mayo", "Junio",
@@ -382,6 +448,195 @@ def version_kpi_inst():
 
 
 # ---------------------------------------------------------------------------
+# Carga de datos · Gestión Educativa (Alimentación Escolar, Uniformes, Textos
+# Escolares y Mobiliario y Transporte). A diferencia del PND/KPI, cada Excel
+# es una tabla de beneficiarios por Zona/Provincia/Cantón (o por institución,
+# en Mobiliario), sin la estructura de indicador con Meta/Línea base. Aquí
+# solo se agregan conteos (beneficiarios, instituciones, estudiantes); el
+# monto de inversión de cada base NUNCA se usa para la tarjeta de resumen
+# (pedido explícito del usuario: "sin mostrar dinero").
+# ---------------------------------------------------------------------------
+def _localizar_hoja_con_columna(ruta, columna_clave, filas_busqueda=30):
+    """Devuelve el primer DataFrame, de cualquier hoja del libro, cuya fila de
+    encabezado contenga `columna_clave` (ya normalizada). Algunas matrices
+    (p. ej. Textos Escolares) traen una fila de título antes del encabezado
+    real, así que no se asume que el encabezado está en la fila 1."""
+    libro = pd.ExcelFile(ruta, engine="openpyxl")
+    for hoja in libro.sheet_names:
+        vista = pd.read_excel(libro, sheet_name=hoja, header=None,
+                               nrows=filas_busqueda, engine="openpyxl")
+        for fila_num, fila in vista.iterrows():
+            etiquetas = {_normalizar_encabezado_presupuesto(x)
+                         for x in fila.dropna() if str(x).strip()}
+            if columna_clave in etiquetas:
+                return pd.read_excel(libro, sheet_name=hoja, header=int(fila_num),
+                                      engine="openpyxl")
+    return None
+
+
+PROVINCIAS_ECUADOR = {
+    "AZUAY", "BOLIVAR", "CANAR", "CARCHI", "CHIMBORAZO", "COTOPAXI",
+    "EL ORO", "ESMERALDAS", "GALAPAGOS", "GUAYAS", "IMBABURA", "LOJA",
+    "LOS RIOS", "MANABI", "MORONA SANTIAGO", "NAPO", "ORELLANA", "PASTAZA",
+    "PICHINCHA", "SANTA ELENA", "SANTO DOMINGO DE LOS TSACHILAS", "SUCUMBIOS",
+    "TUNGURAHUA", "ZAMORA CHINCHIPE",
+}
+
+
+def _provincia_homologada(valor):
+    """Homologa variantes de escritura y descarta valores que no sean una de
+    las 24 provincias oficiales del Ecuador."""
+    clave = _normalizar_encabezado_presupuesto(valor)
+    clave = re.sub(r"^(PROVINCIA_DE_|PROVINCIA_)", "", clave).replace("_", " ").strip()
+    equivalencias = {
+        "SANTO DOMINGO": "SANTO DOMINGO DE LOS TSACHILAS",
+        "SANTO DOMINGO DE LOS TSACHILAS": "SANTO DOMINGO DE LOS TSACHILAS",
+        "GALAPAGO": "GALAPAGOS",
+        "CANAR": "CANAR",
+    }
+    clave = equivalencias.get(clave, clave)
+    return clave if clave in PROVINCIAS_ECUADOR else None
+
+
+def _columna_por_claves(mapa, claves):
+    for clave in claves:
+        if clave in mapa:
+            return mapa[clave]
+    return None
+
+
+def _metricas_gestion(df, mapa):
+    dato = {}
+    col_benef = mapa.get("BENEFICIARIOS")
+    col_ie = _columna_por_claves(mapa, ("NRO_IE", "NO_IE", "NO_I_E"))
+    col_amie = mapa.get("AMIE")
+    col_est = mapa.get("TOTAL_ESTUDIANTES")
+    col_prov = mapa.get("PROVINCIA")
+    col_sost = _columna_por_claves(mapa, ("SOSTENIMIENTO", "TIPO_SOSTENIMIENTO"))
+    col_area = _columna_por_claves(mapa, ("AREA", "AREA_GEOGRAFICA", "URBANO_RURAL"))
+
+    if col_benef:
+        dato["beneficiarios"] = float(pd.to_numeric(df[col_benef], errors="coerce").sum())
+    if col_ie:
+        dato["instituciones"] = float(pd.to_numeric(df[col_ie], errors="coerce").sum())
+    elif col_amie:
+        dato["instituciones"] = float(df[col_amie].dropna().astype(str).str.strip().nunique())
+    if col_est:
+        dato["estudiantes"] = float(pd.to_numeric(df[col_est], errors="coerce").sum())
+    if col_prov:
+        provincias = df[col_prov].map(_provincia_homologada).dropna()
+        dato["provincias"] = min(24, int(provincias.nunique()))
+    if col_sost:
+        dato["sostenimientos"] = int(df[col_sost].dropna().astype(str).str.strip().replace("", pd.NA).nunique())
+    if col_area:
+        dato["areas"] = int(df[col_area].dropna().astype(str).str.strip().replace("", pd.NA).nunique())
+    return dato
+
+
+def _resumen_base_gestion_educativa(archivo, nombre_legible):
+    """Lee una base, homologa provincias y precalcula sus filtros reales."""
+    df = _localizar_hoja_con_columna(archivo, "BENEFICIARIOS")
+    if df is None:
+        df = _localizar_hoja_con_columna(archivo, "TOTAL_ESTUDIANTES")
+    if df is None:
+        raise ValueError(
+            f"'{nombre_legible}' no tiene una columna de Beneficiarios ni "
+            "de Total Estudiantes reconocible."
+        )
+    df.columns = [" ".join(str(c).strip().split()) for c in df.columns]
+    mapa = {_normalizar_encabezado_presupuesto(c): c for c in df.columns}
+    dato = _metricas_gestion(df, mapa)
+    col_regimen = next((c for k, c in mapa.items() if "REGIMEN" in k), None)
+    col_clasificacion = next((c for k, c in mapa.items() if "CLASIFICACION" in k), None)
+    regimenes = sorted(df[col_regimen].dropna().astype(str).str.strip().replace("", pd.NA).dropna().unique()) \
+        if col_regimen else []
+    clasificaciones = sorted(df[col_clasificacion].dropna().astype(str).str.strip().replace("", pd.NA).dropna().unique()) \
+        if col_clasificacion else []
+    dato["regimenes"] = list(regimenes)
+    dato["clasificaciones"] = list(clasificaciones)
+    segmentos = {}
+    for regimen in ["Todos"] + list(regimenes):
+        base_regimen = df if regimen == "Todos" else df.loc[df[col_regimen].astype(str).str.strip() == regimen]
+        for clasificacion in ["Todas"] + list(clasificaciones):
+            filtrado = base_regimen
+            if col_clasificacion and clasificacion != "Todas":
+                filtrado = filtrado.loc[filtrado[col_clasificacion].astype(str).str.strip() == clasificacion]
+            segmentos[f"{regimen}||{clasificacion}"] = _metricas_gestion(filtrado, mapa)
+    dato["segmentos"] = segmentos
+    # La fuente conjunta de Mobiliario y Transporte se presenta en dos
+    # tarjetas independientes. La clasificación se usa internamente y deja
+    # de exponerse como filtro al usuario.
+    if col_clasificacion:
+        clasificacion_normalizada = df[col_clasificacion].map(
+            _normalizar_encabezado_presupuesto
+        )
+        dato["por_recurso"] = {
+            "mobiliario": _metricas_gestion(
+                df.loc[clasificacion_normalizada.str.contains("MOBILIARIO", na=False)], mapa
+            ),
+            "transporte": _metricas_gestion(
+                df.loc[clasificacion_normalizada.str.contains("TRANSPORTE", na=False)], mapa
+            ),
+        }
+    return dato
+
+
+def _obtener_origen_gestion_educativa(prefijo, nombre_legible):
+    """Da preferencia al vínculo de OneDrive (la fuente que sí se sigue
+    actualizando); si no hay uno configurado para esta base, cae de vuelta a
+    buscar el Excel junto a app.py. Devuelve (origen_para_pandas,
+    descripcion_para_mensajes, version_para_detectar_cambios) o levanta
+    una excepción con el motivo exacto si no se pudo obtener ninguno."""
+    url = GESTION_EDUCATIVA_DOWNLOAD_URLS.get(nombre_legible, "")
+    if url:
+        origen, version, _fecha = _descargar_excel_onedrive(url, f"{nombre_legible}.xlsx")
+        return origen, f"OneDrive ({nombre_legible}.xlsx)", version
+    archivo = buscar_archivo(prefijo)
+    if not archivo:
+        # Diagnóstico explícito: evita el error silencioso de la vez pasada
+        # (prefijo mal escrito) — dice exactamente qué .xlsx sí ve el
+        # servidor, para distinguir "no está el archivo" de "el nombre no
+        # coincide con el prefijo buscado".
+        raise FileNotFoundError(
+            f"no se encontró un .xlsx que empiece con '{prefijo}' junto a app.py "
+            f"(y no hay vínculo de OneDrive configurado para esta base); "
+            f"Excel visibles: {diagnostico_excel()}"
+        )
+    return archivo, archivo.name, str(archivo.stat().st_mtime_ns)
+
+
+def cargar_resumen_gestion_educativa():
+    """Intenta leer las 4 bases (de OneDrive si hay vínculo configurado, o
+    junto a app.py si no); cada una que falte o no se pueda interpretar se
+    reporta por separado, sin bloquear a las demás (igual que el resto del
+    panel: se muestra lo que sí hay disponible)."""
+    resumen = {}
+    pendientes = []
+    for prefijo, nombre_legible in BASES_GESTION_EDUCATIVA:
+        try:
+            origen, descripcion, _version = _obtener_origen_gestion_educativa(prefijo, nombre_legible)
+        except Exception as exc:
+            pendientes.append(f"{nombre_legible} ({exc})")
+            continue
+        try:
+            resumen[nombre_legible] = _resumen_base_gestion_educativa(origen, nombre_legible)
+        except Exception as exc:
+            pendientes.append(f"{nombre_legible} (se leyó '{descripcion}' pero no se pudo interpretar: {exc})")
+    return resumen, pendientes
+
+
+def version_gestion_educativa(resumen=None, pendientes=None):
+    """No hay forma barata de saber si un Excel en OneDrive cambió sin
+    descargarlo de nuevo (a diferencia de un archivo local, que sí expone su
+    fecha de modificación), así que la versión es un hash del propio
+    resultado leído: cambia solo cuando el contenido realmente cambió."""
+    resumen = RESUMEN_GESTION_EDUCATIVA if resumen is None else resumen
+    pendientes = PENDIENTES_GESTION_EDUCATIVA if pendientes is None else pendientes
+    firma = repr((sorted(resumen.items()), sorted(pendientes)))
+    return hashlib.sha256(firma.encode()).hexdigest()
+
+
+# ---------------------------------------------------------------------------
 # Carga de datos · Visión Ejecutiva
 # ---------------------------------------------------------------------------
 def cargar_base_vision():
@@ -434,15 +689,41 @@ ESIGEF_DOWNLOAD_URL = os.getenv(
     "?e=0KSa78&download=1",
 ).strip()
 
+# Vínculos "Copiar vínculo" de OneDrive para las 4 bases de Gestión Educativa
+# (mismo mecanismo que ESIGEF_actual.xlsx: deben terminar en "&download=1").
+# Mientras no se defina un vínculo para una base, se sigue buscando su Excel
+# junto a app.py (BASES_GESTION_EDUCATIVA), igual que antes.
+GESTION_EDUCATIVA_DOWNLOAD_URLS = {
+    "Alimentación Escolar": os.getenv(
+        "ALIMENTACION_ESCOLAR_DOWNLOAD_URL",
+        "https://educacionec-my.sharepoint.com/:x:/g/personal/daei_educacion_gob_ec/"
+        "IQBrz0MHostwQIW5R61Mz3tnATQK3DrSUL7YqpgcgXcYvpY?e=2YwCXT&download=1",
+    ).strip(),
+    "Uniformes Escolares": os.getenv(
+        "UNIFORMES_ESCOLARES_DOWNLOAD_URL",
+        "https://educacionec-my.sharepoint.com/:x:/g/personal/daei_educacion_gob_ec/"
+        "IQC9L2hLRK4SQoTVUakfR24WAUVeGIAfMNOEv3l0kx7IgJA?e=6fou2z&download=1",
+    ).strip(),
+    "Textos Escolares": os.getenv(
+        "TEXTOS_ESCOLARES_DOWNLOAD_URL",
+        "https://educacionec-my.sharepoint.com/:x:/g/personal/daei_educacion_gob_ec/"
+        "IQCG5JN7n6U5SYEW3w-5KfxMAepbyAr8GplbqLBlEd5s1DA?e=4wgwGk&download=1",
+    ).strip(),
+    "Mobiliario y Transporte Escolar": os.getenv(
+        "MOBILIARIO_TRANSPORTE_DOWNLOAD_URL",
+        "https://educacionec-my.sharepoint.com/:x:/g/personal/daei_educacion_gob_ec/"
+        "IQDc3cxCQrPZSqLnDHiYf7IfAdYqyIj2Y374Az_Xg4nHTfI?e=2Ck9L8&download=1",
+    ).strip(),
+}
 
-def _descargar_esigef_actual():
-    """Descarga el archivo presupuestario vigente desde OneDrive.
 
-    Reproduce la estrategia usada en Shiny/httr: sigue redirecciones y evita
-    reutilizar una copia almacenada en caché.
-    """
+def _descargar_excel_onedrive(url, nombre_archivo):
+    """Descarga un Excel desde un vínculo de OneDrive/SharePoint que termine en
+    '&download=1'. Reproduce la estrategia usada en Shiny/httr: sigue
+    redirecciones y evita reutilizar una copia almacenada en caché. Devuelve
+    (contenido_en_memoria, version_hash, fecha_ultima_modificacion)."""
     respuesta = requests.get(
-        ESIGEF_DOWNLOAD_URL,
+        url,
         headers={
             "User-Agent": "Mozilla/5.0",
             "Cache-Control": "no-cache, no-store",
@@ -460,12 +741,20 @@ def _descargar_esigef_actual():
     # enviada por error a openpyxl.
     if not contenido.startswith(b"PK"):
         raise ValueError(
-            "El enlace de ESIGEF_actual.xlsx no devolvió un archivo Excel. "
-            "Revise que el vínculo permita descargar el archivo."
+            f"El enlace de {nombre_archivo} no devolvió un archivo Excel. "
+            "Revise que el vínculo de OneDrive permita descargar el archivo "
+            "(debe terminar en '&download=1')."
         )
-
     version = hashlib.sha256(contenido).hexdigest()
-    return BytesIO(contenido), {
+    return BytesIO(contenido), version, ultima_modificacion
+
+
+def _descargar_esigef_actual():
+    """Descarga el archivo presupuestario vigente desde OneDrive."""
+    origen, version, ultima_modificacion = _descargar_excel_onedrive(
+        ESIGEF_DOWNLOAD_URL, "ESIGEF_actual.xlsx"
+    )
+    return origen, {
         "archivo": "ESIGEF_actual.xlsx",
         "fecha": ultima_modificacion or datetime.now().strftime("%d/%m/%Y %H:%M"),
         "origen": "OneDrive",
@@ -570,6 +859,7 @@ def version_presupuesto():
 DATA_PND, ERROR_PND = cargar_base_pnd()
 DATA_KPI, ERROR_KPI = cargar_base_kpi()
 DATA_KPI_INST, ERROR_KPI_INST = cargar_base_kpi_inst()
+RESUMEN_GESTION_EDUCATIVA, PENDIENTES_GESTION_EDUCATIVA = cargar_resumen_gestion_educativa()
 # Visión Ejecutiva ahora es una infografía institucional estática y ya no
 # depende del archivo vision_ejecutiva.xlsx.
 DATA_VISION, ERROR_VISION = pd.DataFrame(), None
@@ -577,6 +867,7 @@ DATA_PRESUPUESTO, ERROR_PRESUPUESTO = cargar_base_presupuesto()
 VERSION_PND = version_pnd()
 VERSION_KPI = version_kpi()
 VERSION_KPI_INST = version_kpi_inst()
+VERSION_GESTION_EDUCATIVA = version_gestion_educativa()
 VERSION_VISION = "infografia-minedec-2026"
 VERSION_PRESUPUESTO = version_presupuesto()
 
@@ -610,6 +901,20 @@ def obtener_datos(seccion):
 app = Dash(__name__, title="Panel Integrado de Gestión MINEDEC", update_title=None,
            suppress_callback_exceptions=True)
 server = app.server
+
+
+@server.route("/descargar-entregable/<path:nombre_archivo>")
+def descargar_entregable(nombre_archivo):
+    """Entrega los anexos oficiales desde la carpeta Quipux del proyecto."""
+    # Solo se exponen los tres entregables definidos por la aplicación.
+    if Path(nombre_archivo).name != nombre_archivo or nombre_archivo not in NOMBRES_ENTREGABLES:
+        abort(404)
+
+    for directorio in directorios_entregables():
+        archivo = directorio / nombre_archivo
+        if archivo.is_file():
+            return send_file(archivo, as_attachment=True, download_name=nombre_archivo)
+    abort(404, description="El entregable no se encuentra en la carpeta Quipux/Entregables05102026.")
 
 # MathJax renderiza las fórmulas en LaTeX (delimitadas con $...$, $$...$$,
 # \(...\) o \[...\]) que
@@ -669,6 +974,7 @@ def portada():
         "indicadores": """<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64' fill='none' stroke='white' stroke-width='2.8' stroke-linecap='round' stroke-linejoin='round'><rect x='10' y='8' width='44' height='48' rx='5'/><path d='M20 21l3 3 6-7M34 21h11M20 35l3 3 6-7M34 35h11M20 49l3 3 6-7M34 49h11'/></svg>""",
         "presupuesto": """<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64' fill='none' stroke='white' stroke-width='2.8' stroke-linecap='round' stroke-linejoin='round'><path d='M9 53h46M14 48V29M25 48V37M36 48V23M47 48V14'/><path d='M14 21l11-7 11 3 14-9M43 8h7v7'/><circle cx='14' cy='21' r='2.5'/><circle cx='25' cy='14' r='2.5'/><circle cx='36' cy='17' r='2.5'/></svg>""",
         "inventario": """<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64' fill='none' stroke='white' stroke-width='2.8' stroke-linecap='round' stroke-linejoin='round'><path d='M7 20h20l5 6h25v27H7z'/><path d='M7 20v-8h19l5 6h20v8M17 35h12M17 43h22'/><circle cx='48' cy='43' r='7'/><path d='M53 48l5 5'/></svg>""",
+        "documentacion": """<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64' fill='none' stroke='white' stroke-width='2.8' stroke-linecap='round' stroke-linejoin='round'><path d='M16 7h24l10 10v40H16z'/><path d='M40 7v12h12M24 30h18M24 39h18M24 48h12'/></svg>""",
     }
 
     def icono(codigo):
@@ -1270,6 +1576,9 @@ def preparar_periodos_visuales(grupo):
 def crear_grafico_periodo(grupo):
     grupo = preparar_periodos_visuales(grupo)
     unidad = primer_texto(grupo, "Unidad de medida", "")
+    # En series mensuales hay hasta 13 categorías. Una escala tipográfica
+    # ligeramente menor evita cruces en portátiles sin sacrificar legibilidad.
+    etiqueta_size = 9 if len(grupo) >= 10 else 10
     claves_periodo = list(grupo["Periodo_id"])
     periodos = list(grupo["Periodo_grafico"])
     periodos_completos = list(grupo["Periodo"])
@@ -1278,21 +1587,21 @@ def crear_grafico_periodo(grupo):
     fig.add_bar(x=claves_periodo, y=grupo["Línea base"], name="Línea base",
                 marker=dict(color="#80BBBF", line=dict(color="#446381", width=1.4)),
                 text=[formato_texto_barra(v, unidad) for v in grupo["Línea base"]],
-                textposition="outside", textfont=dict(size=10, color="#232D5A", family="Arial"), constraintext="none",
+                textposition="outside", textfont=dict(size=etiqueta_size, color="#232D5A", family="Arial"), constraintext="none",
                 width=.34, offset=-.17, cliponaxis=False,
                 customdata=periodos_completos,
                 hovertemplate="%{customdata}<br>Línea base: %{y:,.2f}<extra></extra>")
     fig.add_bar(x=claves_periodo, y=grupo["Meta"], name="Meta",
                 marker=dict(color="#F1B620", line=dict(color="#C88F00", width=1.4)),
                 text=[formato_texto_barra(v, unidad) for v in grupo["Meta"]],
-                textposition="outside", textfont=dict(size=10, color="#232D5A", family="Arial"),
+                textposition="outside", textfont=dict(size=etiqueta_size, color="#232D5A", family="Arial"),
                 constraintext="none", width=.34, offset=-.36, cliponaxis=False,
                 customdata=periodos_completos,
                 hovertemplate="%{customdata}<br>Meta: %{y:,.2f}<extra></extra>")
     fig.add_bar(x=claves_periodo, y=grupo["Estimador"], name="Ejecutado",
                 marker=dict(color="#4F449A", line=dict(color="#232D5A", width=1.4)),
                 text=[formato_texto_barra(v, unidad) for v in grupo["Estimador"]],
-                textposition="outside", textfont=dict(size=10, color="#232D5A", family="Arial"),
+                textposition="outside", textfont=dict(size=etiqueta_size, color="#232D5A", family="Arial"),
                 constraintext="none", width=.34, offset=.02, cliponaxis=False,
                 customdata=periodos_completos,
                 hovertemplate="%{customdata}<br>Ejecutado: %{y:,.2f}<extra></extra>")
@@ -1313,7 +1622,7 @@ def crear_grafico_periodo(grupo):
                    categoryarray=claves_periodo, tickmode="array",
                    tickvals=claves_periodo, ticktext=periodos,
                    fixedrange=True, tickangle=0,
-                   automargin=True, tickfont=dict(size=10)),
+                   automargin=True, tickfont=dict(size=etiqueta_size)),
         yaxis=dict(title=unidad or "Valor", gridcolor="#E9EBF3",
                    zeroline=False, fixedrange=True, range=[0, techo] if techo else None),
     )
@@ -1438,6 +1747,1093 @@ def contenido_kpi_inst(vice=None, indicador=None):
 
 
 # ---------------------------------------------------------------------------
+# Visión Ejecutiva · menú de viceministerios (prototipo "MINEDEC · Prototipo
+# Ejecutivo"). Al entrar se presentan los 5 botones; "Gestión Educativa" arma
+# las tarjetas de cobertura con las 4 bases reales, sin montos; el resto de
+# viceministerios no tiene fuente todavía y se muestra "en construcción".
+# ---------------------------------------------------------------------------
+def vision_tabs_nav(activo):
+    """Menú de los 5 viceministerios. En la pantalla de entrada (sin
+    viceministerio elegido) se ve como lista vertical de botones; una vez
+    elegido uno, se compacta en una franja superior tipo pestañas."""
+    compacto = activo is not None
+    estilo_nav = None if compacto else {
+        "display": "grid", "gridTemplateColumns": "repeat(5, minmax(170px, 1fr))",
+        "gap": "9px", "width": "100%", "maxWidth": "none", "overflowX": "auto",
+        "paddingBottom": "3px",
+    }
+    estilo_fila = None if compacto else {
+        "minWidth": "170px", "padding": "4px", "display": "flex",
+        "border": "1px solid #e1e4ed", "borderRadius": "12px", "background": "#fff",
+        "boxShadow": "0 6px 16px rgba(24,37,87,.05)",
+    }
+    estilo_boton = None if compacto else {
+        "width": "100%", "minHeight": "54px", "padding": "10px 12px",
+        "border": "none", "borderRadius": "999px", "background": "#e9ecfb",
+        "color": "#3b3f91", "fontSize": "14px", "fontWeight": "800",
+        "textAlign": "center", "cursor": "pointer",
+    }
+    return html.Nav(
+        [html.Div(
+            html.Button(nombre, id={"type": "vision-tab", "index": codigo}, n_clicks=0,
+                        className="vision-vice-pill active" if codigo == activo else "vision-vice-pill",
+                        type="button", style=estilo_boton),
+            className="vision-vice-row", style=estilo_fila,
+        ) for codigo, nombre in VISION_TABS],
+        className="vision-vice-menu vision-vice-menu-compacta" if compacto else "vision-vice-menu",
+        style=estilo_nav,
+        **{"aria-label": "Viceministerios de Visión Ejecutiva"},
+    )
+
+
+def tarjeta_gestion_educativa(codigo, titulo, subtitulo, valor, detalles=None,
+                              unidad=None, filtros=None, contenido_id=None, valor_id=None):
+    return html.Article([
+        html.Span(className="vision-card-icon-mark"),
+        html.Span(titulo, className="vision-card-label"),
+        html.Div([
+            html.Strong(
+                valor,
+                className="vision-card-total",
+                **({"id": valor_id} if valor_id is not None else {}),
+            ),
+            html.Span(unidad, className="vision-card-unit") if unidad else None,
+        ], className="vision-card-value-row"),
+        html.Div(
+            detalles,
+            className="vision-card-details",
+            **({"id": contenido_id} if contenido_id is not None else {}),
+        ) if detalles else None,
+        html.P(subtitulo),
+        html.Div(filtros, className="vision-card-filters") if filtros else None,
+    ], className=f"vision-exec-card {codigo}")
+
+
+# Eje 2 · Educación Superior. La primera sección se alimenta de la matriz
+# "Mapeo - Rendicion de cuentas.xlsx"; la segunda recoge la agenda entregada
+# en las diapositivas y se presenta separadamente como cartera futura.
+EJE2_PROGRAMAS_RESPALDO = [
+    {"direccion": "Dirección de Admisión", "programa": "Cupos Aceptados en Educación Superior",
+     "beneficiarios": 194000, "tipo": "Estudiantes"},
+    {"direccion": "Dirección de Diseño y Evaluación de Política Pública de Fortalecimiento del Talento Humano",
+     "programa": "BECAUSE HE IS NICE", "beneficiarios": 400000, "tipo": "Ciudadanos"},
+    {"direccion": "Dirección de Gestión Académica de Tercer y Cuarto Nivel",
+     "programa": "ValidaTec (Validación de Trayectoria para obtener tercer nivel)",
+     "beneficiarios": 120, "tipo": "Docentes"},
+    {"direccion": "Dirección de Cooperación y Asuntos Internacionales",
+     "programa": "Becas Técnicas y tecnológicas financiadas por aliados",
+     "beneficiarios": 5000, "tipo": "Estudiantes"},
+]
+
+# Totales nacionales de Educación Superior mostrados en la portada
+# institucional MINEDEC 2026. Se mantienen separados de los programas y
+# servicios porque describen el tamaño del sistema, no sus beneficiarios.
+DATOS_GENERALES_EDUCACION_SUPERIOR = {
+    "estudiantes": 1004175,
+    "estudiantes_itts": 138613,
+    "estudiantes_uep": 865562,
+    "docentes": 47145,
+    "docentes_itts": 9320,
+    "docentes_uep": 37825,
+    "instituciones": 257,
+    "instituciones_itts": 193,
+    "instituciones_uep": 64,
+}
+
+
+def tarjetas_datos_educacion_superior():
+    """Resumen nacional de estudiantes, docentes e instituciones superiores."""
+    d = DATOS_GENERALES_EDUCACION_SUPERIOR
+
+    def desglose(valor_itts, valor_uep):
+        return [
+            html.Div([
+                html.Span("ITTS"),
+                html.Strong(formato_valor(valor_itts)),
+            ], className="vision-mini-stat"),
+            html.Div([
+                html.Span("UEP"),
+                html.Strong(formato_valor(valor_uep)),
+            ], className="vision-mini-stat secondary"),
+        ]
+
+    subtitulo = "Información institucional consolidada · MINEDEC 2026"
+    return [
+        tarjeta_gestion_educativa(
+            "superior-instituciones", "Instituciones de Educación Superior", subtitulo,
+            formato_valor(d["instituciones"]),
+            detalles=desglose(d["instituciones_itts"], d["instituciones_uep"]),
+        ),
+        tarjeta_gestion_educativa(
+            "superior-estudiantes", "Estudiantes", subtitulo,
+            formato_valor(d["estudiantes"]),
+            detalles=desglose(d["estudiantes_itts"], d["estudiantes_uep"]),
+        ),
+        tarjeta_gestion_educativa(
+            "superior-docentes", "Docentes", subtitulo,
+            formato_valor(d["docentes"]),
+            detalles=desglose(d["docentes_itts"], d["docentes_uep"]),
+        ),
+    ]
+
+EJE2_PROYECTOS_FUTUROS = [
+    {"mes": "Octubre", "titulo": "Entrega de 595 becas",
+     "descripcion": "Becas de especialización y posgrado para ampliar las oportunidades de formación.",
+     "beneficiarios": 595, "inversion": 1785778.00},
+    {"mes": "Octubre", "titulo": "Reconocimiento de títulos Ecuador–España",
+     "descripcion": "Convenio de homologación y reconocimiento bilateral de títulos académicos.",
+     "beneficiarios": None, "inversion": None},
+    {"mes": "Octubre", "titulo": "Inicio de construcción de Casa U",
+     "descripcion": "Espacios en Azuay, El Oro y Chimborazo junto con la Universidad de Cuenca, UTMACH y UNACH.",
+     "beneficiarios": 1000, "inversion": 20136155.55},
+    {"mes": "Octubre", "titulo": "Universidad Pública de Santo Domingo de los Tsáchilas",
+     "descripcion": "Inicio de la construcción de la primera fase de la nueva universidad pública.",
+     "beneficiarios": 243, "inversion": 5638691.00},
+    {"mes": "Noviembre", "titulo": "Entrega de becas técnicas y tecnológicas",
+     "descripcion": "Nuevas oportunidades de formación técnica y tecnológica para jóvenes.",
+     "beneficiarios": 2550, "inversion": 5236916.00},
+]
+
+
+def cargar_programas_educacion_superior():
+    """Lee únicamente las filas de Educación Superior de la matriz oficial."""
+    archivo = buscar_archivo("Mapeo - Rendicion de cuentas")
+    if archivo is None:
+        return EJE2_PROGRAMAS_RESPALDO, "Se muestra el último corte disponible; publique el Excel para actualizarlo."
+    try:
+        df = pd.read_excel(archivo)
+        columnas = {_sin_tildes(c): c for c in df.columns}
+        campos = {"vice": columnas.get("viceministerio"), "direccion": columnas.get("direccion"),
+                  "programa": columnas.get("programa o servicio"),
+                  "beneficiarios": columnas.get("beneficiarios"),
+                  "tipo": columnas.get("tipo beneficiario")}
+        if any(v is None for v in campos.values()):
+            raise ValueError("la matriz no conserva las cinco columnas esperadas")
+        mascara = df[campos["vice"]].map(_sin_tildes).str.contains("educacion superior", na=False)
+        programas = []
+        for _, fila in df.loc[mascara].iterrows():
+            beneficiarios = pd.to_numeric(fila[campos["beneficiarios"]], errors="coerce")
+            programas.append({"direccion": str(fila[campos["direccion"]]).strip(),
+                              "programa": str(fila[campos["programa"]]).strip(),
+                              "beneficiarios": int(beneficiarios) if pd.notna(beneficiarios) else 0,
+                              "tipo": str(fila[campos["tipo"]]).strip()})
+        if not programas:
+            raise ValueError("no se encontraron filas de Educación Superior")
+        return programas, None
+    except Exception as exc:
+        return EJE2_PROGRAMAS_RESPALDO, f"Se muestra el último corte disponible ({exc})."
+
+
+def cargar_programas_viceministerio(nombre_viceministerio):
+    """Obtiene de la misma matriz los programas del viceministerio solicitado."""
+    archivo = buscar_archivo("Mapeo - Rendicion de cuentas")
+    if archivo is None:
+        return [], "No se encontró la matriz de rendición de cuentas."
+    try:
+        df = pd.read_excel(archivo)
+        columnas = {_sin_tildes(c): c for c in df.columns}
+        campos = {"vice": columnas.get("viceministerio"), "direccion": columnas.get("direccion"),
+                  "programa": columnas.get("programa o servicio"),
+                  "beneficiarios": columnas.get("beneficiarios"),
+                  "tipo": columnas.get("tipo beneficiario")}
+        if any(v is None for v in campos.values()):
+            raise ValueError("la matriz no conserva las cinco columnas esperadas")
+        objetivo = _sin_tildes(nombre_viceministerio)
+        mascara = df[campos["vice"]].map(_sin_tildes).eq(objetivo)
+        datos = []
+        for _, fila in df.loc[mascara].iterrows():
+            beneficiarios = pd.to_numeric(fila[campos["beneficiarios"]], errors="coerce")
+            datos.append({"direccion": str(fila[campos["direccion"]]).strip(),
+                          "programa": str(fila[campos["programa"]]).strip(),
+                          "beneficiarios": int(beneficiarios) if pd.notna(beneficiarios) else 0,
+                          "tipo": str(fila[campos["tipo"]]).strip()})
+        return datos, None if datos else f"No existen registros para {nombre_viceministerio}."
+    except Exception as exc:
+        return [], f"No se pudo leer el consolidado ({exc})."
+
+
+def _stats_eje2(datos):
+    resumen = [(formato_valor(len(datos)), "Programas y servicios"),
+               (formato_valor(sum(d["beneficiarios"] for d in datos)), "Beneficiarios registrados"),
+               (formato_valor(len({d["direccion"] for d in datos})), "Direcciones responsables"),
+               (formato_valor(len({d["tipo"] for d in datos})), "Perfiles beneficiarios")]
+    return html.Div([html.Div([html.Strong(v), html.Span(e)], className="eje1-stat") for v, e in resumen],
+                    className="eje1-stats-grid eje2-stats-grid")
+
+
+def _tarjetas_programas_eje2(datos):
+    """Presenta cada programa con el mismo lenguaje visual de las cifras."""
+    tarjetas = []
+    colores = ["azul", "verde", "amarillo", "morado"]
+    for i, dato in enumerate(datos):
+        tarjetas.append(html.Article([
+            html.Span(className="vision-card-icon-mark"),
+            html.Span(dato["programa"], className="vision-card-label"),
+            html.Div([
+                html.Strong(formato_valor(dato["beneficiarios"])),
+                html.Span(str(dato["tipo"]).strip()),
+            ], className="vision-card-value-row programa-card-resultado"),
+            html.P("Programa o servicio"),
+        ], className=f"vision-exec-card programa-resumen-card programa-{colores[i % len(colores)]}"))
+    return html.Div(tarjetas,
+                    className="vision-exec-grid gestion-educativa-grid programas-servicios-grid")
+
+
+def _cartera_futura_eje2(proyectos):
+    stats = [(formato_valor(len(proyectos)), "Acciones programadas"),
+             (formato_valor(sum(p["beneficiarios"] or 0 for p in proyectos)), "Beneficiarios directos"),
+             (_moneda_corta(sum(p["inversion"] or 0 for p in proyectos)), "Inversión asociada")]
+    tarjetas = []
+    for i, p in enumerate(proyectos, 1):
+        meta = []
+        if p["beneficiarios"] is not None:
+            meta.append(html.Span(
+                f"{formato_valor(p['beneficiarios'])} beneficiarios",
+                style={"padding": "6px 9px", "borderRadius": "7px", "color": "#473286",
+                       "background": "#efedf8", "fontSize": "12px", "fontWeight": "900"}))
+        if p["inversion"] is not None:
+            meta.append(html.Span(
+                _moneda_corta(p["inversion"]),
+                style={"padding": "6px 9px", "borderRadius": "7px", "color": "#795b11",
+                       "background": "#fff0c2", "fontSize": "12px", "fontWeight": "900"}))
+        es_noviembre = p["mes"] == "Noviembre"
+        tarjetas.append(html.Article([
+            html.Div([
+                html.Span(p["mes"], className="eje2-project-month",
+                          style={"padding": "5px 10px", "borderRadius": "999px",
+                                 "color": "#241259" if es_noviembre else "#ffffff",
+                                 "background": "#f4b91e" if es_noviembre else "#503a98",
+                                 "fontSize": "9px", "fontWeight": "900",
+                                 "letterSpacing": ".08em", "textTransform": "uppercase"}),
+                html.Span(f"{i:02d}", className="eje2-project-number",
+                          style={"color": "#c9cde0", "fontSize": "29px", "fontWeight": "900"})
+            ], className="eje2-project-top",
+               style={"display": "flex", "alignItems": "center", "justifyContent": "space-between"}),
+            html.H3(p["titulo"], style={"margin": "11px 0 6px", "color": "#17245b",
+                                        "fontSize": "13px", "lineHeight": "1.2"}),
+            html.P(p["descripcion"], style={"minHeight": "42px", "margin": "0 0 13px",
+                                            "color": "#59627d", "fontSize": "11px",
+                                            "lineHeight": "1.45"}),
+            html.Div(meta, className="eje2-project-meta",
+                     style={"display": "flex", "flexWrap": "wrap", "gap": "6px"}) if meta else
+            html.Div("Hito normativo", className="eje2-project-meta eje2-project-meta-single",
+                     style={"display": "inline-flex", "padding": "6px 9px", "borderRadius": "7px",
+                            "color": "#473286", "background": "#efedf8", "fontSize": "10px",
+                            "fontWeight": "800"}),
+        ], className="eje2-project-card",
+           style={"minWidth": "0", "padding": "13px", "border": "1px solid #e1e4ed",
+                  "borderTop": f"4px solid {'#f4b91e' if es_noviembre else '#503a98'}",
+                  "borderRadius": "13px", "background": "#fffdf7" if es_noviembre else "#ffffff",
+                  "boxShadow": "0 7px 18px rgba(24, 37, 87, .07)"}))
+    return html.Section([
+        html.Div([
+            html.Div([
+                html.Strong(v, style={
+                    "fontSize": "clamp(24px, 2vw, 34px)",
+                    "whiteSpace": "nowrap", "letterSpacing": "-.02em"
+                }),
+                html.Span(e)
+            ], className="eje1-stat") for i, (v, e) in enumerate(stats)
+        ],
+                 className="eje1-stats-grid eje2-future-stats"),
+        html.Div(tarjetas, className="eje2-project-grid",
+                 style={"display": "grid", "gridTemplateColumns": "repeat(5, minmax(230px, 1fr))",
+                        "gap": "10px", "alignItems": "stretch", "overflowX": "auto",
+                        "paddingBottom": "6px"}),
+        html.P("Cifras consolidadas de la agenda presentada para octubre y noviembre. El hito de "
+               "reconocimiento de títulos no registra beneficiarios ni inversión en la fuente.",
+               className="eje2-source-note")], className="eje2-future-section")
+
+
+def pagina_educacion_superior():
+    programas, aviso = cargar_programas_educacion_superior()
+    return html.Section(className="vision-exec-page educacion-superior-page", children=[
+        html.Div(className="vision-exec-header vision-exec-header-compacta", children=[
+            html.Div(className="vision-title-mark"),
+            html.Div([html.H1(
+                          "EJE 2 • BECAS Y OPORTUNIDADES PARA JÓVENES",
+                          className="gestion-educativa-titulo-eje",
+                          style={
+                              "fontSize": "clamp(15px, 1.15vw, 20px)",
+                              "lineHeight": "1.2",
+                              "whiteSpace": "normal",
+                              "maxWidth": "1240px",
+                          },
+                      ),
+                      html.P("Programas vigentes y agenda priorizada para ampliar el acceso, reconocer trayectorias "
+                             "académicas y fortalecer la formación técnica, tecnológica y universitaria.")])]),
+        html.H2("Educación Superior en cifras", className="vision-eje-banner"),
+        html.Div(
+            className="vision-exec-grid gestion-educativa-grid datos-generales-grid "
+                      "educacion-superior-cifras-grid",
+            children=tarjetas_datos_educacion_superior(),
+        ),
+        html.H2("Programas y servicios de Educación Superior", className="vision-eje-banner"),
+        html.P("Consolidado inicial de la matriz de rendición de cuentas.", className="eje1-subtitulo"),
+        _tarjetas_programas_eje2(programas),
+        html.P(aviso, className="eje2-source-note") if aviso else None,
+        html.H2("Proyectos a futuro", className="vision-eje-banner"),
+        html.P("Agenda de acciones estratégicas prevista para octubre y noviembre.", className="eje1-subtitulo"),
+        _cartera_futura_eje2(EJE2_PROYECTOS_FUTUROS)])
+
+
+EJES_VICEMINISTERIALES = {
+    "educacion": {
+        "numero": 3, "vice_excel": "Educación", "titulo": "Educación para el Nuevo Ecuador",
+        "introduccion": "Aprendizajes, convivencia, transformación digital y servicios que fortalecen la educación.",
+        "resumen": [("8", "Líneas de acción consolidadas"), ("Octubre · Noviembre", "Agenda prevista"),
+                    ("USD 3.864.343", "Inversión y autogestión")],
+        "acciones": [
+            {"icono": "✦", "mes": "Octubre", "titulo": "Plan Nacional para el Fortalecimiento de los Aprendizajes",
+             "descripcion": "Plan nacional enfocado en Lectura y Matemática, Ciencias y Pensamiento Computacional.",
+             "detalle": "Quito · modalidad de autogestión"},
+            {"icono": "▤", "mes": "Octubre", "titulo": "Guía «Que no te cuenten cuentos»",
+             "descripcion": "1.000 guías orientadas a la cultura de paz.", "detalle": "Guayaquil · USD 7.500 aprox."},
+            {"icono": "⌘", "mes": "Octubre", "titulo": "Transformación Digital para la Educación",
+             "descripcion": "Alianza con Google para fortalecer capacidades desde educación básica hasta superior.",
+             "detalle": "Primera fase 2026: USD 9,6 millones · alcance: USD 2,8 millones"},
+            {"icono": "⚙", "mes": "Octubre–Noviembre", "titulo": "Robótica Educativa para reducir la brecha digital",
+             "descripcion": "Fase 2: entrega de kits, capacitación docente y 69 clubes en 47 cantones.",
+             "detalle": "Inversión total: USD 159.843"},
+            {"icono": "▥", "mes": "Noviembre", "titulo": "Entrega de 222 ambientes de lectura",
+             "descripcion": "Ambientes implementados en instituciones educativas rurales de 58 distritos.",
+             "detalle": "La Concordia · 222 instituciones · USD 697.000"},
+            {"icono": "⌾", "mes": "Octubre–Noviembre", "titulo": "Plan ESCUDO / Comunidades Educativas",
+             "descripcion": "Prevención, protección y seguridad escolar en 102 cantones y 14 provincias priorizadas.",
+             "detalle": "1.264.863 estudiantes · 5.293 instituciones"},
+            {"icono": "▣", "mes": "Octubre–Noviembre", "titulo": "Concursos Nacionales de Comprensión Lectora",
+             "descripcion": "Concursos de alcance nacional mediante alianzas estratégicas.",
+             "detalle": "1.000 estudiantes"},
+            {"icono": "◉", "mes": "Octubre–Noviembre", "titulo": "Fortalecimiento de los DECE",
+             "descripcion": "Avance en la contratación de profesionales para Sierra y Amazonía.",
+             "detalle": "Meta: 1.000 profesionales · inversión aprox. USD 3 millones"},
+        ],
+    },
+    "deporte": {
+        "numero": 4, "vice_excel": "Deporte", "titulo": "Deporte para el Nuevo Ecuador",
+        "introduccion": "Programas de recreación, actividad física e infraestructura deportiva con alcance territorial.",
+        "resumen": [("4", "Programas estratégicos"), ("98.500", "Beneficiarios directos"),
+                    ("USD 2.120.195,10", "Inversión ejecutada")],
+        "acciones": [
+            {"icono": "▧", "mes": "Octubre–Noviembre", "titulo": "Programa «Pinta tu Cancha»",
+             "descripcion": "Pintado de canchas comunitarias e institucionales mediante autogestión.",
+             "detalle": "8.300 beneficiarios · 6 provincias · 9 intervenciones"},
+            {"icono": "⌂", "mes": "Octubre–Noviembre", "titulo": "Infraestructura deportiva",
+             "descripcion": "Rehabilitación, adecuación y mantenimiento de escenarios deportivos emblemáticos.",
+             "detalle": "85.720 beneficiarios · USD 2.088.465,10 · 14 inauguraciones"},
+            {"icono": "●", "mes": "Octubre–Noviembre", "titulo": "Programa «Actívate»",
+             "descripcion": "Eventos y festivales orientados a promover actividad física en adultos y adultos mayores.",
+             "detalle": "2.930 beneficiarios · USD 24.692 · 6 actividades"},
+            {"icono": "★", "mes": "Octubre–Noviembre", "titulo": "Programa «Vamos a la Cancha»",
+             "descripcion": "Práctica deportiva para niñas, niños y adolescentes de 5 a 17 años.",
+             "detalle": "1.550 beneficiarios · USD 7.038 · 6 actividades"},
+        ],
+    },
+    "cultura": {
+        "numero": 5, "vice_excel": "Cultura", "titulo": "Cultura para el Nuevo Ecuador",
+        "introduccion": "Circulación artística, memoria social, lectura y fortalecimiento de capacidades culturales.",
+        "resumen": [("11", "Actividades totales"), ("181.915", "Beneficiarios directos"),
+                    ("USD 1.297.399,25", "Inversión total ejecutada")],
+        "acciones": [
+            {"icono": "✦", "mes": "Octubre–Noviembre", "titulo": "Arte en mi Ciudad",
+             "descripcion": "Dos ediciones mensuales de actividades artísticas abiertas a la comunidad.",
+             "detalle": "3.000 beneficiarios"},
+            {"icono": "◈", "mes": "Octubre–Noviembre", "titulo": "Arte en mi Escuela",
+             "descripcion": "Sensibilización, mediación y formación artística en instituciones educativas.",
+             "detalle": "8 provincias"},
+            {"icono": "▤", "mes": "Octubre", "titulo": "Feria Académica Elige Crear (3.ª edición)",
+             "descripcion": "Encuentro académico y cultural desarrollado en Azuay.", "detalle": "2.000 beneficiarios"},
+            {"icono": "▥", "mes": "Octubre", "titulo": "Feria Internacional del Libro Quito",
+             "descripcion": "Promoción del libro, la lectura y la circulación editorial.",
+             "detalle": "45.000 beneficiarios · USD 400.000"},
+            {"icono": "⌂", "mes": "Octubre", "titulo": "Ludobiblioteca del Complejo Ingapirca",
+             "descripcion": "Entrega de un espacio cultural y educativo en Cañar.",
+             "detalle": "5.525 beneficiarios · USD 57.699,25"},
+            {"icono": "♨", "mes": "Octubre", "titulo": "IV Encuentro de Cocinas Iberoamericanas",
+             "descripcion": "Encuentro para la puesta en valor del patrimonio alimentario.",
+             "detalle": "322.925 beneficiarios · USD 30.000"},
+            {"icono": "▶", "mes": "Octubre", "titulo": "Cine al Río MAAC",
+             "descripcion": "Programación cinematográfica con una edición mensual.", "detalle": "700 beneficiarios"},
+            {"icono": "▣", "mes": "Noviembre", "titulo": "Reapertura Showroom MUNA",
+             "descripcion": "Reapertura del espacio expositivo del Museo Nacional.",
+             "detalle": "Pichincha · 1.000 beneficiarios · USD 10.000"},
+            {"icono": "◎", "mes": "Noviembre", "titulo": "Fortalecimiento de capacidades del REMAB",
+             "descripcion": "Capacitación para fortalecer la gestión de la red.",
+             "detalle": "Pichincha · 20 beneficiarios capacitados"},
+            {"icono": "♫", "mes": "Noviembre", "titulo": "Festival Internacional de Artes Vivas de Loja",
+             "descripcion": "Programación nacional e internacional de artes vivas.",
+             "detalle": "160.000 beneficiarios · USD 829.700"},
+            {"icono": "◇", "mes": "Noviembre", "titulo": "Remodelación integral del Museo de Ibarra",
+             "descripcion": "Primera piedra para la intervención integral del museo.",
+             "detalle": "187.536 beneficiarios potenciales"},
+        ],
+    },
+}
+
+
+def _tarjetas_acciones_eje(acciones):
+    tarjetas = []
+    for i, accion in enumerate(acciones, 1):
+        tarjetas.append(html.Article([
+            html.Div([
+                html.Span(accion["icono"], className="eje-card-icon"),
+                html.Span(accion["mes"], className="eje2-project-month"),
+                html.Span(f"{i:02d}", className="eje2-project-number"),
+            ], className="eje-card-top"),
+            html.H3(accion["titulo"]), html.P(accion["descripcion"]),
+            html.Div(accion["detalle"], className="eje-card-detail"),
+        ], className="eje-action-card"))
+    return html.Div(tarjetas, className="eje-actions-grid eje-actions-grid-4")
+
+
+def pagina_eje_viceministerial(codigo):
+    eje = EJES_VICEMINISTERIALES[codigo]
+    programas, aviso = cargar_programas_viceministerio(eje["vice_excel"])
+    return html.Section(className="vision-exec-page eje-viceministerial-page", children=[
+        html.Div(className="vision-exec-header vision-exec-header-compacta", children=[
+            html.Div(className="vision-title-mark"),
+            html.Div([html.H1(
+                          f"EJE {eje['numero']} • {eje['titulo'].upper()}",
+                          className="gestion-educativa-titulo-eje",
+                          style={
+                              "fontSize": "clamp(15px, 1.15vw, 20px)",
+                              "lineHeight": "1.2",
+                              "whiteSpace": "normal",
+                              "maxWidth": "1240px",
+                          },
+                      ),
+                      html.P(eje["introduccion"])])]),
+        html.H2(f"Programas y servicios de {eje['vice_excel']}", className="vision-eje-banner"),
+        html.P("Consolidado inicial de la matriz de rendición de cuentas.", className="eje1-subtitulo"),
+        html.Div(
+            _tarjetas_programas_eje2(programas),
+            className="eje-programas-fila-unica",
+        ) if programas else None,
+        html.P(aviso, className="eje2-source-note") if aviso else None,
+        html.H2("Acciones estratégicas", className="vision-eje-banner"),
+        html.P("Resumen ejecutivo de actividades y acciones previstas para octubre y noviembre.",
+               className="eje1-subtitulo"),
+        html.Div([html.Div([html.Strong(v), html.Span(e)], className="eje1-stat")
+                  for v, e in eje["resumen"] if "agenda" not in e.lower()],
+                 className="eje1-stats-grid eje-summary-grid"),
+        _tarjetas_acciones_eje(eje["acciones"]),
+        html.P("Las cifras de esta sección corresponden a las diapositivas institucionales entregadas.",
+               className="eje2-source-note"),
+    ])
+
+
+# Cifras generales del sistema educativo nacional (año lectivo 2025-2026),
+# tal como las proporcionó la Viceministra — no provienen de las 4 bases de
+# abajo (que son por programa), sino del portal de Datos Abiertos del
+# Ministerio. Son un valor fijo hasta que se conecte una base propia.
+DATOS_GENERALES_GESTION_EDUCATIVA = {
+    "anio_lectivo": "2025-2026",
+    "instituciones": 16215,
+    "estudiantes_mujeres": 2005491,
+    "estudiantes_hombres": 2034159,
+    "docentes_total": 217693,
+    "docentes_mujeres": 157629,
+    "docentes_hombres": 60064,
+}
+
+DATOS_ABIERTOS_MINEDEC_URL = "https://educacion.gob.ec/datos-abiertos-minedec/"
+
+
+def tarjetas_datos_generales(epja=None):
+    """Cifras de Educación Media y, cuando existe, la fila EPJA del Excel."""
+    d = DATOS_GENERALES_GESTION_EDUCATIVA
+    subtitulo = f"Año lectivo {d['anio_lectivo']}"
+    tarjetas = [
+        tarjeta_gestion_educativa(
+            "generales", "Instituciones Educativas (IE)", subtitulo,
+            formato_valor(d["instituciones"]),
+        ),
+        tarjeta_gestion_educativa(
+            "generales", "Estudiantes", subtitulo,
+            formato_valor(d["estudiantes_mujeres"] + d["estudiantes_hombres"]),
+            detalles=[
+                html.Div([html.Span("Mujeres"), html.Strong(formato_valor(d["estudiantes_mujeres"]))],
+                         className="vision-mini-stat"),
+                html.Div([html.Span("Hombres"), html.Strong(formato_valor(d["estudiantes_hombres"]))],
+                         className="vision-mini-stat secondary"),
+            ],
+        ),
+        tarjeta_gestion_educativa(
+            "generales", "Docentes", subtitulo,
+            formato_valor(d["docentes_total"]),
+            detalles=[
+                html.Div([html.Span("Mujeres"), html.Strong(formato_valor(d["docentes_mujeres"]))],
+                         className="vision-mini-stat"),
+                html.Div([html.Span("Hombres"), html.Strong(formato_valor(d["docentes_hombres"]))],
+                         className="vision-mini-stat secondary"),
+            ],
+        ),
+    ]
+    if epja is not None:
+        tarjetas.append(tarjeta_gestion_educativa(
+            "epja", "Educación para Jóvenes y Adultos (EPJA)",
+            "Programa de Gestión Educativa",
+            formato_valor(epja["beneficiarios"]),
+            unidad=str(epja["tipo"]).strip(),
+        ))
+    return tarjetas
+
+
+# ---------------------------------------------------------------------------
+# Eje 1 · Infraestructura educativa (Fortalecimiento de la Infraestructura,
+# Equipamiento y Alimentación Escolar). No proviene de ninguna de las 4 bases
+# conectadas — son los registros puntuales de infraestructura que la
+# Viceministra pasó a mano; se dejan aquí como fuente única hasta que exista
+# una base propia. A diferencia de Cobertura, aquí SÍ se muestra la inversión
+# (pedido explícito: esto es para presumir metas/logros, no cobertura de
+# programas). Cada registro trae lat/lon aproximados de su provincia para el
+# mapa (sin necesidad de un archivo geográfico externo).
+EJE1_INSTITUCIONES = [
+    {"institucion": "Unidad Educativa Puerto Limón", "beneficiarios": 1510,
+     "inversion": 647584.59, "provincia": "Santo Domingo de los Tsáchilas",
+     "canton": "Santo Domingo de los Tsáchilas", "lat": -0.2530, "lon": -79.1719},
+    {"institucion": "Unidad Educativa Jaime del Hierro", "beneficiarios": 733,
+     "inversion": 308154.49, "provincia": "Santo Domingo de los Tsáchilas",
+     "canton": "Santo Domingo de los Tsáchilas", "lat": -0.2530, "lon": -79.1719},
+    {"institucion": "Unidad Educativa \"Velasco Ibarra\"", "beneficiarios": 639,
+     "inversion": 395258.71, "provincia": "Manabí", "canton": "Portoviejo",
+     "lat": -1.0546, "lon": -80.4525},
+    {"institucion": "Unidad Educativa Provincia de Manabí", "beneficiarios": 823,
+     "inversion": 216434.73, "provincia": "Manabí", "canton": "Puerto López",
+     "lat": -1.0546, "lon": -80.4525},
+    {"institucion": "Unidad Educativa Las Mercedes", "beneficiarios": 631,
+     "inversion": 509222.24, "provincia": "Manabí", "canton": "24 de Mayo",
+     "lat": -1.0546, "lon": -80.4525},
+    {"institucion": "Unidad Educativa Bosco Wisuma", "beneficiarios": 700,
+     "inversion": 43472.62, "provincia": "Morona Santiago", "canton": "Morona",
+     "lat": -2.3086, "lon": -78.1114},
+    {"institucion": "Unidad Educativa 2 de Octubre", "beneficiarios": 129,
+     "inversion": 199281.21, "provincia": "Napo", "canton": "Tena",
+     "lat": -1.0021, "lon": -77.8140},
+]
+
+# Programa de Alimentación Escolar: resumen provincial entregado para la
+# presentación ejecutiva. Se mantiene separado de las inauguraciones porque
+# su unidad de análisis es la provincia y no la institución individual.
+PMA_PROVINCIAS = [
+    {"provincia": "Esmeraldas", "instituciones": 6, "beneficiarios": 5654,
+     "inversion": 930280.85},
+    {"provincia": "Pichincha", "instituciones": 9, "beneficiarios": 13999,
+     "inversion": 2094137.13},
+    {"provincia": "Tungurahua", "instituciones": 3, "beneficiarios": 1206,
+     "inversion": 203108.06},
+    {"provincia": "Santo Domingo de los Tsáchilas", "instituciones": 2,
+     "beneficiarios": 3978, "inversion": 674679.66},
+    {"provincia": "Los Ríos", "instituciones": 2, "beneficiarios": 3653,
+     "inversion": 598117.78},
+    {"provincia": "Santa Elena", "instituciones": 15, "beneficiarios": 6220,
+     "inversion": 1053251.35},
+    {"provincia": "Azuay", "instituciones": 1, "beneficiarios": 975,
+     "inversion": 145942.94},
+    {"provincia": "El Oro", "instituciones": 3, "beneficiarios": 3509,
+     "inversion": 630482.80},
+    {"provincia": "Guayas", "instituciones": 2, "beneficiarios": 4226,
+     "inversion": 669398.40},
+]
+
+
+def _moneda_corta(valor):
+    """Formato de moneda consistente con el resto del panel (ver _moneda,
+    más abajo, para Ejecución Presupuestaria)."""
+    return "$ " + f"{float(valor):,.2f}".replace(",", "X").replace(".", ",").replace("X", ".")
+
+
+def franja_stats_eje1(registros):
+    total_instituciones = len(registros)
+    total_beneficiarios = sum(r["beneficiarios"] for r in registros)
+    total_inversion = sum(r["inversion"] for r in registros)
+    total_provincias = len({r["provincia"] for r in registros})
+    datos = [
+        (formato_valor(total_instituciones), "Instituciones Educativas"),
+        (formato_valor(total_beneficiarios), "Estudiantes Beneficiados"),
+        (_moneda_corta(total_inversion), "Inversión Total"),
+        (formato_valor(total_provincias), "Provincias"),
+    ]
+    return html.Div([
+        html.Div([html.Strong(valor), html.Span(etiqueta)], className="eje1-stat")
+        for valor, etiqueta in datos
+    ], className="eje1-stats-grid")
+
+
+def tabla_eje1(registros):
+    """La tabla va detrás de un <details>/<summary> (igual que las fórmulas
+    del panel): colapsada por defecto, se despliega con un clic — pedido
+    explícito del usuario, no mostrar la tabla de entrada."""
+    filas = [
+        html.Tr([
+            html.Td(r["institucion"]), html.Td(formato_valor(r["beneficiarios"])),
+            html.Td(_moneda_corta(r["inversion"])), html.Td(r["provincia"]), html.Td(r["canton"]),
+        ]) for r in registros
+    ]
+    tabla = html.Table([
+        html.Thead(html.Tr([html.Th("Institución"), html.Th("Beneficiarios"), html.Th("Inversión"),
+                             html.Th("Provincia"), html.Th("Cantón")])),
+        html.Tbody(filas),
+    ], className="eje1-tabla")
+    return html.Details([
+        html.Summary([
+            html.Span("Ver tabla de instituciones"),
+            html.Span("⌄", className="eje1-tabla-chevron"),
+        ], className="eje1-tabla-header"),
+        html.Div(tabla, className="eje1-tabla-body"),
+    ], className="eje1-tabla-accordion")
+
+
+def _sin_tildes(texto):
+    normalizado = unicodedata.normalize("NFKD", str(texto).strip().lower())
+    return "".join(c for c in normalizado if not unicodedata.combining(c))
+
+
+_GEOJSON_PROVINCIAS_CACHE = None
+
+
+def _cargar_geojson_provincias():
+    """Carga provincias_ecuador.geojson (generado por
+    procesar_mapa_provincias.py a partir del shapefile oficial de CONALI).
+    Se cachea en memoria; si el archivo no existe todavía, devuelve None y
+    el mapa cae de vuelta al modo de burbujas por coordenadas."""
+    global _GEOJSON_PROVINCIAS_CACHE
+    if _GEOJSON_PROVINCIAS_CACHE is not None:
+        return _GEOJSON_PROVINCIAS_CACHE
+    # El archivo puede estar junto a app.py o dentro de assets. No se guarda
+    # un fallo en caché: si el procesador genera el GeoJSON mientras la app
+    # está abierta, una actualización posterior podrá encontrarlo.
+    for raiz in (BASE_DIR, BASE_DIR / "assets", Path.cwd(), Path.cwd() / "assets"):
+        ruta = raiz / "provincias_ecuador.geojson"
+        if ruta.exists():
+            with open(ruta, "r", encoding="utf-8") as f:
+                _GEOJSON_PROVINCIAS_CACHE = json.load(f)
+            return _GEOJSON_PROVINCIAS_CACHE
+    return None
+
+
+def mapa_eje1(registros):
+    """Mapa coroplético de provincias: colorea con los límites reales de
+    Ecuador (shapefile oficial de CONALI, procesado por
+    procesar_mapa_provincias.py) las provincias donde hubo intervenciones.
+    Si todavía no se generó el GeoJSON, usa un mapa de burbujas como
+    respaldo para que la página nunca se rompa."""
+    agregados = {}
+    for r in registros:
+        prov = agregados.setdefault(r["provincia"], {
+            "lat": r["lat"], "lon": r["lon"], "instituciones": 0, "beneficiarios": 0,
+        })
+        prov["instituciones"] += 1
+        prov["beneficiarios"] += r["beneficiarios"]
+
+    geojson = _cargar_geojson_provincias()
+
+    if geojson:
+        texto_hover = {}
+        resaltadas = []  # (nombre, lon, lat, instituciones) de las provincias con intervención
+        nombres_resaltados = set()
+        for feat in geojson["features"]:
+            nombre = feat["properties"]["nombre"]
+            match = None
+            for clave_prov, datos in agregados.items():
+                if _sin_tildes(clave_prov) == _sin_tildes(nombre):
+                    match = datos
+                    break
+            if match:
+                nombres_resaltados.add(nombre)
+                texto_hover[nombre] = (
+                    f"<b>{nombre.title()}</b><br>{match['instituciones']} institución(es)<br>"
+                    f"{formato_valor(match['beneficiarios'])} estudiantes"
+                )
+                resaltadas.append((
+                    nombre.title(),
+                    feat["properties"]["centroide_lon"],
+                    feat["properties"]["centroide_lat"],
+                    match["instituciones"],
+                ))
+            else:
+                texto_hover[nombre] = f"<b>{nombre.title()}</b><br>Sin intervenciones registradas"
+
+        # Tres capas sólidas: provincias sin intervención en blanco y las
+        # cuatro provincias destacadas repartidas entre amarillo y azul.
+        feats_base = geojson["features"]
+        # Distribución tomada del diseño original:
+        # amarillo = Manabí y Morona Santiago;
+        # violeta = Santo Domingo de los Tsáchilas y Napo.
+        amarillas = {"manabi", "morona santiago"}
+        azules = {"santo domingo de los tsachilas", "napo"}
+        feats_amarillas = [
+            f for f in feats_base
+            if _sin_tildes(f["properties"]["nombre"]) in amarillas
+        ]
+        feats_azules = [
+            f for f in feats_base
+            if _sin_tildes(f["properties"]["nombre"]) in azules
+        ]
+        feats_normales = [
+            f for f in feats_base
+            if _sin_tildes(f["properties"]["nombre"]) not in amarillas | azules
+        ]
+
+        def _trazo(features, color):
+            nombres = [f["properties"]["nombre"] for f in features]
+            return go.Choropleth(
+                geojson={"type": "FeatureCollection", "features": features},
+                locations=nombres,
+                featureidkey="properties.nombre",
+                z=[1] * len(nombres),
+                zmin=0, zmax=1,
+                colorscale=[[0, color], [1, color]],
+                showscale=False,
+                marker_line_color="#28345f",
+                marker_line_width=1.0,
+                text=[texto_hover[n] for n in nombres],
+                hoverinfo="text",
+            )
+
+        fig = go.Figure()
+        if feats_normales:
+            fig.add_trace(_trazo(feats_normales, "#ffffff"))
+        if feats_amarillas:
+            fig.add_trace(_trazo(feats_amarillas, "#f8bd20"))
+        if feats_azules:
+            fig.add_trace(_trazo(feats_azules, "#4d3a94"))
+
+        if resaltadas:
+            fig.add_trace(go.Scattergeo(
+                lon=[r[1] for r in resaltadas],
+                lat=[r[2] for r in resaltadas],
+                mode="markers",
+                marker=dict(size=5, color="#17245b", line=dict(width=1, color="#ffffff")),
+                hoverinfo="skip",
+                showlegend=False,
+            ))
+        fig.update_geos(
+            scope="south america",
+            lataxis_range=[-5.6, 2.0],
+            lonaxis_range=[-82.3, -74.2],
+            showcountries=False,
+            showland=False,
+            showocean=True, oceancolor="#ffffff",
+            resolution=50,
+            bgcolor="#ffffff",
+            fitbounds=False,
+            projection_scale=1,
+        )
+        fig.update_layout(margin=dict(l=28, r=28, t=10, b=10), height=400,
+                           paper_bgcolor="#ffffff", plot_bgcolor="#ffffff",
+                           autosize=True, showlegend=False)
+        return dcc.Graph(figure=fig, config={"displayModeBar": False, "responsive": True},
+                          className="eje1-mapa", style={"width": "100%", "height": "400px"})
+
+    # --- Respaldo: mapa de burbujas por coordenadas (sin GeoJSON) ---
+    provincias = list(agregados)
+    etiqueta_pin = [
+        f"{p}<br>{agregados[p]['instituciones']} "
+        f"{'institución' if agregados[p]['instituciones'] == 1 else 'instituciones'}"
+        for p in provincias
+    ]
+    fig = go.Figure(go.Scattergeo(
+        lat=[agregados[p]["lat"] for p in provincias],
+        lon=[agregados[p]["lon"] for p in provincias],
+        text=etiqueta_pin,
+        textposition="top center",
+        textfont=dict(size=12, color="#28304f", family="Arial Black, Arial"),
+        hovertext=[f"<b>{p}</b><br>{agregados[p]['instituciones']} institución(es)<br>"
+                   f"{formato_valor(agregados[p]['beneficiarios'])} estudiantes" for p in provincias],
+        mode="markers+text",
+        marker=dict(
+            size=[22 + agregados[p]["instituciones"] * 7 for p in provincias],
+            color="#f8bd20",
+            opacity=1,
+            line=dict(width=2.5, color="#503a98"),
+            symbol="circle",
+        ),
+        hoverinfo="text",
+    ))
+    fig.update_geos(
+        scope="south america",
+        lataxis_range=[-5.6, 1.8],
+        lonaxis_range=[-82, -74.8],
+        showcountries=True, countrycolor="#9aa2bd",
+        showland=True, landcolor="#f5f6fa",
+        showocean=True, oceancolor="#eef1fb",
+        showsubunits=True, subunitcolor="#c7cbe0",
+        countrywidth=1.4,
+        resolution=50,
+        bgcolor="rgba(0,0,0,0)",
+    )
+    fig.update_layout(margin=dict(l=10, r=10, t=30, b=10), height=420,
+                       paper_bgcolor="rgba(0,0,0,0)")
+    return dcc.Graph(figure=fig, config={"displayModeBar": False}, className="eje1-mapa")
+
+
+def seccion_eje1_infraestructura():
+    registros = EJE1_INSTITUCIONES
+    return html.Div([
+        html.P("Infraestructura educativa", className="eje1-subtitulo"),
+        franja_stats_eje1(registros),
+        html.Div([
+            html.Div(tabla_eje1(registros), className="eje1-col-tabla"),
+            html.Div([mapa_eje1(registros)], className="eje1-mapa-wrap eje1-col-mapa"),
+        ], className="eje1-fila-detalle"),
+    ], className="eje1-seccion")
+
+
+def franja_stats_pma(registros):
+    datos = [
+        (formato_valor(sum(r["instituciones"] for r in registros)), "Instituciones Educativas"),
+        (formato_valor(sum(r["beneficiarios"] for r in registros)), "Estudiantes Beneficiarios"),
+        (_moneda_corta(sum(r["inversion"] for r in registros)), "Inversión Total"),
+        (formato_valor(len(registros)), "Provincias"),
+    ]
+    return html.Div([
+        html.Div([html.Strong(valor), html.Span(etiqueta)], className="eje1-stat")
+        for valor, etiqueta in datos
+    ], className="eje1-stats-grid pma-stats-grid")
+
+
+def tabla_pma(registros):
+    filas = [
+        html.Tr([
+            html.Td(r["provincia"]),
+            html.Td(formato_valor(r["instituciones"])),
+            html.Td(formato_valor(r["beneficiarios"])),
+            html.Td(_moneda_corta(r["inversion"])),
+        ]) for r in registros
+    ]
+    tabla = html.Table([
+        html.Thead(html.Tr([
+            html.Th("Provincia"), html.Th("N.° IE"),
+            html.Th("Beneficiarios"), html.Th("Inversión PMA"),
+        ])),
+        html.Tbody(filas),
+    ], className="eje1-tabla pma-tabla")
+    return html.Details([
+        html.Summary([
+            html.Span("Ver tabla por provincias"),
+            html.Span("⌄", className="eje1-tabla-chevron"),
+        ], className="eje1-tabla-header"),
+        html.Div(tabla, className="eje1-tabla-body"),
+    ], className="eje1-tabla-accordion")
+
+
+def mapa_pma(registros):
+    geojson = _cargar_geojson_provincias()
+    if not geojson:
+        return html.Div("No se encontró provincias_ecuador.geojson.", className="pma-sin-mapa")
+
+    por_provincia = {_sin_tildes(r["provincia"]): r for r in registros}
+    # Distribución tomada de la lámina original del PMA.
+    amarillas = {"esmeraldas", "pichincha", "los rios", "santa elena", "azuay"}
+    azules = {
+        "santo domingo de los tsachilas", "tungurahua", "guayas", "el oro",
+    }
+    seleccionadas = amarillas | azules
+
+    normales, feats_amarillas, feats_azules = [], [], []
+    etiquetas = []
+    hover = {}
+    for feat in geojson["features"]:
+        nombre = feat["properties"]["nombre"]
+        clave = _sin_tildes(nombre)
+        dato = por_provincia.get(clave)
+        if dato:
+            hover[nombre] = (
+                f"<b>{dato['provincia']}</b><br>{dato['instituciones']} instituciones"
+                f"<br>{formato_valor(dato['beneficiarios'])} beneficiarios"
+                f"<br>{_moneda_corta(dato['inversion'])}"
+            )
+            etiqueta = "Santo Domingo" if clave == "santo domingo de los tsachilas" else dato["provincia"]
+            etiquetas.append((
+                feat["properties"]["centroide_lon"],
+                feat["properties"]["centroide_lat"],
+                f"<b>{etiqueta}</b><br>{dato['instituciones']} IE",
+            ))
+        else:
+            hover[nombre] = f"<b>{nombre.title()}</b><br>Sin cobertura priorizada"
+
+        if clave in amarillas:
+            feats_amarillas.append(feat)
+        elif clave in azules:
+            feats_azules.append(feat)
+        elif clave not in seleccionadas:
+            normales.append(feat)
+
+    def _capa(features, color):
+        nombres = [f["properties"]["nombre"] for f in features]
+        return go.Choropleth(
+            geojson={"type": "FeatureCollection", "features": features},
+            locations=nombres, featureidkey="properties.nombre",
+            z=[1] * len(nombres), zmin=0, zmax=1,
+            colorscale=[[0, color], [1, color]], showscale=False,
+            marker_line_color="#4d4f83", marker_line_width=.85,
+            text=[hover[n] for n in nombres], hoverinfo="text",
+        )
+
+    fig = go.Figure()
+    fig.add_trace(_capa(normales, "#ffffff"))
+    fig.add_trace(_capa(feats_amarillas, "#f8bd20"))
+    fig.add_trace(_capa(feats_azules, "#4d3a94"))
+    fig.add_trace(go.Scattergeo(
+        lon=[e[0] for e in etiquetas], lat=[e[1] for e in etiquetas],
+        mode="markers", text=[e[2] for e in etiquetas],
+        marker=dict(size=5, color="#17245b", line=dict(width=1, color="#ffffff")),
+        hovertemplate="%{text}<extra></extra>", showlegend=False,
+    ))
+    fig.update_geos(
+        scope="south america", lataxis_range=[-5.6, 2.0], lonaxis_range=[-82.3, -74.2],
+        showcountries=False, showland=False, showocean=True, oceancolor="#ffffff",
+        resolution=50, bgcolor="#ffffff", fitbounds=False,
+    )
+    fig.update_layout(
+        margin=dict(l=20, r=20, t=8, b=8), height=420,
+        paper_bgcolor="#ffffff", plot_bgcolor="#ffffff", showlegend=False,
+    )
+    return dcc.Graph(
+        figure=fig, config={"displayModeBar": False, "responsive": True},
+        className="eje1-mapa", style={"width": "100%", "height": "420px"},
+    )
+
+
+def seccion_pma():
+    registros = PMA_PROVINCIAS
+    return html.Div([
+        html.H2(
+            "Alimentación escolar: inversión que llega al territorio",
+            className="vision-eje-banner",
+        ),
+        html.P(
+            "Por provincia priorizada un plato de comida con inversión",
+            className="eje1-subtitulo pma-subtitulo",
+        ),
+        franja_stats_pma(registros),
+        html.Div([
+            html.Div(tabla_pma(registros), className="eje1-col-tabla"),
+            html.Div([mapa_pma(registros)], className="eje1-mapa-wrap eje1-col-mapa"),
+        ], className="eje1-fila-detalle pma-fila-detalle"),
+    ], className="eje1-seccion pma-seccion")
+
+
+def seccion_proximamente(titulo, descripcion):
+    """Placeholder visual para secciones que todavía no tienen contenido ni
+    fuente de datos, pero ya reservan su lugar en la página."""
+    return html.Div([
+        html.H2(titulo),
+        html.P(descripcion),
+    ], className="vision-proximamente")
+
+
+# (código CSS, fuente, título, subtítulo, clave principal, unidad, subgrupo)
+TARJETAS_GESTION_EDUCATIVA = [
+    ("alimentacion", "Alimentación Escolar", "Alimentación Escolar",
+     "Raciones entregadas por cantón", "beneficiarios", "Estudiantes", None),
+    ("uniformes", "Uniformes Escolares", "Uniformes Escolares",
+     "Entrega de uniformes por cantón", "beneficiarios", "Estudiantes", None),
+    ("textos", "Textos Escolares", "Textos Escolares",
+     "Entrega de textos por cantón", "beneficiarios", "Estudiantes", None),
+    ("mobiliario", "Mobiliario y Transporte Escolar", "Mobiliario Escolar",
+     "Instituciones atendidas con mobiliario", "estudiantes", "Estudiantes", "mobiliario"),
+    ("transporte", "Mobiliario y Transporte Escolar", "Transporte Escolar",
+     "Estudiantes atendidos con transporte", "estudiantes", "Estudiantes", "transporte"),
+]
+
+
+def _detalles_tarjeta_gestion(dato):
+    detalles = [html.Div([
+        html.Span("Instituciones"),
+        html.Strong(formato_valor(dato.get("instituciones", 0)))
+    ], className="vision-mini-stat secondary")]
+    return detalles
+
+
+def pagina_gestion_educativa():
+    """Una tarjeta por cada una de las 4 bases reales, mostrando exactamente
+    lo que cada una tiene (beneficiarios/instituciones y su cobertura por
+    provincia) — nunca el monto de inversión. No se inventan tarjetas de
+    Matrícula, Permanencia o Riesgos de continuidad: esas requieren la base
+    de matrícula estudiantil, que todavía no está conectada aquí."""
+    resumen = RESUMEN_GESTION_EDUCATIVA
+    pendientes = PENDIENTES_GESTION_EDUCATIVA
+    programas_gestion, aviso_programas = cargar_programas_viceministerio("Gestión Educativa")
+    epja = next((p for p in programas_gestion
+                 if "epja" in _sin_tildes(p.get("programa", ""))), None)
+    programas_gestion = [p for p in programas_gestion
+                         if "epja" not in _sin_tildes(p.get("programa", ""))]
+
+    def dato(nombre_legible, clave):
+        return resumen.get(nombre_legible, {}).get(clave)
+
+    tarjetas = []
+    for (codigo, nombre_legible, titulo, subtitulo, clave_principal,
+         etiqueta_principal, subgrupo) in TARJETAS_GESTION_EDUCATIVA:
+        fuente_completa = resumen.get(nombre_legible, {})
+        fuente = (fuente_completa.get("por_recurso", {}).get(subgrupo, {})
+                  if subgrupo else fuente_completa)
+        valor_principal = fuente.get(clave_principal)
+        if valor_principal is None and clave_principal == "estudiantes":
+            valor_principal = fuente.get("beneficiarios")
+        detalles = _detalles_tarjeta_gestion(fuente)
+        tarjetas.append(tarjeta_gestion_educativa(
+            codigo, titulo, subtitulo,
+            formato_valor(valor_principal) if valor_principal is not None else "Sin fuente",
+            detalles=detalles, unidad=etiqueta_principal,
+        ))
+
+    pie = None
+    if pendientes:
+        pie = html.Div([
+            html.Strong("Fuentes por complementar: "),
+            html.Span("aún no se pudieron leer las bases de " + "; ".join(pendientes) + "."),
+        ], className="vision-exec-footer-aviso")
+
+    return html.Section(className="vision-exec-page gestion-educativa-page", children=[
+        html.Div(className="vision-exec-header vision-exec-header-compacta", children=[
+            html.Div(className="vision-title-mark"),
+            html.Div([
+                html.H1(
+                    "EJE 1 • FORTALECIMIENTO DE LA INFRAESTRUCTURA, "
+                    "EQUIPAMIENTO Y ALIMENTACIÓN ESCOLAR",
+                    className="gestion-educativa-titulo-eje",
+                    style={
+                        "fontSize": "clamp(15px, 1.15vw, 20px)",
+                        "lineHeight": "1.2",
+                        "whiteSpace": "normal",
+                        "maxWidth": "1240px",
+                    },
+                ),
+                html.P("Totales nacionales del sistema educativo y, por separado, la cobertura de Alimentación, "
+                       "Uniformes, Textos Escolares, Mobiliario y Transporte Escolar. No "
+                       "incluye montos de inversión. Matrícula, permanencia y riesgos de continuidad requieren "
+                       "la base de matrícula estudiantil, todavía no conectada a esta vista."),
+            ]),
+        ]),
+
+        html.H2("Información de Educación Media", className="vision-eje-banner"),
+        html.Div(
+                 className="vision-exec-grid gestion-educativa-grid datos-generales-grid "
+                           "educacion-media-cifras-grid",
+                 children=tarjetas_datos_generales(epja)),
+
+        html.H2("Programas y servicios de Gestión Educativa", className="vision-eje-banner"),
+        html.P("Cifras consolidadas de los programas y servicios institucionales.",
+               className="eje1-subtitulo"),
+        _tarjetas_programas_eje2(programas_gestion) if programas_gestion else None,
+        html.P(aviso_programas, className="eje2-source-note") if aviso_programas else None,
+
+        html.H2("Recursos educativos y complementarios",
+                className="vision-eje-banner"),
+        html.Div(className="vision-exec-grid gestion-educativa-grid", children=tarjetas),
+        pie,
+
+        html.H2("Proyectos que transforman la educación",
+                className="vision-eje-banner"),
+        seccion_eje1_infraestructura(),
+        seccion_pma(),
+    ])
+
+
+# ---------------------------------------------------------------------------
 # Visión Ejecutiva · infografía institucional estática
 # ---------------------------------------------------------------------------
 def tabla_vision(grupo):
@@ -1490,7 +2886,7 @@ def tarjeta_tabla_vision(grupo):
     ], className="vision-table-card")
 
 
-def contenido_vision(seccion=None):
+def contenido_resumen_minedec():
     """Muestra la infografía institucional (imagen) sin recortes ni deformación."""
     return html.Section(
         className="vision-image-page",
@@ -1506,6 +2902,62 @@ def contenido_vision(seccion=None):
             ),
         ],
     )
+
+
+def contenido_vision(tab=None):
+    """Al entrar a Visión Ejecutiva se presenta el menú de los 5 viceministerios
+    y nada más, hasta que se elige uno; hoy solo "Gestión Educativa" tiene
+    contenido real, el resto está en construcción."""
+    tab = tab if tab in dict(VISION_TABS) else None
+    menu = vision_tabs_nav(tab)
+    if tab is None:
+        return html.Div([
+            html.H1(
+                "MINISTERIO DE EDUCACIÓN, DEPORTE Y CULTURA",
+                className="vision-landing-title",
+                style={
+                    "margin": "0",
+                    "color": "#4e3cab",
+                    "fontSize": "clamp(25px, 2.35vw, 40px)",
+                    "fontWeight": "900",
+                    "lineHeight": "1.08",
+                    "letterSpacing": ".01em",
+                    "textAlign": "center",
+                },
+            ),
+            html.Div(menu, className="vision-landing-menu", style={"width": "100%", "marginTop": "0"}),
+            html.Div([
+                html.Img(
+                    src=app.get_asset_url("vision-ejecutiva-portada.png"),
+                    className="vision-landing-image",
+                    alt="Resumen ejecutivo MINEDEC 2026",
+                    style={"display": "block", "width": "100%", "height": "auto",
+                           "objectFit": "contain",
+                           "borderRadius": "14px", "background": "#fff",
+                           "boxShadow": "0 12px 28px rgba(24,37,87,.10)"},
+                ),
+            ], className="vision-landing-visual",
+               style={"width": "100%", "minWidth": "0", "display": "flex",
+                      "alignItems": "flex-start", "justifyContent": "center",
+                      "position": "relative", "aspectRatio": "1909 / 1079",
+                      "overflow": "hidden",
+                      "flex": "1 1 auto", "borderRadius": "14px"}),
+        ], className="vision-landing",
+           style={"minHeight": "calc(100vh - 92px)", "padding": "18px 28px 26px",
+                  "display": "flex", "flexDirection": "column", "gap": "14px",
+                  "alignItems": "stretch", "boxSizing": "border-box", "background": "#f5f6fa"})
+    if tab == "gestion-educativa":
+        cuerpo = pagina_gestion_educativa()
+    elif tab == "educacion-superior":
+        cuerpo = pagina_educacion_superior()
+    elif tab in EJES_VICEMINISTERIALES:
+        cuerpo = pagina_eje_viceministerial(tab)
+    else:
+        cuerpo = html.Div([
+            html.H1(dict(VISION_TABS)[tab]),
+            html.P("Esta sección está en construcción: aún no se ha definido ni cargado su fuente de datos."),
+        ], className="module-welcome")
+    return html.Div([menu, cuerpo])
 
 
 # ---------------------------------------------------------------------------
@@ -1969,6 +3421,76 @@ def contenido_inventario():
     ], className="indicator-content")
 
 
+def contenido_documentacion():
+    """Repositorio documental exigido para el entregable E-02 (DP-SI-020)."""
+    icono_documento = (
+        "<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 48 48' "
+        "fill='none' stroke='#503a98' stroke-width='2.6' "
+        "stroke-linecap='round' stroke-linejoin='round'>"
+        "<path d='M13 6h15l8 8v28H13z'/><path d='M28 6v9h9'/>"
+        "<path d='M19 23h11M19 29h11M19 35h8'/></svg>"
+    )
+
+    def tarjeta_entregable(codigo, titulo, descripcion, formato, nombre_archivo):
+        return html.Article([
+            html.Div([
+                html.Span(
+                    html.Img(
+                        src="data:image/svg+xml;utf8," + quote(icono_documento),
+                        className="document-file-icon-svg", alt="",
+                    ),
+                    className="document-file-icon", **{"aria-hidden": "true"},
+                ),
+                html.Span(codigo, className="document-code"),
+            ], className="document-card-top"),
+            html.H3(titulo),
+            html.P(descripcion),
+            html.Div([html.Span("Formato: "), html.Strong(formato)], className="document-format"),
+            html.Div([
+                html.Span("• Disponible", className="document-status available"),
+                html.A(
+                    [html.Span("Descargar archivo"), html.Span("↓", **{"aria-hidden": "true"})],
+                    href="/descargar-entregable/" + quote(nombre_archivo),
+                    className="document-action",
+                    download=nombre_archivo,
+                ),
+            ], className="document-card-actions"),
+        ], className="document-deliverable-card")
+
+    entregables = [
+        tarjeta_entregable(
+            "E-03", "Manual de usuario",
+            "Cómo navegar el portal, leer sus tableros, usar los filtros y descargar gráficos y tablas.",
+            "DOCX", "E-03_Manual_de_usuario.docx",
+        ),
+        tarjeta_entregable(
+            "E-04", "Diccionario de datos e indicadores",
+            "Variables de cada archivo de datos del portal y definición de cada indicador: fórmula, unidad, fuente y desagregaciones.",
+            "XLSX", "E-04_Diccionario_de_datos_e_indicadores_Anexo5.xlsx",
+        ),
+        tarjeta_entregable(
+            "E-05", "Fichas metodológicas de los indicadores",
+            "Archivo único con las fichas metodológicas de todos los indicadores publicados en el portal.",
+            "DOCX", "E-05_Fichas_metodologicas.docx",
+        ),
+    ]
+    return html.Div([
+        html.Section([
+            html.Div([
+                html.P("PORTAL DE INDICADORES", className="documentation-kicker"),
+                html.H1("Documentación"),
+                html.P("Manual de usuario, diccionario de datos e indicadores y fichas metodológicas de la solución de información."),
+            ]),
+        ], className="documentation-hero"),
+        html.Section([
+            html.Div([
+                html.H2("DOCUMENTOS DISPONIBLES"),
+            ], className="documentation-section-heading"),
+            html.Div(entregables, className="document-deliverables-grid"),
+        ], className="documentation-section"),
+    ], className="documentation-page")
+
+
 def contenido_seccion(seccion, vice=None, indicador=None):
     if seccion == "vision":
         return contenido_vision(vice)
@@ -1982,6 +3504,8 @@ def contenido_seccion(seccion, vice=None, indicador=None):
         return contenido_presupuesto(vice)
     if seccion == "inventario":
         return contenido_inventario()
+    if seccion == "documentacion":
+        return contenido_documentacion()
     return html.Div([html.H1(dict(SECCIONES).get(seccion, "Módulo")),
                       html.P("Módulo preparado para la siguiente etapa.")],
                      className="module-welcome")
@@ -1999,6 +3523,7 @@ app.layout = html.Div([
     dcc.Store(id="selected-indicator"),
     dcc.Store(id="data-version", data={"pnd": VERSION_PND, "kpi-estrategicos": VERSION_KPI,
                                         "kpi-institucionales": VERSION_KPI_INST,
+                                        "gestion-educativa": VERSION_GESTION_EDUCATIVA,
                                         "vision": VERSION_VISION,
                                         "presupuesto": VERSION_PRESUPUESTO}),
     dcc.Interval(id="excel-watcher", interval=15000, n_intervals=0),
@@ -2068,11 +3593,24 @@ def seleccionar_vice(_clicks, actual, seccion):
     # Segundo clic sobre el mismo viceministerio: recoge el acordeón y limpia la ficha.
     if vice == actual:
         return None, None
-    if seccion in {"vision", "presupuesto"}:
+    if seccion == "presupuesto":
         return vice, None
     indicadores = df.loc[df[cfg["vice_col"]] == vice, cfg["indicador_col"]].dropna().unique()
     primer_indicador = indicadores[0] if len(indicadores) else None
     return vice, primer_indicador
+
+
+@app.callback(Output("selected-vice", "data", allow_duplicate=True),
+              Input({"type": "vision-tab", "index": ALL}, "n_clicks"),
+              State("active-section", "data"), prevent_initial_call=True)
+def seleccionar_pestana_vision(_clicks, seccion):
+    """Pestañas de Visión Ejecutiva (reutiliza el Store 'selected-vice', que
+    en esta sección no se usa para viceministerios sino para la pestaña
+    activa)."""
+    if (seccion != "vision" or not isinstance(ctx.triggered_id, dict)
+            or not _clicks or not any((v or 0) > 0 for v in _clicks)):
+        return no_update
+    return ctx.triggered_id["index"]
 
 
 @app.callback(Output("selected-indicator", "data"),
@@ -2204,6 +3742,7 @@ def actualizar_excel(_intervalo, version_actual):
     """Recarga únicamente el Excel que cambió; no interrumpe los clics del usuario."""
     global DATA_PND, ERROR_PND, VERSION_PND, DATA_KPI, ERROR_KPI, VERSION_KPI
     global DATA_KPI_INST, ERROR_KPI_INST, VERSION_KPI_INST
+    global RESUMEN_GESTION_EDUCATIVA, PENDIENTES_GESTION_EDUCATIVA, VERSION_GESTION_EDUCATIVA
     global DATA_PRESUPUESTO, ERROR_PRESUPUESTO, VERSION_PRESUPUESTO
     version_actual = dict(version_actual or {})
     cambio = False
@@ -2230,6 +3769,18 @@ def actualizar_excel(_intervalo, version_actual):
         if not nuevo_error and not nueva_data.empty:
             DATA_KPI_INST, ERROR_KPI_INST, VERSION_KPI_INST = nueva_data, None, nueva_version_kpi_inst
             version_actual["kpi-institucionales"] = nueva_version_kpi_inst
+            cambio = True
+
+    # Las bases de Gestión Educativa (algunas en OneDrive) se vuelven a leer
+    # cada 15 minutos, igual que el presupuesto: no hay forma barata de saber
+    # si cambiaron sin descargarlas, así que se relee y se compara después.
+    if _intervalo % 60 == 0:
+        nuevo_resumen, nuevos_pendientes = cargar_resumen_gestion_educativa()
+        nueva_version_gestion_educ = version_gestion_educativa(nuevo_resumen, nuevos_pendientes)
+        if nueva_version_gestion_educ != version_actual.get("gestion-educativa"):
+            RESUMEN_GESTION_EDUCATIVA, PENDIENTES_GESTION_EDUCATIVA = nuevo_resumen, nuevos_pendientes
+            VERSION_GESTION_EDUCATIVA = nueva_version_gestion_educ
+            version_actual["gestion-educativa"] = nueva_version_gestion_educ
             cambio = True
 
     # SharePoint se consulta cada 15 minutos para evitar solicitudes innecesarias.
