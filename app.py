@@ -36,8 +36,12 @@ def directorios_entregables():
     candidatos = [
         BASE_DIR.parent / "Quipux" / "Entregables05102026",
         BASE_DIR / "Quipux" / "Entregables05102026",
+        BASE_DIR / "Entregables05102026",
+        BASE_DIR,
         Path.cwd().parent / "Quipux" / "Entregables05102026",
         Path.cwd() / "Quipux" / "Entregables05102026",
+        Path.cwd() / "Entregables05102026",
+        Path.cwd(),
     ]
     resultado = []
     for directorio in candidatos:
@@ -914,6 +918,20 @@ def descargar_entregable(nombre_archivo):
         archivo = directorio / nombre_archivo
         if archivo.is_file():
             return send_file(archivo, as_attachment=True, download_name=nombre_archivo)
+
+    # En GitHub/Posit Cloud la carpeta puede quedar en un nivel diferente al
+    # usado en Windows. Como los nombres están protegidos por la lista blanca,
+    # se permite una búsqueda final dentro del proyecto desplegado.
+    try:
+        coincidencias = [
+            ruta for ruta in BASE_DIR.rglob(nombre_archivo)
+            if ruta.is_file() and ".git" not in ruta.parts
+        ]
+    except OSError:
+        coincidencias = []
+    if coincidencias:
+        return send_file(coincidencias[0], as_attachment=True,
+                         download_name=nombre_archivo)
     abort(404, description="El entregable no se encuentra en la carpeta Quipux/Entregables05102026.")
 
 # MathJax renderiza las fórmulas en LaTeX (delimitadas con $...$, $$...$$,
@@ -3450,7 +3468,9 @@ def contenido_documentacion():
                 html.Span("• Disponible", className="document-status available"),
                 html.A(
                     [html.Span("Descargar archivo"), html.Span("↓", **{"aria-hidden": "true"})],
-                    href="/descargar-entregable/" + quote(nombre_archivo),
+                    href=app.get_relative_path(
+                        "/descargar-entregable/" + quote(nombre_archivo)
+                    ),
                     className="document-action",
                     download=nombre_archivo,
                 ),
