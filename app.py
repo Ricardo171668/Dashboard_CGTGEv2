@@ -73,9 +73,9 @@ SECCIONES_INDICADORES = [
 # Uniformes/Textos/Mobiliario) tiene datos reales hoy — el resto se muestra
 # "en construcción" hasta tener sus fuentes.
 VISION_TABS = [
-    ("educacion", "Viceministerio de Educación"),
     ("gestion-educativa", "Viceministerio de Gestión Educativa"),
     ("educacion-superior", "Viceministerio de Educación Superior"),
+    ("educacion", "Viceministerio de Educación"),
     ("deporte", "Viceministerio del Deporte"),
     ("cultura", "Viceministerio de Cultura"),
 ]
@@ -1822,7 +1822,7 @@ def tarjeta_gestion_educativa(codigo, titulo, subtitulo, valor, detalles=None,
             className="vision-card-details",
             **({"id": contenido_id} if contenido_id is not None else {}),
         ) if detalles else None,
-        html.P(subtitulo),
+        html.P(subtitulo) if subtitulo else None,
         html.Div(filtros, className="vision-card-filters") if filtros else None,
     ], className=f"vision-exec-card {codigo}")
 
@@ -1875,7 +1875,7 @@ def tarjetas_datos_educacion_superior():
             ], className="vision-mini-stat secondary"),
         ]
 
-    subtitulo = "Información institucional consolidada · MINEDEC 2026"
+    subtitulo = None
     return [
         tarjeta_gestion_educativa(
             "superior-instituciones", "Instituciones de Educación Superior", subtitulo,
@@ -1984,15 +1984,28 @@ def _tarjetas_programas_eje2(datos):
     tarjetas = []
     colores = ["azul", "verde", "amarillo", "morado"]
     for i, dato in enumerate(datos):
-        tarjetas.append(html.Article([
+        clave_programa = _sin_tildes(dato["programa"])
+        es_dece = clave_programa.startswith("profesionales dece")
+        es_comunidades = clave_programa.startswith("comunidades seguras")
+        titulo = ("Profesionales DECE (Apoyo Psicológico)"
+                  if es_dece else dato["programa"])
+        unidad = ("Comunidad Educativa"
+                  if es_comunidades else str(dato["tipo"]).strip())
+        contenido = [
             html.Span(className="vision-card-icon-mark"),
-            html.Span(dato["programa"], className="vision-card-label"),
+            html.Span(titulo, className="vision-card-label"),
             html.Div([
                 html.Strong(formato_valor(dato["beneficiarios"])),
-                html.Span(str(dato["tipo"]).strip()),
+                html.Span(unidad),
             ], className="vision-card-value-row programa-card-resultado"),
-            html.P("Programa o servicio"),
-        ], className=f"vision-exec-card programa-resumen-card programa-{colores[i % len(colores)]}"))
+        ]
+        if es_dece:
+            contenido.append(html.P("La brecha nacional se ha reducido en 45%",
+                                    className="programa-card-destacado"))
+        tarjetas.append(html.Article(
+            contenido,
+            className=f"vision-exec-card programa-resumen-card programa-{colores[i % len(colores)]}",
+        ))
     return html.Div(tarjetas,
                     className="vision-exec-grid gestion-educativa-grid programas-servicios-grid")
 
@@ -2087,7 +2100,6 @@ def pagina_educacion_superior():
             children=tarjetas_datos_educacion_superior(),
         ),
         html.H2("Programas y servicios de Educación Superior", className="vision-eje-banner"),
-        html.P("Consolidado inicial de la matriz de rendición de cuentas.", className="eje1-subtitulo"),
         _tarjetas_programas_eje2(programas),
         html.P(aviso, className="eje2-source-note") if aviso else None,
         html.H2("Proyectos a futuro", className="vision-eje-banner"),
@@ -2222,7 +2234,6 @@ def pagina_eje_viceministerial(codigo):
                       ),
                       html.P(eje["introduccion"])])]),
         html.H2(f"Programas y servicios de {eje['vice_excel']}", className="vision-eje-banner"),
-        html.P("Consolidado inicial de la matriz de rendición de cuentas.", className="eje1-subtitulo"),
         html.Div(
             _tarjetas_programas_eje2(programas),
             className="eje-programas-fila-unica",
@@ -2421,12 +2432,38 @@ def _cargar_geojson_provincias():
     # El archivo puede estar junto a app.py o dentro de assets. No se guarda
     # un fallo en caché: si el procesador genera el GeoJSON mientras la app
     # está abierta, una actualización posterior podrá encontrarlo.
-    for raiz in (BASE_DIR, BASE_DIR / "assets", Path.cwd(), Path.cwd() / "assets"):
-        ruta = raiz / "provincias_ecuador.geojson"
-        if ruta.exists():
-            with open(ruta, "r", encoding="utf-8") as f:
-                _GEOJSON_PROVINCIAS_CACHE = json.load(f)
-            return _GEOJSON_PROVINCIAS_CACHE
+    raices = (BASE_DIR, BASE_DIR / "assets", Path.cwd(), Path.cwd() / "assets")
+    candidatos = [raiz / "provincias_ecuador.geojson" for raiz in raices]
+
+    # GitHub/Posit Cloud puede conservar el archivo dentro de una subcarpeta
+    # diferente o con otra combinación de mayúsculas y minúsculas.
+    vistos = set()
+    for raiz in (BASE_DIR, Path.cwd()):
+        try:
+            for ruta in raiz.rglob("*"):
+                if (ruta.is_file()
+                        and ruta.name.casefold() == "provincias_ecuador.geojson"
+                        and ".git" not in ruta.parts):
+                    candidatos.append(ruta)
+        except OSError:
+            continue
+
+    for ruta in candidatos:
+        try:
+            ruta_resuelta = ruta.resolve()
+        except OSError:
+            continue
+        if ruta_resuelta in vistos or not ruta_resuelta.is_file():
+            continue
+        vistos.add(ruta_resuelta)
+        try:
+            with open(ruta_resuelta, "r", encoding="utf-8-sig") as f:
+                contenido = json.load(f)
+            if contenido.get("type") == "FeatureCollection" and contenido.get("features"):
+                _GEOJSON_PROVINCIAS_CACHE = contenido
+                return _GEOJSON_PROVINCIAS_CACHE
+        except (OSError, UnicodeError, json.JSONDecodeError, AttributeError):
+            continue
     return None
 
 
@@ -2639,7 +2676,50 @@ def tabla_pma(registros):
 def mapa_pma(registros):
     geojson = _cargar_geojson_provincias()
     if not geojson:
-        return html.Div("No se encontró provincias_ecuador.geojson.", className="pma-sin-mapa")
+        # Respaldo visible cuando el despliegue no incluyó el GeoJSON. Evita
+        # dejar un cuadro vacío y mantiene las nueve provincias identificadas.
+        centros = {
+            "esmeraldas": (0.73, -79.15), "pichincha": (-0.18, -78.47),
+            "tungurahua": (-1.25, -78.62),
+            "santo domingo de los tsachilas": (-0.25, -79.17),
+            "los rios": (-1.42, -79.47), "santa elena": (-2.23, -80.86),
+            "azuay": (-2.90, -79.01), "el oro": (-3.26, -79.96),
+            "guayas": (-2.20, -79.89),
+        }
+        amarillas = {"esmeraldas", "pichincha", "los rios", "santa elena", "azuay"}
+        claves = [_sin_tildes(r["provincia"]) for r in registros]
+        fig = go.Figure(go.Scattergeo(
+            lat=[centros[c][0] for c in claves],
+            lon=[centros[c][1] for c in claves],
+            text=[f"<b>{r['provincia']}</b><br>{r['instituciones']} IE" for r in registros],
+            hovertext=[
+                f"<b>{r['provincia']}</b><br>{r['instituciones']} instituciones"
+                f"<br>{formato_valor(r['beneficiarios'])} beneficiarios"
+                f"<br>{_moneda_corta(r['inversion'])}" for r in registros
+            ],
+            mode="markers+text", textposition="top center",
+            textfont=dict(size=10, color="#17245b"), hoverinfo="text",
+            marker=dict(
+                size=[14 + min(r["instituciones"], 10) * 2 for r in registros],
+                color=["#f8bd20" if c in amarillas else "#4d3a94" for c in claves],
+                line=dict(width=2, color="#ffffff"), opacity=1,
+            ),
+        ))
+        fig.update_geos(
+            scope="south america", lataxis_range=[-5.6, 2.0],
+            lonaxis_range=[-82.3, -74.2], showcountries=True,
+            countrycolor="#9aa2bd", showland=True, landcolor="#f5f6fa",
+            showocean=True, oceancolor="#ffffff", resolution=50,
+            bgcolor="#ffffff",
+        )
+        fig.update_layout(
+            margin=dict(l=10, r=10, t=20, b=10), height=420,
+            paper_bgcolor="#ffffff", plot_bgcolor="#ffffff", showlegend=False,
+        )
+        return dcc.Graph(
+            figure=fig, config={"displayModeBar": False, "responsive": True},
+            className="eje1-mapa", style={"width": "100%", "height": "420px"},
+        )
 
     por_provincia = {_sin_tildes(r["provincia"]): r for r in registros}
     # Distribución tomada de la lámina original del PMA.
@@ -3459,7 +3539,6 @@ def contenido_documentacion():
                     ),
                     className="document-file-icon", **{"aria-hidden": "true"},
                 ),
-                html.Span(codigo, className="document-code"),
             ], className="document-card-top"),
             html.H3(titulo),
             html.P(descripcion),
@@ -3497,7 +3576,6 @@ def contenido_documentacion():
     return html.Div([
         html.Section([
             html.Div([
-                html.P("PORTAL DE INDICADORES", className="documentation-kicker"),
                 html.H1("Documentación"),
                 html.P("Manual de usuario, diccionario de datos e indicadores y fichas metodológicas de la solución de información."),
             ]),

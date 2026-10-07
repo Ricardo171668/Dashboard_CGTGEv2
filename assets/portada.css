@@ -1353,6 +1353,17 @@
   font-size: 10.5px !important;
 }
 
+.programa-resumen-card > p.programa-card-destacado {
+  margin-top: 10px !important;
+  padding: 7px 9px;
+  border-radius: 8px;
+  color: #17245b;
+  background: #fff1bd;
+  font-size: 11px !important;
+  font-weight: 850;
+  line-height: 1.3;
+}
+
 .programa-card-direccion {
   flex: 1;
   padding: 10px 0 12px;
@@ -1424,7 +1435,7 @@
    banda y las acciones se ordenan de cuatro en cuatro. */
 .eje-programas-fila-unica .programas-servicios-grid,
 .eje-programas-fila-unica .programas-servicios-grid.vision-exec-grid {
-  grid-template-columns: repeat(5, minmax(0, 1fr)) !important;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)) !important;
 }
 
 .eje-programas-fila-unica .programa-resumen-card {
