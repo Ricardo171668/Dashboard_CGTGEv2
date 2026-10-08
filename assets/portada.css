@@ -212,7 +212,7 @@
 
 .document-deliverables-grid {
   display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
+  grid-template-columns: repeat(4, minmax(0, 1fr));
   gap: 16px;
 }
 .document-deliverable-card {
@@ -323,12 +323,13 @@
 }
 
 @media (max-width: 1050px) {
-  .document-deliverables-grid { grid-template-columns: 1fr; }
+  .document-deliverables-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .document-support-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .document-timeline { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 }
 
 @media (max-width: 680px) {
+  .document-deliverables-grid { grid-template-columns: 1fr; }
   .documentation-hero { grid-template-columns: 1fr; }
   .documentation-deadline { justify-self: stretch; }
   .document-support-grid,
@@ -1306,6 +1307,13 @@
 .programas-servicios-grid.vision-exec-grid {
   grid-template-columns: repeat(4, minmax(0, 1fr));
   gap: 12px;
+}
+
+/* Cuando una sección contiene tres programas, los tres cuadros aprovechan
+   toda la fila. Los puntos de quiebre inferiores conservan la adaptación
+   para monitores pequeños. */
+.programas-servicios-grid.programas-3-columnas {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
 }
 
 .programa-resumen-card {

@@ -1,132 +1,944 @@
-"""
-Panel de Inversión MINEDEC — versión Dash
-
-Arquitectura orientada a rendimiento:
-- Dash/Flask: los callbacks actualizan solo el componente afectado.
-- SharePoint institucional como fuente (sin OneDrive personal).
-- Caché en memoria con TTL: no vuelve a descargar Excel en cada clic.
-- Carga diferida: presupuesto al entrar; ejecución al mostrar Gantt;
-  Banco de Proyectos/PRETT únicamente al consultar un detalle.
-"""
-
+"""Panel Integrado de Gestión MINEDEC - aplicación Dash."""
 from __future__ import annotations
 
-import base64
+from datetime import datetime, timedelta
+from email.utils import parsedate_to_datetime
+from io import BytesIO
+from pathlib import Path
 import hashlib
-import io
+import json
 import os
 import re
-import threading
-import time
 import unicodedata
-from datetime import datetime
-from difflib import get_close_matches
-from urllib.parse import parse_qs, quote, unquote
-
+from urllib.parse import quote, urlencode
+from urllib.request import Request, urlopen
 import pandas as pd
-import openpyxl
-
-try:
-    import python_calamine  # noqa: F401
-    _HAS_CALAMINE = True
-except ImportError:
-    _HAS_CALAMINE = False
 import plotly.graph_objects as go
 import requests
-from dash import ALL, Dash, Input, Output, State, ctx, dcc, html, no_update
-from flask import Flask
+from dash import ALL, MATCH, Dash, Input, Output, State, ctx, dash_table, dcc, html, no_update
+from flask import abort, send_file
+
+BASE_DIR = Path(__file__).resolve().parent if "__file__" in globals() else Path.cwd()
+NOMBRES_ENTREGABLES = {
+    "E-03_Manual_de_usuario.docx",
+    "E-04_Diccionario_de_datos_e_indicadores_Anexo5.xlsx",
+    "E-05_Fichas_metodologicas.docx",
+    "E-06_Anexo4_Ficha_formalizacion.docx",
+}
 
 
-# =============================================================================
-# 1. CONFIGURACIÓN
-# =============================================================================
+def directorios_entregables():
+    """Ubicaciones admitidas para ejecutar el proyecto desde Windows o ZIP.
 
-URL_PRESUPUESTO = (
-    "https://educacionec.sharepoint.com/:x:/s/DocumentacinDNSE/"
-    "IQAF7raaOY2gRLSqM8J-kLEQAcrTKgB8Ga1VyXIrMcc79qI"
-    "?e=dsBNDf&CID=3a90d370-fcb6-8f8c-28fc-1c63a63a09bd"
-)
-
-URL_BANCO_PROYECTOS = (
-    "https://educacionec.sharepoint.com/:x:/s/DocumentacinDNSE/"
-    "IQDVr77shy8qT7nYBIahKQQNAbRhPkTnK71B2x9iMiAz3LA"
-    "?e=NpYkAW&CID=0c26ad54-e9f6-147c-f500-88d9b0cd0075"
-)
-
-URLS_PRETT = [
-    (
-        "https://educacionec.sharepoint.com/:x:/s/DocumentacinDNSE/"
-        "IQDCY7-LdgDhT4QqcNHV1DyTARigN6HoJSzIaB1jxxMehvk"
-        "?e=1XxBAn&CID=e2e3ce30-6b70-71c6-c006-afb03d8f2247"
-    )
+    En el equipo institucional, ``app.py`` está dentro de Dashboard_CGTGEv2,
+    pero Quipux se guarda en la carpeta superior Dashboard_CGTGE. El segundo
+    candidato permite también distribuir el proyecto como una sola carpeta.
+    """
+    candidatos = [
+        BASE_DIR.parent / "Quipux" / "Entregables05102026",
+        BASE_DIR / "Quipux" / "Entregables05102026",
+        BASE_DIR / "Entregables05102026",
+        BASE_DIR,
+        Path.cwd().parent / "Quipux" / "Entregables05102026",
+        Path.cwd() / "Quipux" / "Entregables05102026",
+        Path.cwd() / "Entregables05102026",
+        Path.cwd(),
+    ]
+    resultado = []
+    for directorio in candidatos:
+        try:
+            directorio = directorio.resolve()
+        except OSError:
+            continue
+        if directorio not in resultado:
+            resultado.append(directorio)
+    return resultado
+SECCIONES = [
+    ("vision", "Visión Ejecutiva"),
+    ("pnd", "Plan Nacional de Desarrollo"),
+    ("kpi-estrategicos", "KPI´s Estratégicos"),
+    ("kpi-institucionales", "KPI´s Institucionales"),
+    ("presupuesto", "Ejecución Presupuestaria - Inversión"),
+    ("inventario", "Inventario y Recurso de Información"),
+    ("documentacion", "Documentación"),
 ]
 
-URL_EJECUCION_MENSUAL = (
-    "https://educacionec.sharepoint.com/:x:/s/DocumentacinDNSE/"
-    "IQAx97NfQnZNTozEs_I5kCcrARhZAXfKhUbv6Rby25YX2vo"
-    "?rtime=JTIrh8MC30g"
-)
+SECCIONES_INDICADORES = [
+    ("pnd", "Plan Nacional de Desarrollo"),
+    ("kpi-estrategicos", "KPI´s Estratégicos"),
+    ("kpi-institucionales", "KPI´s Institucionales"),
+]
 
-CACHE_TTL_SECONDS = int(os.getenv("CACHE_TTL_SECONDS", "3600"))  # 60 min
-REQUEST_CONNECT_TIMEOUT = 4
-REQUEST_READ_TIMEOUT = 18
+# Al entrar a Visión Ejecutiva se presenta un menú de los 5 viceministerios
+# (igual al prototipo); solo "gestion-educativa" (bases de Alimentación/
+# Uniformes/Textos/Mobiliario) tiene datos reales hoy — el resto se muestra
+# "en construcción" hasta tener sus fuentes.
+VISION_TABS = [
+    ("gestion-educativa", "Viceministerio de Gestión Educativa"),
+    ("educacion-superior", "Viceministerio de Educación Superior"),
+    ("educacion", "Viceministerio de Educación"),
+    ("deporte", "Viceministerio del Deporte"),
+    ("cultura", "Viceministerio de Cultura"),
+]
 
-PURPLE_900 = "#25206D"
-PURPLE_800 = "#332A8F"
-PURPLE_700 = "#4E3CC5"
-PURPLE_600 = "#6550D8"
-PURPLE_500 = "#7A66E4"
-PURPLE_300 = "#B9AEF3"
-PURPLE_100 = "#EEEAFE"
-PURPLE_50 = "#F8F6FF"
-INK = "#18203A"
-MUTED = "#717A91"
-BORDER = "#E5E7F0"
-GREEN = "#2FA66F"
-GRAY = "#9AA2B2"
+# Las 4 bases de Gestión Educativa, cada una con su propia estructura real
+# (no siguen el formato PND/KPI): tablas por Zona/Provincia/Cantón con
+# beneficiarios y, en Mobiliario y Transporte, estudiantes por institución.
+# Solo se usan conteos — nunca los montos de inversión (pedido explícito:
+# "sin mostrar dinero").
+BASES_GESTION_EDUCATIVA = [
+    # El prefijo debe ser el INICIO real del nombre de archivo que llega de
+    # OneDrive (buscar_archivo solo ignora tildes/mayúsculas, no cambia
+    # espacios ni corrige variantes). Se usa una sola palabra distintiva en
+    # vez del nombre completo para no fallar por una tilde o un plural que
+    # cambie en una próxima actualización del archivo:
+    #   Alimentación Escolar.xlsx
+    #   Uniformes Ecolares.xlsx        (tal como llega, sin la "s" de "Escolares")
+    #   Textos Escolares.xlsx
+    #   INVERSION MOBILIARIO Y TRANSPORTE.xlsx  (empieza con "Inversión", no con "Mobiliario")
+    ("alimentacion", "Alimentación Escolar"),
+    ("uniformes", "Uniformes Escolares"),
+    ("textos escolares", "Textos Escolares"),
+    ("inversion mobiliario", "Mobiliario y Transporte Escolar"),
+]
+
+SECCIONES_PRINCIPALES = [
+    ("vision", "Visión Ejecutiva"),
+    ("indicadores", "Indicadores"),
+    ("presupuesto", "Ejecución Presupuestaria - Inversión"),
+    ("inventario", "Inventario y Recurso de Información"),
+    ("documentacion", "Documentación"),
+]
+
+# Iconografía lineal, monocromática y minimalista según el manual técnico.
+ICONOS = {
+    "vision": "◎",
+    "pnd": "⌖",
+    "kpi-estrategicos": "◇",
+    "kpi-institucionales": "◫",
+    "presupuesto": "▥",
+    "inventario": "▤",
+    "documentacion": "▧",
+}
+
+MESES = ["Enero", "Febrero", "Marzo", "Abril", "Mayo", "Junio",
+         "Julio", "Agosto", "Septiembre", "Octubre", "Noviembre", "Diciembre"]
 
 
-# =============================================================================
-# 2. SERVIDOR / DASH
-# =============================================================================
+def buscar_archivo(prefijo):
+    """Busca el .xlsx más reciente cuyo nombre empiece con el prefijo dado,
+    sin distinguir mayúsculas, tildes ni carpeta de publicación."""
+    def sin_tildes(texto):
+        texto = str(texto)
+
+        # Plotly Cloud codifica algunos caracteres Unicode de los nombres de
+        # archivo como texto literal. Por ejemplo, "é" puede convertirse en
+        # "#U00e9". Se reconstruye el carácter antes de normalizar el nombre.
+        def decodificar_plotly(coincidencia):
+            try:
+                return chr(int(coincidencia.group(1), 16))
+            except (TypeError, ValueError):
+                return coincidencia.group(0)
+
+        texto = re.sub(r"#U([0-9A-Fa-f]{4,8})", decodificar_plotly,
+                       texto, flags=re.IGNORECASE)
+        normalizado = unicodedata.normalize("NFKD", texto.lower())
+        return "".join(c for c in normalizado if not unicodedata.combining(c))
+
+    prefijo_normalizado = sin_tildes(prefijo)
+
+    # Plotly Cloud puede iniciar el proceso desde una carpeta diferente a la
+    # que contiene app.py. Primero se prueban ubicaciones directas y luego se
+    # recorren únicamente carpetas razonables del paquete publicado. El filtro
+    # por suffix permite también extensiones .XLSX en mayúsculas.
+    raices = []
+    for raiz in (BASE_DIR, Path.cwd(), BASE_DIR.parent, Path.cwd().parent):
+        try:
+            raiz = raiz.resolve()
+        except OSError:
+            continue
+        if raiz.exists() and raiz not in raices:
+            raices.append(raiz)
+
+    archivos = []
+    vistos = set()
+    for raiz in raices:
+        try:
+            encontrados = (p for p in raiz.rglob("*")
+                            if p.is_file() and p.suffix.lower() == ".xlsx")
+            for p in encontrados:
+                clave = str(p.resolve())
+                if clave not in vistos:
+                    vistos.add(clave)
+                    archivos.append(p)
+        except (OSError, PermissionError):
+            # Una raíz sin permisos no debe impedir revisar las demás.
+            continue
+
+    candidatos = [p for p in archivos
+                  if sin_tildes(p.stem).startswith(prefijo_normalizado)]
+    # Si existe el archivo oficial sin sufijos como (1), (2), se utiliza ese.
+    # Así una copia antigua descargada por Windows no reemplaza accidentalmente
+    # a la matriz que el usuario está actualizando.
+    exactos = [p for p in candidatos if sin_tildes(p.stem) == prefijo_normalizado]
+    if exactos:
+        return max(exactos, key=lambda p: p.stat().st_mtime)
+    return max(candidatos, key=lambda p: p.stat().st_mtime) if candidatos else None
 
 
-def _resolve_base_dir() -> str:
-    """
-    Dash necesita saber en qué carpeta física vive este archivo para
-    encontrar assets/ al lado. Su detección automática usa __file__ por
-    debajo, lo cual falla al correr con el botón "Run" de Spyder (runfile).
-    Por eso lo resolvemos nosotros mismos, con respaldo al directorio de
-    trabajo actual si __file__ no está disponible.
-    """
+def diagnostico_excel():
+    """Informa qué archivos de Excel son visibles para el servidor publicado."""
+    rutas = []
+    for raiz in (BASE_DIR, Path.cwd(), BASE_DIR.parent, Path.cwd().parent):
+        try:
+            raiz = raiz.resolve()
+            if not raiz.exists():
+                continue
+            for p in raiz.rglob("*"):
+                if p.is_file() and p.suffix.lower() == ".xlsx":
+                    visible = str(p.resolve())
+                    if visible not in rutas:
+                        rutas.append(visible)
+        except (OSError, PermissionError):
+            continue
+    return "; ".join(rutas) if rutas else "ningún archivo .xlsx visible"
+
+
+def normalizar_periodo(valor):
+    """Conserva años y años lectivos como etiquetas categóricas."""
+    if pd.isna(valor):
+        return pd.NA
+    if isinstance(valor, (int, float)) and float(valor).is_integer():
+        return str(int(valor))
+    texto = str(valor).strip().replace("–", "-").replace("—", "-")
+    if re.fullmatch(r"\d{4}\.0", texto):
+        return texto[:-2]
+    coincidencia = re.fullmatch(r"(\d{4})\s*-\s*(\d{4})", texto)
+    return f"{coincidencia.group(1)}-{coincidencia.group(2)}" if coincidencia else texto
+
+
+def orden_periodo(valor):
+    """Orden cronológico: 2024 antes de 2024-2025 y luego 2025."""
+    texto = normalizar_periodo(valor)
+    coincidencia = re.fullmatch(r"(\d{4})(?:-(\d{4}))?", str(texto))
+    if not coincidencia:
+        return 99999999
+    inicio = int(coincidencia.group(1))
+    fin = int(coincidencia.group(2) or inicio)
+    return inicio * 10000 + fin
+
+
+def normalizar_mes(valor):
+    """Conserva meses y rangos semestrales como categorías del gráfico."""
+    if pd.isna(valor) or not str(valor).strip():
+        return pd.NA
+    texto = str(valor).strip().replace("–", "-").replace("—", "-")
+    texto = re.sub(r"\s*-\s*", "-", texto)
+    return texto
+
+
+def orden_mes(valor):
+    """Ordena meses simples y rangos como Enero-Junio o Julio-Diciembre."""
+    texto = normalizar_mes(valor)
+    if pd.isna(texto):
+        return 0
+    inicio = str(texto).split("-", 1)[0].strip().lower()
+    if inicio in MES_ORDEN:
+        return MES_ORDEN[inicio]
+    if inicio in {"primer semestre", "primer sem", "semestre 1"}:
+        return 1
+    if inicio in {"segundo semestre", "segundo sem", "semestre 2"}:
+        return 7
+    return 99
+
+
+def etiqueta_mes(valor):
+    """Abrevia meses simples y mantiene completos los rangos semestrales."""
+    texto = normalizar_mes(valor)
+    if pd.isna(texto):
+        return pd.NA
+    if str(texto).lower() in MES_ORDEN:
+        return str(texto).capitalize()[:3]
+    return str(texto)
+
+
+# ---------------------------------------------------------------------------
+# Carga de datos · Plan Nacional de Desarrollo
+# ---------------------------------------------------------------------------
+def cargar_base_pnd():
+    """Lee el Excel del PND aunque Windows añada (1), (2), etc. al nombre."""
+    # La matriz vigente indicada por el usuario es "Indicadores_PND version 1".
+    # Se conserva el nombre anterior únicamente como respaldo para despliegues
+    # donde todavía no se haya reemplazado el archivo.
+    archivo = (buscar_archivo("Indicadores_PND version 1")
+               or buscar_archivo("Indicadores_PND"))
+    if not archivo:
+        return pd.DataFrame(), "No se encontró 'Indicadores_PND version 1.xlsx' junto a app.py."
     try:
-        return os.path.dirname(os.path.abspath(__file__))
-    except NameError:
-        return os.getcwd()
+        df = pd.read_excel(archivo, engine="openpyxl")
+        df = df.loc[:, ~df.columns.astype(str).str.startswith("Unnamed")].copy()
+        # También elimina espacios internos duplicados en los encabezados.
+        df.columns = [" ".join(str(c).strip().split()) for c in df.columns]
+        requeridas = {
+            "NOMBRE DEL INDICADOR", "VICEMINISTERIO", "Definición", "Unidad de medida",
+            "Fuente de datos", "Periodicidad", "Año", "Línea base", "Meta",
+            "Estimador", "Numerador", "Denominador", "Alerta", "Observación",
+        }
+        faltan = sorted(requeridas - set(df.columns))
+        if faltan:
+            return pd.DataFrame(), "Faltan columnas: " + ", ".join(faltan)
+        # No convertir a número: el libro también contiene años lectivos como
+        # 2024-2025, que deben conservarse literalmente en el gráfico.
+        df["Año"] = df["Año"].map(normalizar_periodo).astype("string")
+        df["_orden_periodo"] = df["Año"].map(orden_periodo)
+        for col in ["Línea base", "Meta", "Estimador", "Numerador", "Denominador"]:
+            df[col] = pd.to_numeric(df[col], errors="coerce")
+        for col in ["NOMBRE DEL INDICADOR", "VICEMINISTERIO"]:
+            df[col] = df[col].astype("string").str.strip()
+        # "Fórmula de Cálculo" es opcional: los Excel del PND anteriores no la traían.
+        if "Fórmula de Cálculo" in df.columns:
+            df["Fórmula de Cálculo"] = df["Fórmula de Cálculo"].astype("string")
+        df = df.dropna(subset=["NOMBRE DEL INDICADOR", "VICEMINISTERIO", "Año"])
+
+        # Respaldo para libros cuyas fórmulas no fueron recalculadas al guardarse.
+        alerta_vacia = df["Alerta"].isna() | df["Alerta"].astype(str).str.strip().eq("")
+        comparables = df["Meta"].notna() & df["Estimador"].notna()
+        df.loc[alerta_vacia & comparables & (df["Estimador"] > df["Meta"]), "Alerta"] = "Cumplimiento sobre la meta"
+        df.loc[alerta_vacia & comparables & (df["Estimador"] == df["Meta"]), "Alerta"] = "Cumplimiento igual a la meta"
+        df.loc[alerta_vacia & comparables & (df["Estimador"] < df["Meta"]), "Alerta"] = "Incumplimiento de meta"
+        return df.sort_values(["VICEMINISTERIO", "NOMBRE DEL INDICADOR", "_orden_periodo"]), None
+    except Exception as exc:
+        return pd.DataFrame(), f"No fue posible leer la base del PND: {exc}"
 
 
-_BASE_DIR = _resolve_base_dir()
+def version_pnd():
+    archivo = (buscar_archivo("Indicadores_PND version 1")
+               or buscar_archivo("Indicadores_PND version 1"))
+    return archivo.stat().st_mtime_ns if archivo else 0
 
-_CACHE_DIR = os.path.join(_BASE_DIR, "cache")
-_EJECUCION_CACHE_FILE = os.path.join(_CACHE_DIR, "ejecucion_mensual.pkl")
-os.makedirs(_CACHE_DIR, exist_ok=True)
 
-server = Flask(__name__)
-server.secret_key = os.getenv("FLASK_SECRET_KEY") or os.urandom(32)
+# ---------------------------------------------------------------------------
+# Carga de datos · Excel con estructura tipo PND (VICEMINISTERIO, NOMBRE DEL
+# INDICADOR, Línea base, Meta, Estimador, Alerta, Observación), usada tanto por
+# KPI's Estratégicos como por KPI's Institucionales, con "Mes" opcional
+# (vacío para indicadores anuales, con valor para los mensuales/semestrales).
+# ---------------------------------------------------------------------------
+MES_ORDEN = {mes.lower(): i for i, mes in enumerate(MESES, start=1)}
 
-app = Dash(
-    __name__,
-    server=server,
-    suppress_callback_exceptions=True,
-    title="Panel de Inversión MINEDEC",
-    update_title=None,
-    assets_folder=os.path.join(_BASE_DIR, "assets"),
-)
 
-# El CSS vive en assets/style.css Y ADEMÁS embebido aquí directo como
-# respaldo — así el estilo no depende de que Dash encuentre bien la carpeta
-# assets/, que ya ha fallado antes en este entorno según cómo se corra el
-# script. Con el CSS embebido, aplica siempre, sin importar rutas.
+def cargar_base_tipo_pnd(prefijo, nombre_legible):
+    archivo = buscar_archivo(prefijo)
+    if not archivo:
+        return pd.DataFrame(), (
+            f"No se encontró '{nombre_legible}'. "
+            f"Carpeta de app.py: {BASE_DIR}. "
+            f"Carpeta de ejecución: {Path.cwd()}. "
+            f"Excel visibles: {diagnostico_excel()}."
+        )
+    try:
+        df = pd.read_excel(archivo, engine="openpyxl")
+        df.columns = [" ".join(str(c).strip().split()) if not str(c).startswith("Unnamed") else c
+                      for c in df.columns]
+
+        # Unifica las variantes de encabezados que llegan desde las matrices.
+        # Así, nuevas actualizaciones pueden usar mayúsculas/minúsculas o
+        # "cálculo/calculo" sin romper la ficha del indicador.
+        equivalencias = {
+            "Fórmula de calculo": "Fórmula de Cálculo",
+            "Fórmula de cálculo": "Fórmula de Cálculo",
+            "Formula de calculo": "Fórmula de Cálculo",
+            "Formula de cálculo": "Fórmula de Cálculo",
+            "Fecha de corte": "Fecha de Corte",
+            "Fecha de transferencia": "Fecha de Transferencia",
+        }
+        df = df.rename(columns={c: equivalencias.get(c, c) for c in df.columns})
+
+        # Compatibilidad con archivos donde la columna de Alerta llega sin
+        # encabezado (queda justo antes de "Observación").
+        cols = list(df.columns)
+        if "Observación" in cols:
+            idx_obs = cols.index("Observación")
+            if idx_obs > 0 and str(cols[idx_obs - 1]).startswith("Unnamed"):
+                cols[idx_obs - 1] = "Alerta"
+                df.columns = cols
+
+        df = df.loc[:, ~df.columns.astype(str).str.startswith("Unnamed")].copy()
+
+        requeridas = {
+            "NOMBRE DEL INDICADOR", "VICEMINISTERIO", "Unidad de medida", "Fuente de datos",
+            "Periodicidad", "Año", "Línea base", "Meta", "Estimador",
+            "Numerador", "Denominador", "Alerta", "Observación",
+        }
+        faltan = sorted(requeridas - set(df.columns))
+        if faltan:
+            return pd.DataFrame(), "Faltan columnas: " + ", ".join(faltan)
+
+        # Conserva tanto años calendario (2026) como años lectivos
+        # (2026-2027). Al convertir esta columna a número, los años lectivos
+        # se volvían NaN y sus filas desaparecían del dashboard.
+        df["Año"] = df["Año"].map(normalizar_periodo).astype("string")
+        for col in ["Línea base", "Meta", "Estimador", "Numerador", "Denominador"]:
+            df[col] = pd.to_numeric(df[col], errors="coerce")
+        for col in ["NOMBRE DEL INDICADOR", "VICEMINISTERIO"]:
+            df[col] = df[col].astype("string").str.strip()
+        if "Mes" in df.columns:
+            df["Mes"] = df["Mes"].map(normalizar_mes).astype("string")
+        else:
+            df["Mes"] = pd.array([pd.NA] * len(df), dtype="string")
+        # Si toda la columna Alerta viene vacía, pandas la infiere como float64
+        # y luego falla al intentar escribir texto ahí; se fuerza a texto.
+        df["Alerta"] = df["Alerta"].astype("string")
+        for col in ("ENCARGADO", "TIPO INDICADOR"):
+            if col in df.columns:
+                df[col] = df[col].astype("string").str.strip()
+        if "Fórmula de Cálculo" in df.columns:
+            df["Fórmula de Cálculo"] = df["Fórmula de Cálculo"].astype("string")
+        df = df.dropna(subset=["NOMBRE DEL INDICADOR", "VICEMINISTERIO", "Año"])
+
+        # Algunos indicadores de "Porcentaje" se registran como fracción (0,90 = 90%)
+        # y otros ya en escala 0-100 (97,02), mezclados en el mismo archivo. Se
+        # normaliza celda por celda: solo se multiplica por 100 cuando el valor
+        # es ≤ 1, para no alterar los que ya vienen correctos.
+        es_porcentaje = df["Unidad de medida"].astype(str).str.contains("orcentaje", case=False, na=False)
+        for col in ["Línea base", "Meta", "Estimador"]:
+            parece_fraccion = es_porcentaje & df[col].notna() & (df[col] <= 1)
+            df.loc[parece_fraccion, col] = df.loc[parece_fraccion, col] * 100
+
+        # Orden cronológico real y etiqueta de período: "Ene 2026" si hay mes
+        # registrado, o el año/año lectivo tal como consta en el Excel.
+        df["_mes_num"] = df["Mes"].map(orden_mes)
+        df["_orden_periodo"] = (
+            df["Año"].map(orden_periodo) * 100
+            + df["_mes_num"].fillna(0).astype(int)
+        )
+        tiene_mes = df["Mes"].notna()
+        df["Periodo"] = df["Año"].astype("string")
+        df.loc[tiene_mes, "Periodo"] = (df.loc[tiene_mes, "Mes"].map(etiqueta_mes)
+                                         + " " + df.loc[tiene_mes, "Año"].astype("string"))
+
+        # Respaldo para filas cuya Alerta no fue registrada.
+        alerta_vacia = df["Alerta"].isna() | df["Alerta"].astype(str).str.strip().eq("")
+        comparables = df["Meta"].notna() & df["Estimador"].notna()
+        df.loc[alerta_vacia & comparables & (df["Estimador"] > df["Meta"]), "Alerta"] = "Cumplimiento sobre la meta"
+        df.loc[alerta_vacia & comparables & (df["Estimador"] == df["Meta"]), "Alerta"] = "Cumplimiento igual a la meta"
+        df.loc[alerta_vacia & comparables & (df["Estimador"] < df["Meta"]), "Alerta"] = "Incumplimiento de meta"
+
+        return df.sort_values(["VICEMINISTERIO", "NOMBRE DEL INDICADOR", "_orden_periodo"]), None
+    except Exception as exc:
+        return pd.DataFrame(), f"No fue posible leer '{nombre_legible}': {exc}"
+
+
+# ---------------------------------------------------------------------------
+# Carga de datos · KPI's Estratégicos
+# ---------------------------------------------------------------------------
+def cargar_base_kpi():
+    return cargar_base_tipo_pnd("kpi_estratégicos", "kpi_estratégicos.xlsx")
+
+
+def version_kpi():
+    archivo = buscar_archivo("kpi_estratégicos")
+    return archivo.stat().st_mtime_ns if archivo else 0
+
+
+# ---------------------------------------------------------------------------
+# Carga de datos · KPI's Institucionales
+# ---------------------------------------------------------------------------
+def cargar_base_kpi_inst():
+    return cargar_base_tipo_pnd("kpi_institucional", "KPI_INSTITUCIONALES.xlsx")
+
+
+def version_kpi_inst():
+    archivo = buscar_archivo("kpi_institucional")
+    return archivo.stat().st_mtime_ns if archivo else 0
+
+
+# ---------------------------------------------------------------------------
+# Carga de datos · Gestión Educativa (Alimentación Escolar, Uniformes, Textos
+# Escolares y Mobiliario y Transporte). A diferencia del PND/KPI, cada Excel
+# es una tabla de beneficiarios por Zona/Provincia/Cantón (o por institución,
+# en Mobiliario), sin la estructura de indicador con Meta/Línea base. Aquí
+# solo se agregan conteos (beneficiarios, instituciones, estudiantes); el
+# monto de inversión de cada base NUNCA se usa para la tarjeta de resumen
+# (pedido explícito del usuario: "sin mostrar dinero").
+# ---------------------------------------------------------------------------
+def _localizar_hoja_con_columna(ruta, columna_clave, filas_busqueda=30):
+    """Devuelve el primer DataFrame, de cualquier hoja del libro, cuya fila de
+    encabezado contenga `columna_clave` (ya normalizada). Algunas matrices
+    (p. ej. Textos Escolares) traen una fila de título antes del encabezado
+    real, así que no se asume que el encabezado está en la fila 1."""
+    libro = pd.ExcelFile(ruta, engine="openpyxl")
+    for hoja in libro.sheet_names:
+        vista = pd.read_excel(libro, sheet_name=hoja, header=None,
+                               nrows=filas_busqueda, engine="openpyxl")
+        for fila_num, fila in vista.iterrows():
+            etiquetas = {_normalizar_encabezado_presupuesto(x)
+                         for x in fila.dropna() if str(x).strip()}
+            if columna_clave in etiquetas:
+                return pd.read_excel(libro, sheet_name=hoja, header=int(fila_num),
+                                      engine="openpyxl")
+    return None
+
+
+PROVINCIAS_ECUADOR = {
+    "AZUAY", "BOLIVAR", "CANAR", "CARCHI", "CHIMBORAZO", "COTOPAXI",
+    "EL ORO", "ESMERALDAS", "GALAPAGOS", "GUAYAS", "IMBABURA", "LOJA",
+    "LOS RIOS", "MANABI", "MORONA SANTIAGO", "NAPO", "ORELLANA", "PASTAZA",
+    "PICHINCHA", "SANTA ELENA", "SANTO DOMINGO DE LOS TSACHILAS", "SUCUMBIOS",
+    "TUNGURAHUA", "ZAMORA CHINCHIPE",
+}
+
+
+def _provincia_homologada(valor):
+    """Homologa variantes de escritura y descarta valores que no sean una de
+    las 24 provincias oficiales del Ecuador."""
+    clave = _normalizar_encabezado_presupuesto(valor)
+    clave = re.sub(r"^(PROVINCIA_DE_|PROVINCIA_)", "", clave).replace("_", " ").strip()
+    equivalencias = {
+        "SANTO DOMINGO": "SANTO DOMINGO DE LOS TSACHILAS",
+        "SANTO DOMINGO DE LOS TSACHILAS": "SANTO DOMINGO DE LOS TSACHILAS",
+        "GALAPAGO": "GALAPAGOS",
+        "CANAR": "CANAR",
+    }
+    clave = equivalencias.get(clave, clave)
+    return clave if clave in PROVINCIAS_ECUADOR else None
+
+
+def _columna_por_claves(mapa, claves):
+    for clave in claves:
+        if clave in mapa:
+            return mapa[clave]
+    return None
+
+
+def _metricas_gestion(df, mapa):
+    dato = {}
+    col_benef = mapa.get("BENEFICIARIOS")
+    col_ie = _columna_por_claves(mapa, ("NRO_IE", "NO_IE", "NO_I_E"))
+    col_amie = mapa.get("AMIE")
+    col_est = mapa.get("TOTAL_ESTUDIANTES")
+    col_prov = mapa.get("PROVINCIA")
+    col_sost = _columna_por_claves(mapa, ("SOSTENIMIENTO", "TIPO_SOSTENIMIENTO"))
+    col_area = _columna_por_claves(mapa, ("AREA", "AREA_GEOGRAFICA", "URBANO_RURAL"))
+
+    if col_benef:
+        dato["beneficiarios"] = float(pd.to_numeric(df[col_benef], errors="coerce").sum())
+    if col_ie:
+        dato["instituciones"] = float(pd.to_numeric(df[col_ie], errors="coerce").sum())
+    elif col_amie:
+        dato["instituciones"] = float(df[col_amie].dropna().astype(str).str.strip().nunique())
+    if col_est:
+        dato["estudiantes"] = float(pd.to_numeric(df[col_est], errors="coerce").sum())
+    if col_prov:
+        provincias = df[col_prov].map(_provincia_homologada).dropna()
+        dato["provincias"] = min(24, int(provincias.nunique()))
+    if col_sost:
+        dato["sostenimientos"] = int(df[col_sost].dropna().astype(str).str.strip().replace("", pd.NA).nunique())
+    if col_area:
+        dato["areas"] = int(df[col_area].dropna().astype(str).str.strip().replace("", pd.NA).nunique())
+    return dato
+
+
+def _resumen_base_gestion_educativa(archivo, nombre_legible):
+    """Lee una base, homologa provincias y precalcula sus filtros reales."""
+    df = _localizar_hoja_con_columna(archivo, "BENEFICIARIOS")
+    if df is None:
+        df = _localizar_hoja_con_columna(archivo, "TOTAL_ESTUDIANTES")
+    if df is None:
+        raise ValueError(
+            f"'{nombre_legible}' no tiene una columna de Beneficiarios ni "
+            "de Total Estudiantes reconocible."
+        )
+    df.columns = [" ".join(str(c).strip().split()) for c in df.columns]
+    mapa = {_normalizar_encabezado_presupuesto(c): c for c in df.columns}
+    dato = _metricas_gestion(df, mapa)
+    col_regimen = next((c for k, c in mapa.items() if "REGIMEN" in k), None)
+    col_clasificacion = next((c for k, c in mapa.items() if "CLASIFICACION" in k), None)
+    regimenes = sorted(df[col_regimen].dropna().astype(str).str.strip().replace("", pd.NA).dropna().unique()) \
+        if col_regimen else []
+    clasificaciones = sorted(df[col_clasificacion].dropna().astype(str).str.strip().replace("", pd.NA).dropna().unique()) \
+        if col_clasificacion else []
+    dato["regimenes"] = list(regimenes)
+    dato["clasificaciones"] = list(clasificaciones)
+    segmentos = {}
+    for regimen in ["Todos"] + list(regimenes):
+        base_regimen = df if regimen == "Todos" else df.loc[df[col_regimen].astype(str).str.strip() == regimen]
+        for clasificacion in ["Todas"] + list(clasificaciones):
+            filtrado = base_regimen
+            if col_clasificacion and clasificacion != "Todas":
+                filtrado = filtrado.loc[filtrado[col_clasificacion].astype(str).str.strip() == clasificacion]
+            segmentos[f"{regimen}||{clasificacion}"] = _metricas_gestion(filtrado, mapa)
+    dato["segmentos"] = segmentos
+    # La fuente conjunta de Mobiliario y Transporte se presenta en dos
+    # tarjetas independientes. La clasificación se usa internamente y deja
+    # de exponerse como filtro al usuario.
+    if col_clasificacion:
+        clasificacion_normalizada = df[col_clasificacion].map(
+            _normalizar_encabezado_presupuesto
+        )
+        dato["por_recurso"] = {
+            "mobiliario": _metricas_gestion(
+                df.loc[clasificacion_normalizada.str.contains("MOBILIARIO", na=False)], mapa
+            ),
+            "transporte": _metricas_gestion(
+                df.loc[clasificacion_normalizada.str.contains("TRANSPORTE", na=False)], mapa
+            ),
+        }
+    return dato
+
+
+def _obtener_origen_gestion_educativa(prefijo, nombre_legible):
+    """Da preferencia al vínculo de OneDrive (la fuente que sí se sigue
+    actualizando); si no hay uno configurado para esta base, cae de vuelta a
+    buscar el Excel junto a app.py. Devuelve (origen_para_pandas,
+    descripcion_para_mensajes, version_para_detectar_cambios) o levanta
+    una excepción con el motivo exacto si no se pudo obtener ninguno."""
+    url = GESTION_EDUCATIVA_DOWNLOAD_URLS.get(nombre_legible, "")
+    if url:
+        origen, version, _fecha = _descargar_excel_onedrive(url, f"{nombre_legible}.xlsx")
+        return origen, f"OneDrive ({nombre_legible}.xlsx)", version
+    archivo = buscar_archivo(prefijo)
+    if not archivo:
+        # Diagnóstico explícito: evita el error silencioso de la vez pasada
+        # (prefijo mal escrito) — dice exactamente qué .xlsx sí ve el
+        # servidor, para distinguir "no está el archivo" de "el nombre no
+        # coincide con el prefijo buscado".
+        raise FileNotFoundError(
+            f"no se encontró un .xlsx que empiece con '{prefijo}' junto a app.py "
+            f"(y no hay vínculo de OneDrive configurado para esta base); "
+            f"Excel visibles: {diagnostico_excel()}"
+        )
+    return archivo, archivo.name, str(archivo.stat().st_mtime_ns)
+
+
+def cargar_resumen_gestion_educativa():
+    """Intenta leer las 4 bases (de OneDrive si hay vínculo configurado, o
+    junto a app.py si no); cada una que falte o no se pueda interpretar se
+    reporta por separado, sin bloquear a las demás (igual que el resto del
+    panel: se muestra lo que sí hay disponible)."""
+    resumen = {}
+    pendientes = []
+    for prefijo, nombre_legible in BASES_GESTION_EDUCATIVA:
+        try:
+            origen, descripcion, _version = _obtener_origen_gestion_educativa(prefijo, nombre_legible)
+        except Exception as exc:
+            pendientes.append(f"{nombre_legible} ({exc})")
+            continue
+        try:
+            resumen[nombre_legible] = _resumen_base_gestion_educativa(origen, nombre_legible)
+        except Exception as exc:
+            pendientes.append(f"{nombre_legible} (se leyó '{descripcion}' pero no se pudo interpretar: {exc})")
+    return resumen, pendientes
+
+
+def version_gestion_educativa(resumen=None, pendientes=None):
+    """No hay forma barata de saber si un Excel en OneDrive cambió sin
+    descargarlo de nuevo (a diferencia de un archivo local, que sí expone su
+    fecha de modificación), así que la versión es un hash del propio
+    resultado leído: cambia solo cuando el contenido realmente cambió."""
+    resumen = RESUMEN_GESTION_EDUCATIVA if resumen is None else resumen
+    pendientes = PENDIENTES_GESTION_EDUCATIVA if pendientes is None else pendientes
+    firma = repr((sorted(resumen.items()), sorted(pendientes)))
+    return hashlib.sha256(firma.encode()).hexdigest()
+
+
+# ---------------------------------------------------------------------------
+# Carga de datos · Visión Ejecutiva
+# ---------------------------------------------------------------------------
+def cargar_base_vision():
+    """Lee la base normalizada que alimenta las tablas de Visión Ejecutiva."""
+    archivo = buscar_archivo("vision_ejecutiva")
+    if not archivo:
+        return pd.DataFrame(), "No se encontró 'vision_ejecutiva.xlsx' junto a app.py."
+    try:
+        df = pd.read_excel(archivo, sheet_name="Datos", engine="openpyxl")
+        df.columns = [" ".join(str(c).strip().split()) for c in df.columns]
+        requeridas = {
+            "Sección", "Orden sección", "Tabla", "Orden tabla", "Orden fila",
+            "Etiqueta fila", "Indicador", "Orden indicador", "Valor", "Fuente",
+            "Fecha de corte", "Nota",
+        }
+        faltan = sorted(requeridas - set(df.columns))
+        if faltan:
+            return pd.DataFrame(), "Faltan columnas en Visión Ejecutiva: " + ", ".join(faltan)
+        for col in ["Orden sección", "Orden tabla", "Orden fila", "Orden indicador", "Valor"]:
+            df[col] = pd.to_numeric(df[col], errors="coerce")
+        for col in ["Sección", "Tabla", "Etiqueta fila", "Indicador", "Fuente", "Fecha de corte", "Nota"]:
+            df[col] = df[col].fillna("").astype(str).str.strip()
+        df = df.dropna(subset=["Orden sección", "Orden tabla", "Orden fila", "Orden indicador", "Valor"])
+        df = df[(df["Sección"] != "") & (df["Tabla"] != "") & (df["Indicador"] != "")]
+        return df.sort_values(["Orden sección", "Orden tabla", "Orden fila", "Orden indicador"]), None
+    except Exception as exc:
+        return pd.DataFrame(), f"No fue posible leer la base de Visión Ejecutiva: {exc}"
+
+
+def version_vision():
+    archivo = buscar_archivo("vision_ejecutiva")
+    return archivo.stat().st_mtime_ns if archivo else 0
+
+
+# ---------------------------------------------------------------------------
+# Carga de datos · Ejecución Presupuestaria (último ESIGEF disponible)
+# ---------------------------------------------------------------------------
+PRESUPUESTO_MONETARIAS = [
+    "ASIGNADO", "CODIFICADO", "RESERVADO_NEGATIVO", "PRECOMPROMISO",
+    "COMPROMISO", "DEVENGADO", "PAGADO", "SALDO_DISPONIBLE",
+]
+PRESUPUESTO_META = {"archivo": "", "fecha": "", "origen": ""}
+
+
+ESIGEF_DOWNLOAD_URL = os.getenv(
+    "ESIGEF_DOWNLOAD_URL",
+    "https://educacionec-my.sharepoint.com/:x:/g/personal/"
+    "ricardo_castellanos_educacion_gob_ec/"
+    "IQCIs7P5gRv3RbMPaTt_tCufAeiAcJdopSUXr5tr1kiTToA"
+    "?e=0KSa78&download=1",
+).strip()
+
+# Vínculos "Copiar vínculo" de OneDrive para las 4 bases de Gestión Educativa
+# (mismo mecanismo que ESIGEF_actual.xlsx: deben terminar en "&download=1").
+# Mientras no se defina un vínculo para una base, se sigue buscando su Excel
+# junto a app.py (BASES_GESTION_EDUCATIVA), igual que antes.
+GESTION_EDUCATIVA_DOWNLOAD_URLS = {
+    "Alimentación Escolar": os.getenv(
+        "ALIMENTACION_ESCOLAR_DOWNLOAD_URL",
+        "https://educacionec-my.sharepoint.com/:x:/g/personal/daei_educacion_gob_ec/"
+        "IQBrz0MHostwQIW5R61Mz3tnATQK3DrSUL7YqpgcgXcYvpY?e=2YwCXT&download=1",
+    ).strip(),
+    "Uniformes Escolares": os.getenv(
+        "UNIFORMES_ESCOLARES_DOWNLOAD_URL",
+        "https://educacionec-my.sharepoint.com/:x:/g/personal/daei_educacion_gob_ec/"
+        "IQC9L2hLRK4SQoTVUakfR24WAUVeGIAfMNOEv3l0kx7IgJA?e=6fou2z&download=1",
+    ).strip(),
+    "Textos Escolares": os.getenv(
+        "TEXTOS_ESCOLARES_DOWNLOAD_URL",
+        "https://educacionec-my.sharepoint.com/:x:/g/personal/daei_educacion_gob_ec/"
+        "IQCG5JN7n6U5SYEW3w-5KfxMAepbyAr8GplbqLBlEd5s1DA?e=4wgwGk&download=1",
+    ).strip(),
+    "Mobiliario y Transporte Escolar": os.getenv(
+        "MOBILIARIO_TRANSPORTE_DOWNLOAD_URL",
+        "https://educacionec-my.sharepoint.com/:x:/g/personal/daei_educacion_gob_ec/"
+        "IQDc3cxCQrPZSqLnDHiYf7IfAdYqyIj2Y374Az_Xg4nHTfI?e=2Ck9L8&download=1",
+    ).strip(),
+}
+
+
+def _descargar_excel_onedrive(url, nombre_archivo):
+    """Descarga un Excel desde un vínculo de OneDrive/SharePoint que termine en
+    '&download=1'. Reproduce la estrategia usada en Shiny/httr: sigue
+    redirecciones y evita reutilizar una copia almacenada en caché. Devuelve
+    (contenido_en_memoria, version_hash, fecha_ultima_modificacion)."""
+    respuesta = requests.get(
+        url,
+        headers={
+            "User-Agent": "Mozilla/5.0",
+            "Cache-Control": "no-cache, no-store",
+            "Pragma": "no-cache",
+        },
+        timeout=120,
+        allow_redirects=True,
+    )
+    respuesta.raise_for_status()
+    contenido = respuesta.content
+    ultima_modificacion = respuesta.headers.get("Last-Modified", "")
+
+    # XLSX es un contenedor ZIP y, por tanto, empieza con la firma PK.
+    # Esta comprobación evita que una página HTML de inicio de sesión sea
+    # enviada por error a openpyxl.
+    if not contenido.startswith(b"PK"):
+        raise ValueError(
+            f"El enlace de {nombre_archivo} no devolvió un archivo Excel. "
+            "Revise que el vínculo de OneDrive permita descargar el archivo "
+            "(debe terminar en '&download=1')."
+        )
+    version = hashlib.sha256(contenido).hexdigest()
+    return BytesIO(contenido), version, ultima_modificacion
+
+
+def _descargar_esigef_actual():
+    """Descarga el archivo presupuestario vigente desde OneDrive."""
+    origen, version, ultima_modificacion = _descargar_excel_onedrive(
+        ESIGEF_DOWNLOAD_URL, "ESIGEF_actual.xlsx"
+    )
+    return origen, {
+        "archivo": "ESIGEF_actual.xlsx",
+        "fecha": ultima_modificacion or datetime.now().strftime("%d/%m/%Y %H:%M"),
+        "origen": "OneDrive",
+        "version": version,
+    }
+
+
+def _normalizar_encabezado_presupuesto(valor):
+    """Normaliza tildes, saltos, espacios y guiones de los encabezados ESIGEF."""
+    texto = unicodedata.normalize("NFKD", str(valor).strip())
+    texto = "".join(c for c in texto if not unicodedata.combining(c))
+    texto = re.sub(r"[^A-Za-z0-9]+", "_", texto.upper()).strip("_")
+    return texto
+
+
+def _leer_excel_presupuesto(origen):
+    """Localiza automáticamente la hoja y la fila real del encabezado.
+
+    Los reportes ESIGEF pueden incluir una portada, hojas auxiliares o filas
+    previas al encabezado. Por eso no se asume la primera hoja ni la fila 1.
+    """
+    if hasattr(origen, "seek"):
+        origen.seek(0)
+    libro = pd.ExcelFile(origen, engine="openpyxl")
+    revisadas = []
+
+    for hoja in libro.sheet_names:
+        vista = pd.read_excel(libro, sheet_name=hoja, header=None,
+                             nrows=150, engine="openpyxl")
+        revisadas.append(hoja)
+        for fila_num, fila in vista.iterrows():
+            etiquetas = {
+                _normalizar_encabezado_presupuesto(x)
+                for x in fila.dropna()
+                if str(x).strip()
+            }
+            requeridas = {"CODIFICADO", "DEVENGADO", "VICEMINISTERIO"}
+            if requeridas.issubset(etiquetas):
+                return pd.read_excel(
+                    libro, sheet_name=hoja, header=int(fila_num),
+                    engine="openpyxl"
+                )
+
+    raise ValueError(
+        "No se encontró una hoja con los encabezados CODIFICADO, DEVENGADO "
+        "y Viceministerio. Hojas revisadas: " + ", ".join(revisadas)
+    )
+
+
+def cargar_base_presupuesto():
+    global PRESUPUESTO_META
+    try:
+        try:
+            origen, meta = _descargar_esigef_actual()
+        except Exception as error_remoto:
+            locales = [p for p in BASE_DIR.rglob("*.xlsx")
+                       if p.name.lower() == "esigef_actual.xlsx"]
+            if not locales:
+                return pd.DataFrame(), (
+                    "No fue posible descargar ESIGEF_actual.xlsx y tampoco existe una copia local. "
+                    f"Detalle: {error_remoto}"
+                )
+            archivo = max(locales, key=lambda p: p.stat().st_mtime_ns)
+            origen = archivo
+            meta = {"archivo": archivo.name,
+                    "fecha": datetime.fromtimestamp(archivo.stat().st_mtime).strftime("%d/%m/%Y"),
+                    "origen": "Copia local de ESIGEF_actual.xlsx",
+                    "version": str(archivo.stat().st_mtime_ns)}
+        df = _leer_excel_presupuesto(origen)
+        df.columns = [" ".join(str(c).replace("\n", " ").strip().split()) for c in df.columns]
+        mapa = {_normalizar_encabezado_presupuesto(c): c for c in df.columns}
+        if "VICEMINISTERIO" not in mapa:
+            raise ValueError("La base no contiene la variable Viceministerio.")
+        df = df.rename(columns={mapa["VICEMINISTERIO"]: "Viceministerio"})
+        for col in PRESUPUESTO_MONETARIAS:
+            original = mapa.get(col)
+            if original is None:
+                df[col] = 0.0
+            else:
+                def numero_esigef(valor):
+                    if pd.isna(valor):
+                        return 0.0
+                    if isinstance(valor, (int, float)):
+                        return float(valor)
+                    texto = str(valor).strip().replace("$", "").replace(" ", "")
+                    if "," in texto:
+                        texto = texto.replace(".", "").replace(",", ".")
+                    return pd.to_numeric(texto, errors="coerce")
+                df[col] = df[original].map(numero_esigef).fillna(0.0)
+        df["Viceministerio"] = df["Viceministerio"].fillna("Sin clasificación").astype(str).str.strip()
+        df = df[df["Viceministerio"].ne("")]
+        PRESUPUESTO_META = meta
+        return df, None
+    except Exception as exc:
+        return pd.DataFrame(), f"No fue posible cargar la ejecución presupuestaria: {exc}"
+
+
+def version_presupuesto():
+    return PRESUPUESTO_META.get("version", "")
+
+
+DATA_PND, ERROR_PND = cargar_base_pnd()
+DATA_KPI, ERROR_KPI = cargar_base_kpi()
+DATA_KPI_INST, ERROR_KPI_INST = cargar_base_kpi_inst()
+RESUMEN_GESTION_EDUCATIVA, PENDIENTES_GESTION_EDUCATIVA = cargar_resumen_gestion_educativa()
+# Visión Ejecutiva ahora es una infografía institucional estática y ya no
+# depende del archivo vision_ejecutiva.xlsx.
+DATA_VISION, ERROR_VISION = pd.DataFrame(), None
+DATA_PRESUPUESTO, ERROR_PRESUPUESTO = cargar_base_presupuesto()
+VERSION_PND = version_pnd()
+VERSION_KPI = version_kpi()
+VERSION_KPI_INST = version_kpi_inst()
+VERSION_GESTION_EDUCATIVA = version_gestion_educativa()
+VERSION_VISION = "infografia-minedec-2026"
+VERSION_PRESUPUESTO = version_presupuesto()
+
+# Metadatos de las secciones que sí tienen datos tabulares (menú lateral con acordeón).
+SECCIONES_CON_DATOS = {
+    "pnd": {"vice_col": "VICEMINISTERIO", "indicador_col": "NOMBRE DEL INDICADOR"},
+    "kpi-estrategicos": {"vice_col": "VICEMINISTERIO", "indicador_col": "NOMBRE DEL INDICADOR"},
+    "kpi-institucionales": {"vice_col": "VICEMINISTERIO", "indicador_col": "NOMBRE DEL INDICADOR"},
+    "presupuesto": {"vice_col": "Viceministerio", "indicador_col": "Viceministerio"},
+}
+
+# Secciones cuyos indicadores son pocos y se listan directamente en el menú
+# lateral, sin agruparlos primero por viceministerio.
+SECCIONES_INDICADORES_PLANOS = {"kpi-estrategicos", "kpi-institucionales"}
+
+
+def obtener_datos(seccion):
+    if seccion == "vision":
+        return pd.DataFrame(), None
+    if seccion == "pnd":
+        return DATA_PND, ERROR_PND
+    if seccion == "kpi-estrategicos":
+        return DATA_KPI, ERROR_KPI
+    if seccion == "kpi-institucionales":
+        return DATA_KPI_INST, ERROR_KPI_INST
+    if seccion == "presupuesto":
+        return DATA_PRESUPUESTO, ERROR_PRESUPUESTO
+    return pd.DataFrame(), None
+
+
+app = Dash(__name__, title="Panel Integrado de Gestión MINEDEC", update_title=None,
+           suppress_callback_exceptions=True)
+server = app.server
+
+
+@server.route("/descargar-entregable/<path:nombre_archivo>")
+def descargar_entregable(nombre_archivo):
+    """Entrega los anexos oficiales desde la carpeta Quipux del proyecto."""
+    # Solo se exponen los entregables definidos por la aplicación.
+    if Path(nombre_archivo).name != nombre_archivo or nombre_archivo not in NOMBRES_ENTREGABLES:
+        abort(404)
+
+    for directorio in directorios_entregables():
+        archivo = directorio / nombre_archivo
+        if archivo.is_file():
+            return send_file(archivo, as_attachment=True, download_name=nombre_archivo)
+
+    # En GitHub/Posit Cloud la carpeta puede quedar en un nivel diferente al
+    # usado en Windows. Como los nombres están protegidos por la lista blanca,
+    # se permite una búsqueda final dentro del proyecto desplegado.
+    try:
+        coincidencias = [
+            ruta for ruta in BASE_DIR.rglob(nombre_archivo)
+            if ruta.is_file() and ".git" not in ruta.parts
+        ]
+    except OSError:
+        coincidencias = []
+    if coincidencias:
+        return send_file(coincidencias[0], as_attachment=True,
+                         download_name=nombre_archivo)
+    abort(404, description="El entregable no se encuentra en la carpeta Quipux/Entregables05102026.")
+
+# MathJax renderiza las fórmulas en LaTeX (delimitadas con $...$, $$...$$,
+# \(...\) o \[...\]) que
+# se escriban en la celda "Fórmula de cálculo" del Excel. Se configura antes de
+# cargar el script para que reconozca esos delimitadores.
 app.index_string = """<!DOCTYPE html>
 <html>
     <head>
@@ -134,1159 +946,19 @@ app.index_string = """<!DOCTYPE html>
         <title>{%title%}</title>
         {%favicon%}
         {%css%}
-        <style>
-:root{
-  --purple-900:#25206D;
-  --purple-800:#332A8F;
-  --purple-700:#4E3CC5;
-  --purple-600:#6550D8;
-  --purple-500:#7A66E4;
-  --purple-300:#B9AEF3;
-  --purple-100:#EEEAFE;
-  --purple-50:#F8F6FF;
-  --ink:#18203A;
-  --muted:#717A91;
-  --border:#E5E7F0;
-  --green:#2FA66F;
-  --gray:#9AA2B2;
-  --page:#F5F6FA;
-  --white:#FFFFFF;
-  --shadow:0 8px 30px rgba(37,32,109,.08);
-}
-
-*{box-sizing:border-box;}
-html,body,#react-entry-point,#_dash-app-content{
-  margin:0;
-  min-height:100%;
-}
-body{
-  font-family:Inter,Segoe UI,Roboto,Arial,sans-serif;
-  color:var(--ink);
-  background:var(--page);
-}
-a{text-decoration:none;color:inherit;}
-button,input,select{font:inherit;}
-
-/* LOGIN */
-.login-page{
-  min-height:100vh;
-  width:100%;
-  display:flex;
-  align-items:center;
-  justify-content:center;
-  padding:28px;
-  background:
-    radial-gradient(circle at 16% 18%,rgba(185,174,243,.55),transparent 34%),
-    linear-gradient(135deg,#8F89BF 0%,#667BA8 55%,#526D9A 100%);
-}
-.login-center{
-  width:100%;
-  display:flex;
-  justify-content:center;
-}
-.login-card{
-  width:min(430px,92vw);
-  background:#fff;
-  border-radius:28px;
-  padding:42px 44px 36px;
-  box-shadow:0 30px 80px rgba(37,32,109,.22);
-  text-align:center;
-}
-.login-logo{
-  width:340px;
-  height:auto;
-  max-height:200px;
-  object-fit:contain;
-  display:block;
-  margin:0 auto 30px;
-}
-.login-title{
-  font-size:34px;
-  line-height:1.12;
-  margin:0 0 10px;
-  letter-spacing:-.5px;
-  color:#20243A;
-}
-.login-subtitle{
-  margin:0 0 22px;
-  color:#8A8F9D;
-  font-size:14px;
-}
-.password-input{
-  width:100%;
-  height:52px;
-  border:1px solid #E4E6EE;
-  border-radius:10px;
-  padding:0 14px;
-  line-height:normal;
-  box-sizing:border-box;
-  background:#F7F8FB;
-  outline:none;
-  color:var(--ink);
-  font-size:15px;
-  transition:.2s ease;
-}
-.password-input:focus{
-  border-color:var(--purple-500);
-  box-shadow:0 0 0 3px rgba(122,102,228,.12);
-  background:#fff;
-}
-.login-button{
-  width:100%;
-  height:56px;
-  margin-top:16px;
-  padding:0 18px;
-  border:0;
-  border-radius:10px;
-  color:#fff;
-  font-weight:700;
-  font-size:16px;
-  cursor:pointer;
-  background:linear-gradient(90deg,#533DD7,#A548D1);
-  box-shadow:0 10px 24px rgba(83,61,215,.18);
-}
-.login-button:hover{filter:brightness(1.03);}
-.login-error{
-  min-height:22px;
-  margin-top:10px;
-  color:#C83F55;
-  font-size:13px;
-}
-.login-foot{
-  margin:14px 0 0;
-  color:#999EAA;
-  font-size:12px;
-}
-
-/* APP SHELL */
-.app-shell{
-  min-height:100vh;
-  display:grid;
-  grid-template-columns:260px minmax(0,1fr);
-  background:var(--page);
-}
-.sidebar{
-  position:sticky;
-  top:0;
-  height:100vh;
-  padding:20px 16px 18px;
-  display:flex;
-  flex-direction:column;
-  color:#fff;
-  background:linear-gradient(180deg,#2D2778 0%,#243E83 100%);
-  box-shadow:10px 0 32px rgba(37,32,109,.06);
-  z-index:20;
-}
-.collapse-symbol{
-  text-align:right;
-  font-size:22px;
-  font-weight:800;
-  margin:0 6px 22px;
-  opacity:.95;
-}
-.logo-box{
-  background:#fff;
-  border-radius:8px;
-  min-height:140px;
-  display:flex;
-  align-items:center;
-  justify-content:center;
-  padding:14px;
-  margin-bottom:36px;
-}
-.sidebar-logo{
-  width:220px;
-  max-width:100%;
-  height:110px;
-  object-fit:contain;
-}
-.sidebar-title{
-  margin:0 0 10px;
-  font-size:18px;
-  font-weight:800;
-}
-.sidebar-subtitle{
-  margin:0 0 28px;
-  color:#BEC7E0;
-  font-size:13px;
-}
-.sidebar nav{
-  display:flex;
-  flex-direction:column;
-  gap:14px;
-}
-.nav-button{
-  width:100%;
-  border:1px solid rgba(255,255,255,.08);
-  background:rgba(255,255,255,.07);
-  color:#fff;
-  padding:14px 16px;
-  border-radius:11px;
-  font-size:14px;
-  text-align:center;
-  transition:.18s ease;
-}
-.nav-button:hover{
-  background:rgba(255,255,255,.13);
-  transform:translateY(-1px);
-}
-.sidebar-spacer{flex:1;}
-.sidebar-date{
-  font-size:12px;
-  color:#BBC6E2;
-  margin:0 0 16px;
-}
-.logout-button{
-  width:100%;
-  padding:13px;
-  border-radius:10px;
-  border:1px solid rgba(255,255,255,.10);
-  background:rgba(255,255,255,.08);
-  color:#fff;
-  cursor:pointer;
-  font-weight:600;
-}
-.logout-button:hover{background:rgba(255,255,255,.14);}
-
-.main-content{
-  width:100%;
-  max-width:1460px;
-  margin:0 auto;
-  padding:18px 26px 38px;
-}
-
-/* HEADER */
-.header-card{
-  display:grid;
-  grid-template-columns:minmax(0,1fr) 220px;
-  gap:14px;
-  padding:14px;
-  border:1px solid var(--border);
-  border-radius:14px;
-  margin-bottom:18px;
-  background:#fff;
-}
-.top-gradient{
-  border-radius:12px;
-  padding:22px 26px;
-  min-height:106px;
-  display:flex;
-  flex-direction:column;
-  justify-content:center;
-  color:#fff;
-  background:linear-gradient(90deg,#573FD3 0%,#30257C 100%);
-}
-.top-title{
-  font-size:27px;
-  line-height:1.15;
-  font-weight:800;
-}
-.top-subtitle{
-  margin-top:8px;
-  color:#DED9FF;
-  font-size:13px;
-}
-.updated-card{
-  display:flex;
-  flex-direction:column;
-  justify-content:center;
-  align-items:flex-start;
-  border:1px solid var(--border);
-  border-radius:12px;
-  padding:16px 20px;
-  background:#fff;
-}
-.updated-label{
-  font-size:12px;
-  margin-bottom:6px;
-}
-.updated-value{
-  font-size:31px;
-  line-height:1;
-  font-weight:400;
-}
-
-/* KPI */
-.kpi-grid{
-  display:grid;
-  grid-template-columns:repeat(6,minmax(0,1fr));
-  gap:14px;
-  margin-bottom:18px;
-}
-.kpi-card{
-  min-width:0;
-  min-height:122px;
-  padding:16px 18px;
-  border:1px solid var(--border);
-  border-radius:14px;
-  background:#fff;
-  box-shadow:0 2px 12px rgba(37,32,109,.02);
-}
-.kpi-icon{
-  width:36px;
-  height:36px;
-  border-radius:9px;
-  display:flex;
-  align-items:center;
-  justify-content:center;
-  font-size:19px;
-  margin-bottom:11px;
-}
-.kpi-value{
-  font-size:21px;
-  font-weight:800;
-  white-space:nowrap;
-  overflow:hidden;
-  text-overflow:ellipsis;
-}
-.kpi-label{
-  color:#5E6880;
-  margin-top:6px;
-  font-size:13px;
-}
-
-/* GENERAL CARDS */
-.content-card{
-  border:1px solid #D9DCE6;
-  border-radius:14px;
-  background:#fff;
-  padding:16px 18px;
-  margin-bottom:18px;
-}
-.section-title{
-  font-size:17px;
-  font-weight:800;
-  margin:0 0 5px;
-}
-.section-subtitle{
-  font-size:12px;
-  color:#7E879B;
-  margin:0 0 10px;
-}
-.graph{
-  width:100%;
-}
-.hint{
-  color:#8B92A1;
-  font-size:13px;
-  margin-top:4px;
-}
-.alert,.info-alert{
-  padding:14px 16px;
-  border-radius:9px;
-  background:#E7F0FF;
-  color:#2763A3;
-  border:1px solid #D6E5FA;
-}
-
-/* RADIO */
-.vice-radio{
-  display:flex!important;
-  flex-wrap:wrap;
-  gap:8px;
-  margin:6px 0 12px;
-}
-.radio-label{
-  display:inline-flex!important;
-  align-items:center;
-  gap:7px;
-  border:1px solid var(--border);
-  background:#fff;
-  padding:8px 13px;
-  border-radius:999px;
-  cursor:pointer;
-  color:#26324C;
-  font-size:13px;
-}
-.radio-label:has(input:checked){
-  background:var(--purple-700);
-  color:#fff;
-  border-color:var(--purple-700);
-  font-weight:700;
-}
-.radio-input{accent-color:#FF5964;}
-
-/* PROJECTS */
-.project-filters{
-  display:grid;
-  grid-template-columns:minmax(250px,1fr) minmax(220px,360px);
-  gap:14px;
-  margin-bottom:16px;
-}
-.search-input{
-  width:100%;
-  border:1px solid var(--border);
-  background:#fff;
-  border-radius:10px;
-  padding:12px 14px;
-  outline:none;
-}
-.vice-dropdown .Select-control,
-.vice-dropdown .Select__control{
-  border-radius:10px!important;
-  border-color:var(--border)!important;
-  min-height:43px!important;
-}
-.project-row{
-  display:grid;
-  grid-template-columns:46px minmax(0,1fr) 150px 120px 120px;
-  gap:12px;
-  align-items:center;
-  padding:17px 0;
-  border-bottom:1px solid #E6E8F0;
-}
-.project-row:last-child{border-bottom:0;}
-.project-icon{
-  width:38px;height:38px;
-  display:flex;align-items:center;justify-content:center;
-  border-radius:10px;
-  color:var(--purple-700);
-  background:var(--purple-100);
-  font-size:18px;
-}
-.project-name{
-  font-weight:750;
-  line-height:1.3;
-  margin-bottom:7px;
-}
-.soft-tag{
-  display:inline-block;
-  padding:4px 8px;
-  background:var(--purple-100);
-  color:var(--purple-700);
-  border-radius:6px;
-  font-size:10px;
-  font-weight:700;
-}
-.project-metric{
-  display:flex;
-  flex-direction:column;
-  gap:5px;
-}
-.project-metric strong{font-size:14px;}
-.project-metric small{font-size:11px;color:#8D94A3;}
-.detail-link,.back-link{
-  border:1px solid #DCD8FF;
-  color:var(--purple-700);
-  border-radius:9px;
-  padding:10px 12px;
-  text-align:center;
-  font-size:12px;
-  background:#fff;
-}
-.detail-link:hover,.back-link:hover{
-  background:var(--purple-50);
-}
-
-/* DETAIL */
-.detail-container{width:100%;}
-.detail-main-title{
-  margin:0 0 8px;
-  font-size:23px;
-}
-.detail-kpi-grid{
-  display:grid;
-  grid-template-columns:repeat(4,minmax(0,1fr));
-  gap:14px;
-  margin:16px 0 18px;
-}
-.detail-two-cols{
-  display:grid;
-  grid-template-columns:1fr 1fr;
-  gap:14px;
-  margin-bottom:18px;
-}
-.detail-two-cols.compact{align-items:start;}
-.summary-box{
-  padding:14px 16px;
-  border-radius:9px;
-  background:#E9F2FF;
-  color:#13589D;
-  margin:10px 0 12px;
-  line-height:1.45;
-}
-.meta-three{
-  display:grid;
-  grid-template-columns:1fr 1fr 1fr;
-  gap:14px;
-  padding-top:8px;
-  font-size:13px;
-}
-.native-details{
-  border:1px solid #D9DCE6;
-  border-radius:9px;
-  background:#fff;
-  margin-bottom:12px;
-  overflow:hidden;
-}
-.native-details summary{
-  cursor:pointer;
-  padding:12px 14px;
-  font-size:13px;
-  list-style:none;
-}
-.native-details summary::-webkit-details-marker{display:none;}
-.native-details summary:before{
-  content:"›";
-  display:inline-block;
-  margin-right:9px;
-  font-weight:800;
-  color:var(--purple-700);
-}
-.native-details[open] summary:before{transform:rotate(90deg);}
-.details-body{
-  border-top:1px solid #ECEEF4;
-  padding:14px 16px;
-  font-size:13px;
-  line-height:1.5;
-}
-.prett-block{margin-top:18px;}
-.activity-card{
-  padding:12px 14px;
-  border:1px solid #E1E4EC;
-  border-radius:9px;
-  background:#fff;
-  margin-top:9px;
-}
-.activity-head{
-  display:flex;
-  gap:12px;
-  justify-content:space-between;
-  align-items:flex-start;
-}
-.activity-title{font-size:13px;}
-.activity-pct{font-weight:800;color:var(--purple-700);}
-.progress-track{
-  width:100%;
-  height:7px;
-  border-radius:999px;
-  overflow:hidden;
-  background:#E9ECF3;
-  margin:10px 0;
-}
-.progress-fill{
-  height:100%;
-  border-radius:999px;
-  background:linear-gradient(90deg,#6550D8,#4E3CC5);
-}
-.activity-meta,.macro-meta{
-  display:flex;
-  flex-wrap:wrap;
-  gap:10px 20px;
-  color:#717A91;
-  font-size:11px;
-}
-
-/* Dash loading overlay – keeps the UI visible instead of washing out whole page */
-._dash-loading{
-  color:var(--purple-700)!important;
-}
-
-
-/* Los nombres del Gantt son elementos interactivos */
-.js-plotly-plot .scatterlayer text{
-  cursor:pointer!important;
-}
-
-
-/* ===== Línea de tiempo HTML nativa ===== */
-.timeline-matrix{width:100%;overflow-x:auto;padding-bottom:4px;}
-.timeline-grid{min-width:1120px;display:grid;align-items:stretch;}
-.timeline-head{font-size:13px;font-weight:700;color:#4D5870;padding:10px 8px 12px;text-align:center;border-bottom:1px solid #E9EBF3;}
-.timeline-head.project-col{text-align:left;padding-left:4px;}
-.timeline-project-cell,.timeline-month-cell,.timeline-progress-cell,.timeline-segments-cell{min-height:62px;display:flex;align-items:center;border-bottom:1px solid #EFF1F6;}
-.timeline-project-cell{padding:8px 12px 8px 4px;}
-.timeline-project-button{width:100%;border:0;background:transparent;color:#30257C;text-decoration:underline;text-underline-offset:2px;font-weight:700;font-size:14px;line-height:1.3;text-align:left;cursor:pointer;padding:6px 28px 6px 0;position:relative;}
-.timeline-project-button::after{content:"›";position:absolute;right:7px;top:50%;transform:translateY(-50%);color:#7A66E4;font-size:20px;}
-.timeline-project-button:hover{color:#573FD3;}
-.timeline-month-cell{justify-content:center;padding:8px 4px;}
-.timeline-segment{width:100%;height:28px;border-radius:5px;transition:transform .12s ease,box-shadow .12s ease;}
-.timeline-segment.exec{background:linear-gradient(90deg,#4E3CC5,#573FD3);}
-.timeline-segment.noexec{background:#B9AEF3;}
-.timeline-segment.empty{background:transparent;}
-.timeline-segment:not(.empty):hover{transform:translateY(-1px);box-shadow:0 4px 12px rgba(78,60,197,.18);}
-.timeline-progress-cell{padding:8px 10px 8px 16px;flex-direction:column;align-items:flex-start;justify-content:center;gap:6px;}
-.timeline-progress-label{font-size:13px;font-weight:700;color:#202A43;}
-.timeline-mini-track{width:78px;height:5px;border-radius:999px;background:#E9EAF2;overflow:hidden;}
-.timeline-mini-fill{height:100%;border-radius:999px;background:#4E3CC5;}
-.timeline-segments-cell{justify-content:center;font-size:13px;font-weight:700;color:#44506A;}
-.timeline-legend{display:flex;justify-content:flex-end;gap:22px;align-items:center;margin:3px 0 10px;font-size:13px;color:#44506A;}
-.timeline-legend-item{display:flex;align-items:center;gap:7px;}
-.timeline-legend-box{width:13px;height:13px;border-radius:2px;}
-.timeline-legend-box.exec{background:#573FD3;}
-.timeline-legend-box.noexec{background:#B9AEF3;}
-.timeline-tip{margin-top:12px;padding:12px 14px;border:1px solid #DCE3F3;background:#F7FAFF;color:#63708A;border-radius:9px;font-size:12px;}
-.timeline-selected-wrap{margin-top:14px;}
-.timeline-detail-title{margin:0 0 12px;font-size:18px;font-weight:800;color:#30257C;}
-
-
-/* ===== Detalle ejecutivo sin gráficos ===== */
-.project-context-grid{display:grid;grid-template-columns:1.6fr 1fr 1fr;gap:14px;margin:14px 0 16px;}
-.context-card{background:#fff;border:1px solid #E2E5EF;border-radius:14px;padding:17px 18px;min-height:105px;box-shadow:0 3px 12px rgba(37,32,109,.035);}
-.context-label{font-size:11px;text-transform:uppercase;letter-spacing:.045em;color:#7B8498;font-weight:800;margin-bottom:8px;}
-.context-value{font-size:13px;line-height:1.5;color:#18203A;font-weight:600;}
-.project-values-title{font-size:16px;font-weight:800;color:#25206D;margin:18px 0 10px;}
-.component-details{border:1px solid #D9DDF0;border-radius:14px;background:#fff;overflow:hidden;margin-top:16px;}
-.component-details > summary{list-style:none;cursor:pointer;padding:17px 20px;display:flex;align-items:center;justify-content:space-between;color:#fff;background:linear-gradient(90deg,#4E3CC5,#30257C);font-size:15px;font-weight:800;}
-.component-details > summary::-webkit-details-marker{display:none;}
-.component-details > summary::after{content:'+';width:25px;height:25px;display:flex;align-items:center;justify-content:center;border-radius:50%;background:rgba(255,255,255,.15);font-size:18px;}
-.component-details[open] > summary::after{content:'−';}
-.component-body{padding:18px;}
-.macro-stage{border:1px solid #E1E4EE;border-left:4px solid #573FD3;border-radius:12px;background:#fff;margin-bottom:14px;overflow:hidden;}
-.macro-header{padding:15px 17px 13px;background:#F8F7FE;}
-.macro-topline{display:flex;justify-content:space-between;align-items:flex-start;gap:14px;}
-.macro-title{font-size:15px;font-weight:850;color:#17223C;line-height:1.35;}
-.macro-code{display:inline-block;font-size:10px;color:#6657BA;font-weight:800;margin-bottom:4px;}
-.status-pill{display:inline-flex;align-items:center;padding:5px 9px;border-radius:999px;font-size:10px;font-weight:800;white-space:nowrap;background:#EEEAFE;color:#4E3CC5;}
-.status-pill.done{background:#E8F7F0;color:#247C58;}.status-pill.due{background:#FCEBEC;color:#B4384D;}.status-pill.review{background:#FFF3DF;color:#B56C09;}
-.macro-meta-grid{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:10px;margin-top:12px;}
-.meta-chip{background:#fff;border:1px solid #E5E7F0;border-radius:9px;padding:9px 10px;}
-.meta-chip .lbl{font-size:9px;text-transform:uppercase;letter-spacing:.035em;color:#8A91A1;font-weight:800;margin-bottom:4px;}
-.meta-chip .val{font-size:11px;color:#26324C;font-weight:700;line-height:1.3;}
-.micro-wrap{padding:0 16px 16px;}.micro-table{width:100%;border-collapse:separate;border-spacing:0;font-size:11px;overflow:hidden;border:1px solid #E8EAF1;border-radius:10px;}
-.micro-table th{background:#F3F4F8;color:#556077;text-align:left;padding:9px 8px;font-size:9px;text-transform:uppercase;letter-spacing:.02em;border-bottom:1px solid #E5E7EF;white-space:nowrap;}
-.micro-table td{padding:9px 8px;border-bottom:1px solid #EFF1F5;vertical-align:top;color:#26324C;line-height:1.35;}.micro-table tr:last-child td{border-bottom:0;}
-.micro-activity{font-weight:700;min-width:220px;}.micro-alert-vencida{color:#B4384D;font-weight:850;}.micro-alert-finalizada{color:#247C58;font-weight:850;}.empty-note{color:#8A91A1;font-style:italic;}
-@media(max-width:1100px){.project-context-grid{grid-template-columns:1fr;}.macro-meta-grid{grid-template-columns:repeat(2,1fr);}}
-
-
-/* =========================================================
-   DETALLE JERÁRQUICO PROYECTO -> COMPONENTE -> MACRO -> MICRO
-   ========================================================= */
-.project-context-block{
-  display:flex;
-  flex-direction:column;
-  gap:12px;
-  margin:14px 0 18px;
-}
-
-.context-objective{
-  width:100%;
-  padding:18px 20px;
-}
-
-.objective-text{
-  line-height:1.55;
-  font-size:13.5px;
-}
-
-.project-context-secondary{
-  display:grid;
-  grid-template-columns:repeat(4,minmax(0,1fr));
-  gap:12px;
-}
-
-.detail-project-name{
-  margin:0 0 14px;
-  font-size:19px;
-  line-height:1.35;
-  color:#17223C;
-}
-
-.component-details{
-  margin-top:18px;
-}
-
-.component-details > summary{
-  font-size:15px;
-  font-weight:800;
-  color:#30257C;
-  background:#FFFFFF;
-  border:1px solid #D8DEF0;
-  border-radius:11px;
-  padding:15px 17px;
-  cursor:pointer;
-  list-style:none;
-  transition:.15s ease;
-}
-
-.component-details > summary:hover{
-  border-color:#AFA1F2;
-  background:#FBFAFF;
-}
-
-.component-details[open] > summary{
-  border-color:#7A66E4;
-  box-shadow:0 4px 16px rgba(83,63,211,.08);
-}
-
-.component-body{
-  margin-top:12px;
-}
-
-@media(max-width:1000px){
-  .project-context-secondary{
-    grid-template-columns:repeat(2,minmax(0,1fr));
-  }
-}
-
-@media(max-width:650px){
-  .project-context-secondary{
-    grid-template-columns:1fr;
-  }
-}
-
-
-/* =========================================================
-   TEMA EJECUTIVO - NAVEGACIÓN EN CASCADA
-   Inspiración: admin dashboard claro, sidebar oscuro,
-   tarjetas limpias y controles compactos.
-   ========================================================= */
-
-.route-cascade-shell{
-  margin-top:20px;
-  padding:20px;
-  border:1px solid #DDE3F0;
-  border-radius:16px;
-  background:
-    radial-gradient(circle at 100% 0%, rgba(103,79,219,.08), transparent 260px),
-    #FFFFFF;
-  box-shadow:0 10px 30px rgba(25,35,72,.045);
-}
-
-.cascade-header{
-  display:flex;
-  align-items:flex-start;
-  justify-content:space-between;
-  gap:20px;
-  margin-bottom:18px;
-  padding-bottom:15px;
-  border-bottom:1px solid #EDF0F6;
-}
-
-.cascade-kicker{
-  margin-bottom:4px;
-  color:#6D5BD0;
-  font-size:10px;
-  font-weight:900;
-  letter-spacing:.09em;
-  text-transform:uppercase;
-}
-
-.cascade-section-title{
-  margin:0;
-  color:#17223C;
-  font-size:19px;
-  font-weight:850;
-}
-
-.cascade-section-subtitle{
-  margin:6px 0 0;
-  color:#768198;
-  font-size:12px;
-  line-height:1.45;
-}
-
-.cascade-count{
-  min-width:96px;
-  padding:9px 12px;
-  border:1px solid #E1DCF9;
-  border-radius:12px;
-  background:#F7F4FF;
-  text-align:center;
-}
-
-.cascade-count-number{
-  display:block;
-  color:#5038C9;
-  font-size:20px;
-  font-weight:900;
-  line-height:1;
-}
-
-.cascade-count-label{
-  display:block;
-  margin-top:4px;
-  color:#766F98;
-  font-size:10px;
-  font-weight:750;
-}
-
-.cascade-step-card{
-  margin-top:12px;
-  padding:16px;
-  border:1px solid #E2E6F0;
-  border-radius:13px;
-  background:#FCFCFE;
-}
-
-.cascade-step-heading{
-  display:flex;
-  align-items:center;
-  gap:11px;
-  margin-bottom:12px;
-}
-
-.cascade-step-number{
-  flex:0 0 auto;
-  width:30px;
-  height:30px;
-  display:grid;
-  place-items:center;
-  border-radius:9px;
-  background:linear-gradient(135deg,#5A43D8,#7865E8);
-  box-shadow:0 5px 12px rgba(90,67,216,.18);
-  color:#FFF;
-  font-size:12px;
-  font-weight:900;
-}
-
-.cascade-step-title{
-  color:#202B46;
-  font-size:13px;
-  font-weight:850;
-}
-
-.cascade-step-help{
-  margin-top:2px;
-  color:#8A93A5;
-  font-size:10.5px;
-}
-
-.cascade-dropdown .Select-control,
-.cascade-dropdown .Select__control{
-  min-height:44px!important;
-  border:1px solid #DADFEB!important;
-  border-radius:10px!important;
-  box-shadow:none!important;
-  background:#FFF!important;
-}
-
-.cascade-dropdown .Select-control:hover,
-.cascade-dropdown .Select__control:hover{
-  border-color:#8D7AE8!important;
-}
-
-.cascade-radio-list{
-  display:flex;
-  flex-direction:column;
-  gap:7px;
-}
-
-.cascade-radio-label{
-  position:relative;
-  display:flex!important;
-  align-items:center;
-  width:100%;
-  min-height:45px;
-  margin:0!important;
-  padding:10px 12px!important;
-  border:1px solid #E1E5EF;
-  border-radius:10px;
-  background:#FFF;
-  color:#35415B;
-  font-size:11.5px;
-  font-weight:700;
-  line-height:1.35;
-  cursor:pointer;
-  transition:all .14s ease;
-}
-
-.cascade-radio-label:hover{
-  border-color:#A99AF0;
-  background:#FAF9FF;
-  transform:translateX(2px);
-}
-
-.cascade-radio-label:has(input:checked){
-  border-color:#6A54DF;
-  background:linear-gradient(90deg,#F2EFFF,#FBFAFF);
-  box-shadow:0 4px 13px rgba(91,69,207,.08);
-  color:#35258E;
-}
-
-.cascade-radio-input{
-  flex:0 0 auto;
-  margin:0 10px 0 0!important;
-  accent-color:#6048D9;
-}
-
-.macro-radio-list{
-  max-height:375px;
-  overflow-y:auto;
-  padding-right:4px;
-}
-
-.micro-radio-list{
-  max-height:360px;
-  overflow-y:auto;
-  padding-right:4px;
-}
-
-.cascade-selection-card{
-  margin-bottom:13px;
-  overflow:hidden;
-  border:1px solid #DCDFF0;
-  border-radius:12px;
-  background:#FFF;
-}
-
-.cascade-selected-head{
-  display:flex;
-  justify-content:space-between;
-  align-items:flex-start;
-  gap:14px;
-  padding:14px 15px;
-  background:linear-gradient(90deg,#F5F2FF,#FBFAFF);
-  border-bottom:1px solid #E8E5F5;
-}
-
-.cascade-eyebrow{
-  display:flex;
-  align-items:center;
-  gap:7px;
-  margin-bottom:4px;
-}
-
-.cascade-tag{
-  padding:3px 6px;
-  border-radius:5px;
-  background:#5B43D2;
-  color:#FFF;
-  font-size:8px;
-  font-weight:900;
-  letter-spacing:.08em;
-}
-
-.cascade-code{
-  color:#7B849A;
-  font-size:10px;
-  font-weight:800;
-}
-
-.cascade-selected-title{
-  margin:0;
-  color:#17223C;
-  font-size:15px;
-  font-weight:850;
-}
-
-.cascade-detail-grid{
-  display:grid;
-  grid-template-columns:repeat(4,minmax(0,1fr));
-  gap:8px;
-  padding:13px 15px 15px;
-}
-
-.cascade-metric{
-  min-height:57px;
-  padding:9px 10px;
-  border:1px solid #E8EAF1;
-  border-radius:8px;
-  background:#FAFBFD;
-}
-
-.cascade-metric-wide{
-  grid-column:1/-1;
-}
-
-.cascade-metric-label{
-  margin-bottom:4px;
-  color:#8991A3;
-  font-size:8.5px;
-  font-weight:850;
-  letter-spacing:.025em;
-  text-transform:uppercase;
-}
-
-.cascade-metric-value{
-  color:#28344D;
-  font-size:11.5px;
-  font-weight:700;
-  line-height:1.35;
-  overflow-wrap:anywhere;
-}
-
-.cascade-micro-selector{
-  padding-top:3px;
-}
-
-.cascade-list-caption{
-  margin:0 0 9px;
-  color:#647087;
-  font-size:10.5px;
-  font-weight:750;
-}
-
-.cascade-empty-state{
-  padding:15px;
-  border:1px dashed #D9DDE8;
-  border-radius:10px;
-  background:#FAFBFD;
-  color:#8992A5;
-  font-size:11px;
-}
-
-.cascade-activity-detail{
-  margin-top:12px;
-  overflow:hidden;
-  border:1px solid #D7DCEF;
-  border-radius:13px;
-  background:#FFF;
-  box-shadow:0 8px 22px rgba(38,42,86,.045);
-}
-
-.cascade-activity-head{
-  display:flex;
-  justify-content:space-between;
-  align-items:flex-start;
-  gap:16px;
-  padding:16px;
-  background:linear-gradient(100deg,#F7F5FF,#FFFFFF);
-  border-bottom:1px solid #E9EAF3;
-}
-
-.cascade-activity-title{
-  margin:2px 0 4px;
-  color:#18223B;
-  font-size:16px;
-  font-weight:850;
-  line-height:1.35;
-}
-
-.cascade-activity-code{
-  color:#7868C8;
-  font-size:10px;
-  font-weight:850;
-}
-
-.cascade-reveal{
-  animation:cascadeReveal .18s ease both;
-}
-
-@keyframes cascadeReveal{
-  from{opacity:0;transform:translateY(5px);}
-  to{opacity:1;transform:translateY(0);}
-}
-
-/* Ajustes visuales generales para una lectura ejecutiva */
-.detail-container{
-  max-width:100%;
-}
-
-.detail-kpi-grid .kpi-card{
-  box-shadow:0 5px 16px rgba(28,36,67,.035);
-}
-
-.context-card{
-  box-shadow:0 5px 16px rgba(28,36,67,.035);
-}
-
-@media(max-width:1050px){
-  .cascade-detail-grid{
-    grid-template-columns:repeat(2,minmax(0,1fr));
-  }
-}
-
-@media(max-width:650px){
-  .route-cascade-shell{
-    padding:14px;
-  }
-  .cascade-header{
-    flex-direction:column;
-  }
-  .cascade-detail-grid{
-    grid-template-columns:1fr;
-  }
-}
-
-
-/* =========================================================
-   RESUMEN COMPACTO DEL MACRO
-   ========================================================= */
-.macro-executive-summary{
-  display:grid;
-  grid-template-columns:2fr repeat(3,1fr);
-  gap:0;
-  border-top:1px solid #E9E7F4;
-  background:#FFFFFF;
-}
-
-.macro-summary-item{
-  padding:12px 14px;
-  border-right:1px solid #EDF0F5;
-}
-
-.macro-summary-item:last-child{
-  border-right:0;
-}
-
-.macro-summary-label{
-  margin-bottom:4px;
-  color:#8A92A5;
-  font-size:8.5px;
-  font-weight:850;
-  letter-spacing:.035em;
-  text-transform:uppercase;
-}
-
-.macro-summary-value{
-  color:#26324A;
-  font-size:11.5px;
-  font-weight:800;
-  line-height:1.3;
-}
-
-.macro-summary-period .macro-summary-value{
-  color:#4C3BBC;
-}
-
-@media(max-width:850px){
-  .macro-executive-summary{
-    grid-template-columns:1fr 1fr;
-  }
-
-  .macro-summary-item{
-    border-bottom:1px solid #EDF0F5;
-  }
-}
-
-@media(max-width:550px){
-  .macro-executive-summary{
-    grid-template-columns:1fr;
-  }
-
-  .macro-summary-item{
-    border-right:0;
-  }
-}
-
-/* Responsive */
-@media(max-width:1200px){
-  .kpi-grid{grid-template-columns:repeat(3,1fr);}
-  .project-row{grid-template-columns:44px minmax(0,1fr) 130px 110px;}
-  .detail-link{grid-column:2/-1;justify-self:end;}
-}
-@media(max-width:900px){
-  .app-shell{grid-template-columns:1fr;}
-  .sidebar{
-    position:relative;
-    height:auto;
-    min-height:0;
-  }
-  .sidebar-spacer{display:none;}
-  .main-content{padding:14px;}
-  .header-card{grid-template-columns:1fr;}
-  .updated-card{min-height:86px;}
-  .kpi-grid{grid-template-columns:repeat(2,1fr);}
-  .detail-kpi-grid{grid-template-columns:repeat(2,1fr);}
-  .detail-two-cols{grid-template-columns:1fr;}
-  .meta-three{grid-template-columns:1fr;}
-}
-@media(max-width:640px){
-  .login-card{padding:32px 24px;}
-  .login-title{font-size:28px;}
-  .project-filters{grid-template-columns:1fr;}
-  .project-row{
-    grid-template-columns:42px 1fr;
-  }
-  .project-metric,.detail-link{
-    grid-column:2;
-  }
-  .kpi-grid,.detail-kpi-grid{grid-template-columns:1fr;}
-}
-
-        </style>
+        <script>
+        window.MathJax = {
+          tex: {
+            inlineMath: [['$', '$'], ['\\\\(', '\\\\)']],
+            displayMath: [['$$', '$$'], ['\\\\[', '\\\\]']],
+            processEscapes: true
+          },
+          svg: {fontCache: 'global'}
+        };
+        </script>
+        <script type="text/javascript" id="MathJax-script" async
+          src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-mml-chtml.js">
+        </script>
     </head>
     <body>
         {%app_entry%}
@@ -1299,2471 +971,2979 @@ button,input,select{font:inherit;}
 </html>"""
 
 
-@server.after_request
-def _no_cache(response):
-    """
-    Fuerza al navegador a no guardar en caché NINGUNA respuesta de esta app
-    (ni el HTML, ni el CSS, ni el JS de Dash, ni las llamadas de los
-    callbacks). Esto evita que quede pegada una versión vieja y rota de la
-    página después de haber corregido el código — el síntoma exacto que
-    hemos visto repetidas veces en esta sesión.
-    """
-    response.headers["Cache-Control"] = "no-store, no-cache, must-revalidate, max-age=0"
-    response.headers["Pragma"] = "no-cache"
-    response.headers["Expires"] = "0"
-    return response
-
-
-# =============================================================================
-# 3. CACHÉ EN MEMORIA
-# =============================================================================
-
-_CACHE: dict[str, tuple[float, object]] = {}
-_CACHE_LOCK = threading.RLock()
-
-
-def cached_value(key: str, loader, ttl: int = CACHE_TTL_SECONDS):
-    now = time.time()
-    with _CACHE_LOCK:
-        item = _CACHE.get(key)
-        if item and now - item[0] < ttl:
-            return item[1]
-    value = loader()
-    with _CACHE_LOCK:
-        _CACHE[key] = (time.time(), value)
-    return value
-
-
-def clear_data_cache():
-    with _CACHE_LOCK:
-        _CACHE.clear()
-
-
-# =============================================================================
-# 4. DESCARGA SHAREPOINT
-# =============================================================================
-
-
-def variantes_url(url: str) -> list[str]:
-    if not url:
-        return []
-    if "download=1" in url:
-        return [url]
-    if "?" in url:
-        return [f"{url}&download=1", url]
-    return [f"{url}?download=1", url]
-
-
-def descargar_excel(url: str) -> io.BytesIO | None:
-    headers = {
-        "User-Agent": (
-            "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
-            "AppleWebKit/537.36 Chrome/124 Safari/537.36"
-        ),
-        "Accept": (
-            "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,"
-            "application/octet-stream,*/*"
-        ),
-    }
-    for candidate in variantes_url(url):
-        try:
-            r = requests.get(
-                candidate,
-                timeout=(REQUEST_CONNECT_TIMEOUT, REQUEST_READ_TIMEOUT),
-                allow_redirects=True,
-                headers=headers,
-            )
-            r.raise_for_status()
-            content = r.content
-            ctype = r.headers.get("Content-Type", "").lower()
-            if len(content) > 1000 and content[:2] == b"PK" and "text/html" not in ctype:
-                return io.BytesIO(content)
-        except Exception:
-            continue
-    return None
-
-
-# =============================================================================
-# 5. AUXILIARES
-# =============================================================================
-
-
-_LOGO_CACHE = {}
-
-
-def logo_src():
-    """
-    Busca logo-minedec.png en varias ubicaciones posibles (assets/ junto al
-    script, assets/ en el directorio de trabajo, y la carpeta del proyecto
-    directa) y lo incrusta como data URI en base64. Esto no depende de que
-    Dash resuelva bien la ruta de assets/ ni de rutas servidas por Flask —
-    funciona sin importar cómo se haya corrido el script.
-    """
-    if "src" in _LOGO_CACHE:
-        return _LOGO_CACHE["src"]
-
-    candidatos = [
-        os.path.join(_BASE_DIR, "assets", "logo-minedec.png"),
-        os.path.join(os.getcwd(), "assets", "logo-minedec.png"),
-        os.path.join(_BASE_DIR, "logo-minedec.png"),
-        os.path.join(os.getcwd(), "logo-minedec.png"),
-    ]
-    for ruta in candidatos:
-        try:
-            with open(ruta, "rb") as f:
-                encoded = base64.b64encode(f.read()).decode("ascii")
-            src = f"data:image/png;base64,{encoded}"
-            _LOGO_CACHE["src"] = src
-            return src
-        except Exception:
-            continue
-
-    _LOGO_CACHE["src"] = ""
-    return ""
-
-
-def normalizar(s: str) -> str:
-    s = unicodedata.normalize("NFKD", str(s)).encode("ascii", "ignore").decode("ascii")
-    return re.sub(r"\s+", " ", s).strip().lower()
-
-
-def parse_dated_entries(text, max_entries=6):
-    if not isinstance(text, str) or not text.strip():
-        return []
-    pattern = re.compile(r"(\d{2}/\d{2}/\d{4})\s*[•\-–]\s*")
-    parts = pattern.split(text)
-    entries = []
-    for i in range(1, len(parts), 2):
-        fecha = parts[i].strip()
-        cuerpo = parts[i + 1].strip() if i + 1 < len(parts) else ""
-        cuerpo = re.sub(r"\s{2,}", " ", cuerpo.replace("\n", " ")).strip()
-        if cuerpo:
-            entries.append({"fecha": fecha, "texto": cuerpo[:800]})
-    return entries[-max_entries:]
-
-
-def vice_short(v):
-    return (v or "Sin viceministerio").replace("Viceministerio de ", "")
-
-
-def fmt_money(v):
-    return f"$ {float(v):,.2f}"
-
-
-def fmt_mm(v):
-    v = float(v)
-    return f"$ {v/1_000_000:,.2f} MM" if abs(v) >= 1_000_000 else f"$ {v:,.0f}"
-
-
-def auth_ok(password: str) -> bool:
-    env_hash = os.getenv("APP_PASSWORD_HASH")
-    if env_hash:
-        return hashlib.sha256(password.encode("utf-8")).hexdigest() == env_hash
-    expected = os.getenv("APP_PASSWORD", "minedec2026")
-    return password == expected
-
-
-def match_project(nombre: str, nombres_norm: dict[str, str], cutoff=0.88):
-    clave = normalizar(nombre)
-    real = nombres_norm.get(clave)
-    if real:
-        return real
-    if not nombres_norm:
-        return None
-    matches = get_close_matches(clave, list(nombres_norm.keys()), n=1, cutoff=cutoff)
-    return nombres_norm[matches[0]] if matches else None
-
-
-# =============================================================================
-# 6. PROCESAMIENTO: PRESUPUESTO
-# =============================================================================
-
-
-def procesar_presupuesto(buf: io.BytesIO) -> dict:
-    df = pd.read_excel(buf, sheet_name="HOY")
-    df.columns = [str(c).strip() for c in df.columns]
-    name_col = "NOMBRE DEL PROYECTO"
-    vice_col = "VICEMINISTERIO PROYECTOS"
-    df = df[df[name_col].astype(str).str.strip().str.lower().ne("corriente")].copy()
-
-    proyectos = {}
-    for nombre, g in df.groupby(name_col):
-        if not isinstance(nombre, str) or not nombre.strip():
-            continue
-        vice = g[vice_col].dropna()
-        cod = float(g["CODIFICADO"].sum())
-        dev = float(g["DEVENGADO"].sum())
-        proyectos[nombre.strip()] = {
-            "codificado": cod,
-            "comprometido": float(g["COMPROMISO"].sum()),
-            "devengado": dev,
-            "precompromiso": float(g["PRECOMPROMISO"].sum()),
-            "asignado": float(g["ASIGNADO"].sum()),
-            "saldo_disponible": float(g["SALDO_DISPONIBLE"].sum()),
-            "viceministerio": str(vice.iloc[0]) if not vice.empty else "Sin asignar",
-            "pct_ejecucion": round(dev / cod * 100, 2) if cod else 0.0,
-        }
-    return proyectos
-
-
-def load_presupuesto():
-    def _loader():
-        buf = descargar_excel(URL_PRESUPUESTO)
-        if buf is None:
-            return {}
-        return procesar_presupuesto(buf)
-    return cached_value("presupuesto", _loader)
-
-
-# =============================================================================
-# 7. PROCESAMIENTO: BANCO / PRETT
-# =============================================================================
-
-
-def procesar_fichas(buf: io.BytesIO) -> dict:
-    df = pd.read_excel(buf, sheet_name="Banco Proyectos", header=None)
-    data = df.iloc[1:]
-    COL_PROY, COL_CUP, COL_PERIODO = 1, 2, 6
-    COL_OBJ, COL_COMP = 8, 9
-    COL_LOGROS, COL_NUDOS, COL_ACCIONES, COL_RESP = 10, 11, 15, 17
-
-    # Detecta Dictamen y Oficio si la base los incorpora como encabezados.
-    header_norm = {}
-    for c in df.columns:
-        for v in df[c].head(5).dropna().astype(str):
-            nv = normalizar(v)
-            if nv:
-                header_norm[c] = nv
-                break
-
-    def localizar_columna(*tokens):
-        toks = [normalizar(t) for t in tokens]
-        for c, h in header_norm.items():
-            if all(t in h for t in toks):
-                return c
-        return None
-
-    col_dictamen = localizar_columna("dictamen")
-    col_oficio = localizar_columna("oficio")
-
-    fichas = {}
-    for nombre, g in data.groupby(data[COL_PROY]):
-        if not isinstance(nombre, str) or not nombre.strip():
-            continue
-        if nombre.strip().rstrip(":").upper() == "PROYECTO":
-            continue
-        primera = g.iloc[0]
-        componentes = [str(c).strip() for c in g[COL_COMP].dropna().unique() if str(c).strip()]
-        dictamen = str(primera[col_dictamen]).strip() if col_dictamen is not None and pd.notna(primera[col_dictamen]) else "—"
-        oficio = str(primera[col_oficio]).strip() if col_oficio is not None and pd.notna(primera[col_oficio]) else "—"
-        fichas[nombre.strip()] = {
-            "cup": str(primera[COL_CUP]) if pd.notna(primera[COL_CUP]) else "—",
-            "gerente": str(primera[COL_RESP]) if pd.notna(primera[COL_RESP]) else "—",
-            "periodo_prioridad": str(primera[COL_PERIODO]) if pd.notna(primera[COL_PERIODO]) else "—",
-            "objetivo": str(primera[COL_OBJ]).strip() if pd.notna(primera[COL_OBJ]) else "",
-            "dictamen_prioridad": dictamen,
-            "oficio": oficio,
-            "componentes": componentes,
-            "logros": parse_dated_entries(primera[COL_LOGROS]),
-            "nudos_criticos": parse_dated_entries(primera[COL_NUDOS]),
-            "acciones_gestion": parse_dated_entries(primera[COL_ACCIONES]),
-        }
-    return fichas
-
-
-def procesar_prett(buf: io.BytesIO):
-    """
-    PRETT = información del PROYECTO.
-    HOJA_RUTA = desagregación del PROYECTO en:
-        Componente -> Macro -> Micro
-
-    No se calculan ni completan valores inexistentes.
-    Una celda vacía se conserva vacía y en la interfaz se representa con "—".
-    """
-
-    def clean(v):
-        if pd.isna(v):
-            return ""
-        s = str(v).strip()
-        return "" if s.lower() in ("nan", "none", "nat") else s
-
-    def fmt_fecha(v):
-        if pd.isna(v) or clean(v) == "":
-            return ""
-        dt = pd.to_datetime(v, errors="coerce")
-        if pd.isna(dt):
-            return clean(v)
-        return dt.strftime("%d/%m/%Y")
-
-    # ---------------------------------------------------------
-    # CONEXION: solo para identificar el proyecto y respaldo
-    # ---------------------------------------------------------
-    buf.seek(0)
-    conexion = pd.read_excel(buf, sheet_name="CONEXION", header=None)
-    data = conexion.iloc[1:]
-
-    if data.empty:
-        return None, None, None
-
-    fila = data.iloc[0]
-    nombre_conexion = clean(fila.iloc[0]) if len(fila) > 0 else ""
-
-    # ---------------------------------------------------------
-    # PRETT: datos generales de la ficha
-    # ---------------------------------------------------------
-    buf.seek(0)
-    prett = pd.read_excel(buf, sheet_name="PRETT", header=None)
-
-    def cell_norm(v):
-        return normalizar(clean(v))
-
-    def buscar_valor_derecha(*terminos):
-        terms = [normalizar(t) for t in terminos]
-
-        for r in range(len(prett)):
-            row = prett.iloc[r]
-
-            for c in range(len(row)):
-                nv = cell_norm(row.iloc[c])
-                if not nv:
-                    continue
-
-                if all(t in nv for t in terms):
-                    for cc in range(c + 1, len(row)):
-                        val = clean(row.iloc[cc])
-                        if val:
-                            return val
-
-        return ""
-
-    def buscar_texto_debajo(*terminos):
-        terms = [normalizar(t) for t in terminos]
-
-        for r in range(len(prett)):
-            row = prett.iloc[r]
-            found = False
-
-            for c in range(len(row)):
-                nv = cell_norm(row.iloc[c])
-                if nv and all(t in nv for t in terms):
-                    found = True
-                    break
-
-            if not found:
-                continue
-
-            for rr in range(r + 1, min(r + 8, len(prett))):
-                valores = [clean(v) for v in prett.iloc[rr].tolist()]
-                valores = [v for v in valores if v]
-
-                if not valores:
-                    continue
-
-                texto = " ".join(valores).strip()
-                nt = normalizar(texto)
-
-                # No tomar el siguiente encabezado como contenido.
-                if (
-                    "desagregacion saldo disponible" in nt
-                    or "presupuesto del proyecto" in nt
-                    or "datos generales del proyecto" in nt
-                ):
-                    break
-
-                return texto
-
-        return ""
-
-    nombre_prett = buscar_valor_derecha("proyecto")
-    nombre_proyecto = nombre_prett or nombre_conexion
-
-    # Este campo es ÚNICO en la ficha:
-    # "Oficio último Dictamen de Prioridad o actualización de prioridad"
-    oficio_ultimo_dictamen = buscar_valor_derecha(
-        "oficio", "dictamen", "prioridad"
-    )
-
-    fecha_emision_raw = buscar_valor_derecha("fecha", "emision")
-    fecha_emision = fmt_fecha(fecha_emision_raw)
-
-    objetivo_prett = buscar_valor_derecha("objetivo", "general")
-
-    ficha = {
-        "cup": buscar_valor_derecha("cup"),
-        "no_esigef": buscar_valor_derecha("no esigef"),
-        "gerente": buscar_valor_derecha("gerente", "responsable"),
-        "periodo_prioridad": buscar_valor_derecha("periodo", "prioridad"),
-        "unidad_responsable": buscar_valor_derecha("unidad", "responsable"),
-        "objetivo": objetivo_prett,
-        "oficio_ultimo_dictamen": oficio_ultimo_dictamen,
-        "fecha_emision_dictamen": fecha_emision,
-        "devengado_a_fecha": buscar_texto_debajo("devengado", "fecha"),
-        "desagregacion_saldo_disponible": buscar_texto_debajo(
-            "desagregacion", "saldo", "disponible"
-        ),
-        "es_prett": True,
+def barra_superior():
+    return html.Header([
+        html.Button("⌂", id="home-button", className="home-button", title="Inicio"),
+        html.Div([
+            html.Strong("PANEL INTEGRADO DE GESTIÓN MINEDEC"),
+            html.Span("Panel institucional"),
+        ], className="header-title"),
+        html.Div([
+            html.Div([html.Span("Fecha de corte"), html.Strong(datetime.now().strftime("%d/%m/%Y"))],
+                     className="cutoff-date"),
+            html.Button("⎙", id="print-button", className="print-button", title="Imprimir"),
+        ], className="header-actions"),
+    ], className="header-bar")
+
+
+def portada():
+    # Iconos lineales, monocromáticos y minimalistas conforme a la guía visual.
+    iconos_portada = {
+        "vision": """<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64' fill='none' stroke='white' stroke-width='2.8' stroke-linecap='round' stroke-linejoin='round'><rect x='8' y='8' width='48' height='39' rx='4'/><path d='M15 39V27h8v12M28 39V20h8v19M41 39V15h8v24M18 55h28M32 47v8'/></svg>""",
+        "indicadores": """<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64' fill='none' stroke='white' stroke-width='2.8' stroke-linecap='round' stroke-linejoin='round'><rect x='10' y='8' width='44' height='48' rx='5'/><path d='M20 21l3 3 6-7M34 21h11M20 35l3 3 6-7M34 35h11M20 49l3 3 6-7M34 49h11'/></svg>""",
+        "presupuesto": """<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64' fill='none' stroke='white' stroke-width='2.8' stroke-linecap='round' stroke-linejoin='round'><path d='M9 53h46M14 48V29M25 48V37M36 48V23M47 48V14'/><path d='M14 21l11-7 11 3 14-9M43 8h7v7'/><circle cx='14' cy='21' r='2.5'/><circle cx='25' cy='14' r='2.5'/><circle cx='36' cy='17' r='2.5'/></svg>""",
+        "inventario": """<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64' fill='none' stroke='white' stroke-width='2.8' stroke-linecap='round' stroke-linejoin='round'><path d='M7 20h20l5 6h25v27H7z'/><path d='M7 20v-8h19l5 6h20v8M17 35h12M17 43h22'/><circle cx='48' cy='43' r='7'/><path d='M53 48l5 5'/></svg>""",
+        "documentacion": """<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64' fill='none' stroke='white' stroke-width='2.8' stroke-linecap='round' stroke-linejoin='round'><path d='M16 7h24l10 10v40H16z'/><path d='M40 7v12h12M24 30h18M24 39h18M24 48h12'/></svg>""",
     }
 
-    # ---------------------------------------------------------
-    # HOJA_RUTA
-    # ---------------------------------------------------------
-    buf.seek(0)
-    hr = pd.read_excel(buf, sheet_name="HOJA_RUTA", header=0)
-    hr.columns = [
-        str(c).replace("\n", " ").strip()
-        for c in hr.columns
-    ]
-
-    def find_col(*aliases):
-        aliases_n = [normalizar(a.replace("_", " ")) for a in aliases]
-
-        for c in hr.columns:
-            nc = normalizar(str(c).replace("_", " ").replace("\n", " "))
-            if any(a == nc for a in aliases_n):
-                return c
-
-        # Segundo intento por inclusión, para tolerar "(automático)".
-        for c in hr.columns:
-            nc = normalizar(str(c).replace("_", " ").replace("\n", " "))
-            if any(a in nc or nc in a for a in aliases_n):
-                return c
-
-        return None
-
-    C_PROY = find_col("ID Proyecto", "ID_Proyecto")
-    C_TIPO = find_col("Tipo Registro", "Tipo_Registro")
-    C_ID = find_col("ID Registro", "ID_Registro")
-    C_IDBI = find_col("ID BI", "ID_BI")
-    C_COMP = find_col("Componente")
-    C_NOMBRE = find_col(
-        "Nombre Actividad / Tarea / Descripción",
-        "Nombre_Actividad / Tarea / Descripción",
-        "Nombre Actividad Tarea Descripción",
-    )
-    C_INICIO = find_col("Fecha Inicio", "Fecha_Inicio")
-    C_FIN = find_col("Fecha Fin", "Fecha_Fin")
-    C_EFECTIVA = find_col(
-        "Fecha efectiva finalización",
-        "Fecha_efectiva_finalización",
-    )
-    C_AVANCE = find_col(
-        "% Avance (automático)",
-        "Avance automático",
-    )
-    C_ESTADO = find_col("Estado")
-    C_RESP = find_col("Responsable")
-    C_ATENCION = find_col(
-        "Requiere Atención Ministra",
-        "Requiere_Atención Ministra",
-    )
-    C_OBS = find_col("Observaciones")
-    C_ALERTA = find_col("Alerta de vencimiento")
-
-    required = [C_TIPO, C_ID, C_COMP, C_NOMBRE]
-
-    # Si faltan columnas estructurales, devolvemos la hoja como no utilizable,
-    # pero NO inventamos datos.
-    if any(c is None for c in required):
-        return nombre_proyecto, ficha, {
-            "componentes": [],
-            "columnas_detectadas": list(hr.columns),
-        }
-
-    def raw(row, col):
-        if col is None or col not in row.index:
-            return ""
-        return clean(row[col])
-
-    def avance_text(row):
-        if C_AVANCE is None or pd.isna(row[C_AVANCE]):
-            return ""
-
-        v = row[C_AVANCE]
-
-        # Si Excel/pandas ya devuelve texto como 100%, lo respetamos.
-        if isinstance(v, str):
-            return clean(v)
-
-        try:
-            x = float(v)
-            if x <= 1:
-                return f"{x * 100:.0f}%"
-            return f"{x:.0f}%"
-        except Exception:
-            return clean(v)
-
-    # Separación exacta según Tipo_Registro.
-    tipo = hr[C_TIPO].astype(str).map(normalizar)
-    macros_df = hr[tipo.eq("macro")].copy()
-    micros_df = hr[tipo.eq("micro")].copy()
-
-    componentes = []
-
-    component_names = [
-        clean(x)
-        for x in hr[C_COMP].dropna().tolist()
-        if clean(x)
-    ]
-    # Orden de aparición, sin inventar ni ordenar alfabéticamente.
-    component_names = list(dict.fromkeys(component_names))
-
-    for comp_name in component_names:
-        comp_macro = macros_df[
-            macros_df[C_COMP].astype(str).str.strip().eq(comp_name)
-        ].copy()
-
-        comp_micro = micros_df[
-            micros_df[C_COMP].astype(str).str.strip().eq(comp_name)
-        ].copy()
-
-        macros = []
-
-        for _, m in comp_macro.iterrows():
-            macro_id = raw(m, C_ID)
-
-            # La relación Macro -> Micro se hace con ID_BI, como en la hoja.
-            if C_IDBI is not None:
-                hijos = comp_micro[
-                    comp_micro[C_IDBI]
-                    .astype(str)
-                    .str.strip()
-                    .eq(macro_id)
-                ].copy()
-            else:
-                hijos = pd.DataFrame(columns=comp_micro.columns)
-
-            micros = []
-
-            for _, mi in hijos.iterrows():
-                micros.append({
-                    "id_proyecto": raw(mi, C_PROY),
-                    "tipo_registro": raw(mi, C_TIPO),
-                    "id_registro": raw(mi, C_ID),
-                    "id_bi": raw(mi, C_IDBI),
-                    "componente": raw(mi, C_COMP),
-                    "nombre": raw(mi, C_NOMBRE),
-                    "fecha_inicio": fmt_fecha(mi[C_INICIO]) if C_INICIO else "",
-                    "fecha_fin": fmt_fecha(mi[C_FIN]) if C_FIN else "",
-                    "fecha_efectiva_finalizacion": (
-                        fmt_fecha(mi[C_EFECTIVA]) if C_EFECTIVA else ""
-                    ),
-                    "avance": avance_text(mi),
-                    "estado": raw(mi, C_ESTADO),
-                    "responsable": raw(mi, C_RESP),
-                    "requiere_atencion_ministra": raw(mi, C_ATENCION),
-                    "observaciones": raw(mi, C_OBS),
-                    "alerta_vencimiento": raw(mi, C_ALERTA),
-                })
-
-            macros.append({
-                "id_proyecto": raw(m, C_PROY),
-                "tipo_registro": raw(m, C_TIPO),
-                "id_registro": macro_id,
-                "id_bi": raw(m, C_IDBI),
-                "componente": raw(m, C_COMP),
-                "nombre": raw(m, C_NOMBRE),
-                "fecha_inicio": fmt_fecha(m[C_INICIO]) if C_INICIO else "",
-                "fecha_fin": fmt_fecha(m[C_FIN]) if C_FIN else "",
-                "fecha_efectiva_finalizacion": (
-                    fmt_fecha(m[C_EFECTIVA]) if C_EFECTIVA else ""
-                ),
-                "avance": avance_text(m),
-                "estado": raw(m, C_ESTADO),
-                "responsable": raw(m, C_RESP),
-                "requiere_atencion_ministra": raw(m, C_ATENCION),
-                "observaciones": raw(m, C_OBS),
-                "alerta_vencimiento": raw(m, C_ALERTA),
-                "micros": micros,
-            })
-
-        componentes.append({
-            "nombre": comp_name,
-            "macros": macros,
-        })
-
-    return nombre_proyecto, ficha, {
-        "componentes": componentes,
-        "columnas_detectadas": list(hr.columns),
-    }
-
-
-def load_details_for_projects(proyectos: dict):
-    def _loader_raw():
-        fichas_raw = {}
-        prett_raw = []
-        b = descargar_excel(URL_BANCO_PROYECTOS)
-        if b is not None:
-            try:
-                fichas_raw = procesar_fichas(b)
-            except Exception:
-                fichas_raw = {}
-        for url in URLS_PRETT:
-            b = descargar_excel(url)
-            if b is None:
-                continue
-            try:
-                result = procesar_prett(b)
-                if result and result[0]:
-                    prett_raw.append(result)
-            except Exception:
-                continue
-        return fichas_raw, prett_raw
-
-    fichas_raw, prett_raw = cached_value("details_raw", _loader_raw)
-    nombres_norm = {normalizar(p): p for p in proyectos}
-    fichas, roadmaps = {}, {}
-    for nombre_banco, ficha in fichas_raw.items():
-        real = match_project(nombre_banco, nombres_norm)
-        if real:
-            fichas[real] = ficha
-    for nombre_excel, ficha_prett, roadmap in prett_raw:
-        real = match_project(nombre_excel, nombres_norm)
-
-        if real:
-            # Para el proyecto que tiene ficha PRETT usamos únicamente
-            # los campos que efectivamente provienen de esa ficha.
-            fichas[real] = ficha_prett
-            roadmaps[real] = roadmap
-
-    return fichas, roadmaps
-
-
-# =============================================================================
-# 8. EJECUCIÓN MENSUAL / GANTT
-# =============================================================================
-
-
-def _leer_ejecucion_crudo(buf: io.BytesIO) -> pd.DataFrame:
-    """
-    Lee solo las 5 columnas necesarias de la hoja EJECUCION (~108,000 filas,
-    54 columnas). Usa python-calamine si está instalado (motor en Rust,
-    varias veces más rápido para archivos grandes); si no está disponible,
-    cae de vuelta a openpyxl en modo read_only, que sigue siendo más
-    liviano que pd.read_excel normal para un archivo de este tamaño.
-    """
-    necesarias = ["DATE", "NOMBRE DEL PROYECTO", "VICEMINISTERIO PROYECTOS", "CODIFICADO", "DEVENGADO"]
-
-    if _HAS_CALAMINE:
-        buf.seek(0)
-        df = pd.read_excel(
-            buf,
-            sheet_name="EJECUCION",
-            engine="calamine",
-            usecols=lambda c: str(c).strip() in necesarias,
-        )
-        df.columns = [str(c).strip() for c in df.columns]
-        df = df[df["NOMBRE DEL PROYECTO"].astype(str).str.strip().str.lower().ne("corriente")].copy()
-        return df
-
-    buf.seek(0)
-    wb = openpyxl.load_workbook(buf, read_only=True, data_only=True)
-    ws = wb["EJECUCION"]
-
-    filas = ws.iter_rows(values_only=True)
-    encabezados = [str(c).strip() if c is not None else "" for c in next(filas)]
-
-    indices = {}
-    for nombre in necesarias:
-        for i, h in enumerate(encabezados):
-            if h == nombre:
-                indices[nombre] = i
-                break
-
-    faltantes = [n for n in necesarias if n not in indices]
-    if faltantes:
-        wb.close()
-        raise ValueError(f"Columnas no encontradas en EJECUCION: {faltantes}")
-
-    registros = []
-    for fila in filas:
-        nombre_proy = fila[indices["NOMBRE DEL PROYECTO"]]
-        if not nombre_proy or str(nombre_proy).strip().lower() == "corriente":
-            continue
-        registros.append({
-            "DATE": fila[indices["DATE"]],
-            "NOMBRE DEL PROYECTO": str(nombre_proy).strip(),
-            "VICEMINISTERIO PROYECTOS": fila[indices["VICEMINISTERIO PROYECTOS"]],
-            "CODIFICADO": fila[indices["CODIFICADO"]] or 0,
-            "DEVENGADO": fila[indices["DEVENGADO"]] or 0,
-        })
-    wb.close()
-    return pd.DataFrame(registros)
-
-
-def procesar_ejecucion_mensual(buf: io.BytesIO) -> pd.DataFrame:
-    df = _leer_ejecucion_crudo(buf)
-    df["DATE"] = pd.to_datetime(df["DATE"], errors="coerce")
-    df = df.dropna(subset=["DATE"])
-
-    mensual = (
-        df.groupby(["NOMBRE DEL PROYECTO", "DATE"], as_index=False)
-        .agg(
-            codificado=("CODIFICADO", "sum"),
-            devengado=("DEVENGADO", "sum"),
-            vice=("VICEMINISTERIO PROYECTOS", "first"),
-        )
-        .sort_values(["NOMBRE DEL PROYECTO", "DATE"])
-    )
-    mensual = mensual[(mensual["codificado"] > 0) | (mensual["devengado"] > 0)].copy()
-
-    mensual["devengado_mes"] = (
-        mensual.groupby("NOMBRE DEL PROYECTO")["devengado"]
-        .diff()
-        .fillna(mensual["devengado"])
-        .clip(lower=0)
-    )
-    mensual["estado_mes"] = mensual["devengado_mes"].gt(0).map(
-        {True: "Con ejecución", False: "Sin ejecución"}
-    )
-    mensual["pct_corte"] = (
-        mensual["devengado"]
-        .div(mensual["codificado"].replace(0, pd.NA))
-        .mul(100)
-        .fillna(0)
-        .clip(lower=0)
-        .round(1)
-    )
-    return mensual.rename(columns={"NOMBRE DEL PROYECTO": "proyecto", "DATE": "fecha"})
-
-
-def _guardar_cache_ejecucion(df: pd.DataFrame):
-    """Guarda el Gantt ya procesado para que el siguiente arranque sea rápido."""
-    if df is None or df.empty:
-        return
-    try:
-        tmp = _EJECUCION_CACHE_FILE + ".tmp"
-        df.to_pickle(tmp)
-        os.replace(tmp, _EJECUCION_CACHE_FILE)
-    except Exception:
-        pass
-
-
-def _leer_cache_ejecucion() -> pd.DataFrame:
-    """Lee la última versión procesada disponible en disco."""
-    try:
-        if os.path.exists(_EJECUCION_CACHE_FILE):
-            df = pd.read_pickle(_EJECUCION_CACHE_FILE)
-            if isinstance(df, pd.DataFrame) and not df.empty:
-                return df
-    except Exception:
-        pass
-    return pd.DataFrame()
-
-
-def _descargar_y_procesar_ejecucion() -> pd.DataFrame:
-    """
-    Consulta SharePoint solo cuando corresponde refrescar. Si la descarga
-    funciona, actualiza también la copia local procesada.
-    """
-    b = descargar_excel(URL_EJECUCION_MENSUAL)
-    if b is None:
-        return pd.DataFrame()
-
-    df = procesar_ejecucion_mensual(b)
-    if df is not None and not df.empty:
-        _guardar_cache_ejecucion(df)
-    return df
-
-
-def load_ejecucion(proyectos: dict) -> pd.DataFrame:
-    """
-    Prioridad:
-    1. RAM (respuesta instantánea durante la sesión).
-    2. Copia procesada en disco (respuesta rápida al reabrir la app).
-    3. SharePoint (solo si todavía no existe una copia).
-    """
-    with _CACHE_LOCK:
-        item = _CACHE.get("ejecucion_mensual")
-        if item and item[1] is not None and not item[1].empty:
-            df = item[1]
-        else:
-            df = None
-
-    if df is None:
-        local = _leer_cache_ejecucion()
-        if not local.empty:
-            df = local
-            with _CACHE_LOCK:
-                _CACHE["ejecucion_mensual"] = (time.time(), df)
-        else:
-            df = _descargar_y_procesar_ejecucion()
-            if df is None or df.empty:
-                return pd.DataFrame()
-            with _CACHE_LOCK:
-                _CACHE["ejecucion_mensual"] = (time.time(), df)
-
-    nombres_norm = {normalizar(p): p for p in proyectos}
-    out = df.copy()
-    out["proyecto"] = out["proyecto"].apply(
-        lambda n: match_project(n, nombres_norm) or str(n).strip()
-    )
-    return out
-
-
-def refrescar_ejecucion_en_segundo_plano():
-    """
-    Actualiza SharePoint sin bloquear la interfaz. El usuario puede trabajar
-    con la última copia disponible mientras se termina la sincronización.
-    """
-    try:
-        nuevo = _descargar_y_procesar_ejecucion()
-        if nuevo is not None and not nuevo.empty:
-            with _CACHE_LOCK:
-                _CACHE["ejecucion_mensual"] = (time.time(), nuevo)
-    except Exception:
-        pass
-
-
-def gantt_figure(df: pd.DataFrame, vice_selected: str) -> go.Figure:
-    if df is None or df.empty:
-        fig = go.Figure()
-        fig.add_annotation(
-            text="No se pudo cargar EJECUCION_MENSUAL",
-            showarrow=False, x=.5, y=.5,
-        )
-        fig.update_layout(height=260, xaxis_visible=False, yaxis_visible=False)
-        return fig
-
-    data = df.copy()
-    data["vice_short"] = data["vice"].apply(vice_short)
-    data = data[data["vice_short"] == vice_selected].copy()
-
-    if data.empty:
-        fig = go.Figure()
-        fig.add_annotation(
-            text="Sin registros para este viceministerio",
-            showarrow=False, x=.5, y=.5,
-        )
-        fig.update_layout(height=260, xaxis_visible=False, yaxis_visible=False)
-        return fig
-
-    data["mes_inicio"] = data["fecha"].dt.to_period("M").dt.start_time
-
-    order = (
-        data.groupby("proyecto")["fecha"]
-        .max()
-        .sort_values(ascending=False)
-        .index
-        .tolist()
-    )
-
-    summary = data.groupby("proyecto").agg(
-        total_meses=("estado_mes", "size"),
-        meses_con_ejecucion=(
-            "estado_mes",
-            lambda s: int((s == "Con ejecución").sum()),
-        ),
-    )
-
-    fig = go.Figure()
-    colors = {
-        "Con ejecución": PURPLE_700,
-        "Sin ejecución": PURPLE_300,
-    }
-
-    xmin = data["mes_inicio"].min()
-    xmax = data["mes_inicio"].max() + pd.offsets.MonthBegin(2)
-
-    # -----------------------------------------------------------------
-    # ETIQUETAS CLICABLES
-    # -----------------------------------------------------------------
-    # En lugar de depender de los ticks del eje Y, que Plotly no devuelve
-    # como clickData, se dibujan los nombres como un trace de texto.
-    # Ese texto sí genera clickData y lleva el nombre del proyecto.
-    fig.add_trace(go.Scatter(
-        x=[xmin] * len(order),
-        y=order,
-        mode="text",
-        text=order,
-        textposition="middle left",
-        textfont=dict(
-            size=11,
-            color=PURPLE_800,
-            family="Segoe UI",
-        ),
-        customdata=[[project, "__PROJECT_LABEL__"] for project in order],
-        hovertemplate="<b>%{customdata[0]}</b><br>Haz clic para ver el detalle<extra></extra>",
-        showlegend=False,
-        cliponaxis=False,
-        name="Proyecto",
-    ))
-
-    # -----------------------------------------------------------------
-    # SEGMENTOS MENSUALES
-    # -----------------------------------------------------------------
-    for estado in ["Con ejecución", "Sin ejecución"]:
-        sub = data[data["estado_mes"] == estado].copy()
-        if sub.empty:
-            continue
-
-        durations = []
-        custom = []
-
-        for _, row in sub.iterrows():
-            ini = pd.Timestamp(row["mes_inicio"])
-            fin = ini + pd.offsets.MonthBegin(1)
-            durations.append(int((fin - ini).total_seconds() * 1000))
-            custom.append([
-                row["proyecto"],
-                pd.Timestamp(row["fecha"]).strftime("%b %Y"),
-                float(row["codificado"]),
-                float(row["devengado"]),
-                float(row["devengado_mes"]),
-                float(row["pct_corte"]),
-                estado,
-                "__MONTH_SEGMENT__",
-            ])
-
-        fig.add_trace(go.Bar(
-            name=estado,
-            x=durations,
-            base=sub["mes_inicio"].tolist(),
-            y=sub["proyecto"].tolist(),
-            orientation="h",
-            marker=dict(
-                color=colors[estado],
-                line=dict(color="white", width=1),
-            ),
-            width=.62,
-            customdata=custom,
-            hovertemplate=(
-                "<b>%{customdata[0]}</b><br>"
-                "Mes: %{customdata[1]}<br>"
-                "Estado mensual: %{customdata[6]}<br>"
-                "Codificado al corte: $ %{customdata[2]:,.2f}<br>"
-                "Devengado acumulado: $ %{customdata[3]:,.2f}<br>"
-                "Devengado del mes: $ %{customdata[4]:,.2f}<br>"
-                "Ejecución al corte: %{customdata[5]:.1f}%"
-                "<extra></extra>"
-            ),
-        ))
-
-    # Porcentaje de meses con ejecución
-    for project in order:
-        r = summary.loc[project]
-        total = int(r["total_meses"])
-        executed = int(r["meses_con_ejecucion"])
-        pct = 100 * executed / total if total else 0
-
-        fig.add_annotation(
-            x=xmax - pd.Timedelta(days=4),
-            y=project,
-            text=f"{pct:.0f}% ({executed}/{total})",
-            showarrow=False,
-            xanchor="right",
-            font=dict(size=10, color=INK),
+    def icono(codigo):
+        return html.Img(
+            src="data:image/svg+xml;utf8," + quote(iconos_portada[codigo]),
+            className="portada-boton-icono-svg",
+            alt="",
+            **{"aria-hidden": "true"},
         )
 
-    fig.update_layout(
-        height=max(330, 62 * len(order) + 110),
-
-        # Margen izquierdo amplio: aquí se muestran los nombres clicables.
-        margin=dict(l=330, r=16, t=50, b=35),
-
-        xaxis=dict(
-            type="date",
-            range=[xmin, xmax],
-            tickformat="%b",
-            dtick="M1",
-            gridcolor="#E9EBF3",
-        ),
-
-        # Ocultamos los labels normales porque ahora los nombres clicables
-        # los dibuja el trace Scatter.
-        yaxis=dict(
-            categoryorder="array",
-            categoryarray=order,
-            autorange="reversed",
-            showticklabels=False,
-            automargin=False,
-        ),
-
-        barmode="overlay",
-        legend=dict(
-            orientation="h",
-            y=1.08,
-            x=.28,
-        ),
-        plot_bgcolor="white",
-        paper_bgcolor="white",
-        clickmode="event+select",
-        hovermode="closest",
-    )
-
-    return fig
-
-
-
-def _timeline_months(data: pd.DataFrame) -> list[pd.Timestamp]:
-    if data is None or data.empty:
-        return []
-    vals = (
-        data["fecha"].dt.to_period("M")
-        .dropna().drop_duplicates().sort_values().tolist()
-    )
-    return [pd.Period(v, freq="M").to_timestamp() for v in vals]
-
-
-def _timeline_hover(row) -> str:
-    return (
-        f"{pd.Timestamp(row['fecha']).strftime('%b %Y')} | "
-        f"{str(row.get('estado_mes', ''))} | "
-        f"Codificado: $ {float(row.get('codificado', 0)):,.2f} | "
-        f"Devengado acumulado: $ {float(row.get('devengado', 0)):,.2f} | "
-        f"Devengado del mes: $ {float(row.get('devengado_mes', 0)):,.2f} | "
-        f"Ejecución al corte: {float(row.get('pct_corte', 0)):.1f}%"
-    )
-
-
-def timeline_matrix_component(df: pd.DataFrame, vice_selected: str):
-    if df is None or df.empty:
-        return html.Div("La ejecución mensual aún no está disponible. El resto del panel puede seguir utilizándose mientras se actualizan los datos.", className="alert")
-
-    data = df.copy()
-    data["vice_short"] = data["vice"].apply(vice_short)
-    data = data[data["vice_short"] == vice_selected].copy()
-
-    if data.empty:
-        return html.Div("Sin registros para este viceministerio.", className="alert")
-
-    data["month_start"] = data["fecha"].dt.to_period("M").dt.start_time
-    months = _timeline_months(data)
-    if len(months) > 8:
-        months = months[-8:]
-
-    data = data[data["month_start"].isin(set(months))].copy()
-
-    order = (
-        data.groupby("proyecto")["fecha"]
-        .max().sort_values(ascending=False).index.tolist()
-    )
-
-    month_labels = {1:"Ene",2:"Feb",3:"Mar",4:"Abr",5:"May",6:"Jun",7:"Jul",8:"Ago",9:"Sep",10:"Oct",11:"Nov",12:"Dic"}
-
-    legend = html.Div([
-        html.Span([html.Span(className="timeline-legend-box exec"), "Con ejecución"], className="timeline-legend-item"),
-        html.Span([html.Span(className="timeline-legend-box noexec"), "Sin ejecución"], className="timeline-legend-item"),
-    ], className="timeline-legend")
-
-    grid = [html.Div("Proyecto", className="timeline-head project-col")]
-    for m in months:
-        grid.append(html.Div(month_labels[m.month], className="timeline-head"))
-    grid.extend([
-        html.Div("Avance", className="timeline-head"),
-        html.Div("Segmentos", className="timeline-head"),
-    ])
-
-    for row_idx, project in enumerate(order):
-        sub = data[data["proyecto"] == project].sort_values("month_start").copy()
-        by_month = {pd.Timestamp(r["month_start"]): r for _, r in sub.iterrows()}
-        executed = int((sub["estado_mes"] == "Con ejecución").sum())
-        total = int(len(sub))
-        pct = 100 * executed / total if total else 0
-
-        grid.append(html.Div(
-            html.Button(
-                project,
-                id={"type":"timeline-project","index":row_idx},
-                value=project,
-                n_clicks=0,
-                className="timeline-project-button",
-                title="Ver detalle del proyecto",
-            ),
-            className="timeline-project-cell"
-        ))
-
-        for m in months:
-            r = by_month.get(pd.Timestamp(m))
-            if r is None:
-                cls = "timeline-segment empty"
-                title = "Sin registro para este mes"
-            else:
-                cls = "timeline-segment exec" if str(r.get("estado_mes")) == "Con ejecución" else "timeline-segment noexec"
-                title = _timeline_hover(r)
-            grid.append(html.Div(html.Div(className=cls, title=title), className="timeline-month-cell"))
-
-        grid.append(html.Div([
-            html.Div(f"{pct:.0f}%", className="timeline-progress-label"),
-            html.Div(
-                html.Div(className="timeline-mini-fill", style={"width":f"{max(0,min(pct,100)):.1f}%"}),
-                className="timeline-mini-track"
-            ),
-        ], className="timeline-progress-cell"))
-
-        grid.append(html.Div(f"{executed} / {total}", className="timeline-segments-cell"))
-
-    template = f"minmax(310px,1.9fr) repeat({len(months)}, minmax(72px,.6fr)) 112px 86px"
-
-    return html.Div([
-        legend,
-        html.Div(
-            html.Div(grid, className="timeline-grid", style={"gridTemplateColumns":template}),
-            className="timeline-matrix"
-        ),
-        html.Div(
-            "Haga clic sobre el nombre del proyecto para consultar su detalle. "
-            "Pase el mouse sobre cada mes para revisar el movimiento presupuestario.",
-            className="timeline-tip"
-        ),
-    ])
-
-
-# =============================================================================
-# 9. FIGURAS / COMPONENTES UI
-# =============================================================================
-
-
-def aggregate_kpis(proyectos: dict):
-    n = len(proyectos)
-    cod = sum(p["codificado"] for p in proyectos.values())
-    comp = sum(p["comprometido"] for p in proyectos.values())
-    dev = sum(p["devengado"] for p in proyectos.values())
-    disp = sum(p["saldo_disponible"] for p in proyectos.values())
-    pct = round(dev / cod * 100, 1) if cod else 0
-    return n, cod, comp, dev, disp, pct
-
-
-def kpi_card(icon, value, label, bg):
-    return html.Div([
-        html.Div(icon, className="kpi-icon", style={"background": bg}),
-        html.Div(value, className="kpi-value"),
-        html.Div(label, className="kpi-label"),
-    ], className="kpi-card")
-
-
-def render_kpis(proyectos):
-    n, cod, comp, dev, disp, pct = aggregate_kpis(proyectos)
-    values = [
-        ("📁", str(n), "Proyectos", PURPLE_100),
-        ("💵", fmt_mm(cod), "Codificado", "#E9F3FF"),
-        ("📝", fmt_mm(comp), "Comprometido", "#F1ECFF"),
-        ("✅", fmt_mm(dev), "Devengado", "#E8F7F0"),
-        ("👛", fmt_mm(disp), "Disponible", "#FFF3E3"),
-        ("📊", f"{pct}%", "% Ejecución", PURPLE_100),
-    ]
-    return html.Div([kpi_card(*x) for x in values], className="kpi-grid")
-
-
-def presupuesto_vice_figure(proyectos):
-    rows = []
-    for p in proyectos.values():
-        rows.append({
-            "vice": vice_short(p.get("viceministerio")),
-            "asignado": p["codificado"],
-            "ejecutado": p["devengado"],
-        })
-    df = pd.DataFrame(rows)
-    if df.empty:
-        return go.Figure()
-    df = df.groupby("vice", as_index=False)[["asignado", "ejecutado"]].sum().sort_values("asignado")
-    fig = go.Figure()
-    fig.add_trace(go.Bar(
-        x=df["asignado"] / 1e6, y=df["vice"], orientation="h",
-        name="Presupuesto asignado", marker_color=PURPLE_300,
-        text=[f"$ {v/1e6:,.1f} MM" for v in df["asignado"]], textposition="outside",
-    ))
-    fig.add_trace(go.Bar(
-        x=df["ejecutado"] / 1e6, y=df["vice"], orientation="h",
-        name="Ejecutado", marker_color=PURPLE_700,
-        text=[f"$ {v/1e6:,.1f} MM" for v in df["ejecutado"]], textposition="outside",
-    ))
-    fig.update_layout(
-        barmode="group", height=325, margin=dict(l=0, r=80, t=20, b=10),
-        xaxis=dict(visible=False), legend=dict(orientation="h", y=1.12, x=.08),
-        plot_bgcolor="white", paper_bgcolor="white",
-    )
-    return fig
-
-
-def header_block(title="Panel de seguimiento de proyectos de inversión — MINEDEC", subtitle="Presupuesto general y control de actividades"):
-    return html.Div([
-        html.Div([
-            html.Div(title, className="top-title"),
-            html.Div(subtitle, className="top-subtitle"),
-        ], className="top-gradient"),
-        html.Div([
-            html.Div("Actualizado", className="updated-label"),
-            html.Div(datetime.now().strftime("%d/%m/%Y"), className="updated-value"),
-        ], className="updated-card"),
-    ], className="header-card")
-
-
-def sidebar():
-    return html.Aside([
-        html.Div("‹‹", className="collapse-symbol"),
-        html.Div([
-            html.Img(src=logo_src(), className="sidebar-logo", id="sidebar-logo"),
-        ], className="logo-box"),
-        html.H3("Panel de Inversión", className="sidebar-title"),
-        html.P("Seguimiento institucional", className="sidebar-subtitle"),
-        html.Nav([
-            dcc.Link("⌂  Inicio", href="/inicio", className="nav-button"),
-            dcc.Link("▦  Proyectos", href="/proyectos", className="nav-button"),
-        ]),
-        html.Div(className="sidebar-spacer"),
-        html.P(f"Actualizado {datetime.now().strftime('%d/%m/%Y')}", className="sidebar-date"),
-        html.Button("↪ Cerrar sesión", id="logout-button", className="logout-button", n_clicks=0),
-    ], className="sidebar")
-
-
-def app_shell(content):
-    return html.Div([
-        sidebar(),
-        html.Main(content, className="main-content"),
-    ], className="app-shell")
-
-
-def card(children, className="content-card"):
-    return html.Div(children, className=className)
-
-
-# =============================================================================
-# 10. LOGIN
-# =============================================================================
-
-
-def login_layout(error_text=""):
-    return html.Div([
-        html.Div([
-            html.Div([
-                html.Img(src=logo_src(), className="login-logo"),
-                html.H1("Seguimiento de proyectos de inversión", className="login-title"),
-                html.P("Panel de Inversión", className="login-subtitle"),
-                dcc.Input(
-                    id="password-input", type="password", placeholder="Ingresa la contraseña",
-                    className="password-input", debounce=False,
-                ),
-                html.Button("Ingresar", id="login-button", className="login-button", n_clicks=0),
-                html.Div(error_text, id="login-error", className="login-error"),
-                html.P("Acceso exclusivo para personal autorizado", className="login-foot"),
-            ], className="login-card")
-        ], className="login-center")
-    ], className="login-page")
-
-
-# =============================================================================
-# 11. INICIO
-# =============================================================================
-
-
-def home_layout():
-    proyectos = load_presupuesto()
-    if not proyectos:
-        return app_shell([
-            header_block(),
-            card(html.Div("No se pudo leer MINEDEC 2.0 desde SharePoint.", className="alert")),
-        ])
-
-    # La línea de tiempo necesita la base de ejecución mensual.
-    # Si por cualquier motivo SharePoint/cache falla, el resto del dashboard
-    # sigue funcionando y la sección temporal muestra un aviso en vez de
-    # provocar un NameError o tumbar la página completa.
-    try:
-        ejecucion = load_ejecucion(proyectos)
-    except Exception:
-        ejecucion = pd.DataFrame()
-
-    vices = sorted({vice_short(p.get("viceministerio")) for p in proyectos.values()})
-    default_vice = vices[0] if vices else None
-
-    return app_shell([
-        header_block(),
-        render_kpis(proyectos),
-        card([
-            html.H3("Presupuesto asignado vs. ejecutado por viceministerio", className="section-title"),
-            html.P("Montos en millones USD", className="section-subtitle"),
-            dcc.Graph(
-                id="budget-vice-graph", figure=presupuesto_vice_figure(proyectos),
-                config={"displayModeBar": False}, className="graph",
-            ),
-        ]),
-        card([
-            html.H3("Línea de tiempo por proyecto", className="section-title"),
-            html.P(
-                "Movimiento presupuestario mensual · morado oscuro: con ejecución en el mes · morado claro: sin ejecución en el mes",
-                className="section-subtitle",
-            ),
-            dcc.RadioItems(
-                id="vice-radio",
-                options=[{"label": v, "value": v} for v in vices],
-                value=default_vice,
-                inline=True,
-                className="vice-radio",
-                inputClassName="radio-input",
-                labelClassName="radio-label",
-            ),
-            html.Div(
-                timeline_matrix_component(ejecucion, default_vice),
-                id="timeline-matrix-container",
-            ),
-        ]),
-        html.Div(
-            id="home-project-detail",
-            className="timeline-selected-wrap",
-        ),
-    ])
-
-
-# =============================================================================
-# 12. PROYECTOS
-# =============================================================================
-
-
-def project_row(name, p):
-    return html.Div([
-        html.Div("▦", className="project-icon"),
-        html.Div([
-            html.Div(name, className="project-name"),
-            html.Span(vice_short(p.get("viceministerio")), className="soft-tag"),
-        ], className="project-main"),
-        html.Div([html.Strong(fmt_mm(p["codificado"])), html.Small("Codificado")], className="project-metric"),
-        html.Div([html.Strong(f"{p['pct_ejecucion']}%"), html.Small("Ejecución")], className="project-metric"),
-        dcc.Link("Ver detalle ›", href=f"/detalle?project={quote(name)}", className="detail-link"),
-    ], className="project-row")
-
-
-def projects_layout():
-    proyectos = load_presupuesto()
-    vices = sorted({vice_short(p.get("viceministerio")) for p in proyectos.values()})
-    return app_shell([
-        header_block("Proyectos de inversión", "Consulta y seguimiento individual de los proyectos"),
-        html.Div([
-            dcc.Input(id="project-search", placeholder="Buscar proyecto por nombre", className="search-input", debounce=True),
-            dcc.Dropdown(
-                id="project-vice-filter",
-                options=[{"label": "Todos", "value": "Todos"}] + [{"label": v, "value": v} for v in vices],
-                value="Todos", clearable=False, className="vice-dropdown",
-            ),
-        ], className="project-filters"),
-        html.Div(id="project-list"),
-    ])
-
-
-# =============================================================================
-# 13. DETALLE
-# =============================================================================
-
-
-def budget_detail_fig(p):
-    labels = ["Codificado", "Comprometido", "Devengado", "Disponible"]
-    values = [p["codificado"], p["comprometido"], p["devengado"], p["saldo_disponible"]]
-    fig = go.Figure(go.Bar(
-        x=values, y=labels, orientation="h",
-        marker_color=[PURPLE_300, PURPLE_500, PURPLE_700, PURPLE_100],
-        text=[fmt_money(v) for v in values], textposition="outside",
-    ))
-    fig.update_layout(height=280, margin=dict(l=0, r=120, t=10, b=10), xaxis_visible=False, yaxis_autorange="reversed", plot_bgcolor="white", paper_bgcolor="white")
-    return fig
-
-
-def composition_fig(p):
-    cod, dev = float(p["codificado"]), float(p["devengado"])
-    pending = max(cod - dev, 0)
-    fig = go.Figure(go.Pie(
-        labels=["Devengado", "Pendiente de devengar"], values=[dev, pending], hole=.72,
-        marker_colors=[PURPLE_700, PURPLE_100], textinfo="percent",
-    ))
-    fig.update_layout(
-        height=280, margin=dict(l=0, r=0, t=10, b=10),
-        annotations=[dict(text=f"{p['pct_ejecucion']}%<br>ejecutado", x=.5, y=.5, showarrow=False, font_size=16)],
-    )
-    return fig
-
-
-def dated_list(title, entries):
-    return html.Details([
-        html.Summary(f"{title} ({len(entries)})"),
-        html.Div([
-            html.P([html.Strong(f"{e['fecha']} — "), e["texto"]]) for e in reversed(entries)
-        ] if entries else [html.P("No hay registros con fecha.")], className="details-body"),
-    ], className="native-details")
-
-
-def _display(v):
-    """Representación visual de una celda vacía, sin inventar contenido."""
-    if v is None:
-        return "—"
-    s = str(v).strip()
-    return s if s and s.lower() not in ("nan", "none", "nat") else "—"
-
-
-def _status_class(value):
-    n = normalizar(value)
-
-    if any(k in n for k in ["finalizada", "completada", "completado"]):
-        return "status-pill done"
-
-    if "vencida" in n:
-        return "status-pill due"
-
-    if any(k in n for k in ["revision", "actualizacion", "espera", "pendiente"]):
-        return "status-pill review"
-
-    return "status-pill"
-
-
-def _route_field(label, value, wide=False):
-    return html.Div(
-        [
-            html.Div(label, className="route-field-label"),
-            html.Div(_display(value), className="route-field-value"),
-        ],
-        className=("route-field route-field-wide" if wide else "route-field"),
-    )
-
-
-
-def _route_value(value):
-    """Muestra exactamente el dato leído; vacío = raya visual."""
-    if value is None:
-        return "—"
-    s = str(value).strip()
-    return s if s and s.lower() not in ("nan", "none", "nat") else "—"
-
-
-def _route_metric(label, value, wide=False):
-    return html.Div(
-        [
-            html.Div(label, className="cascade-metric-label"),
-            html.Div(_route_value(value), className="cascade-metric-value"),
-        ],
-        className=(
-            "cascade-metric cascade-metric-wide"
-            if wide
-            else "cascade-metric"
-        ),
-    )
-
-
-def _macro_summary_card(macro):
-    """Resumen ejecutivo del Macro seleccionado."""
-    alerta = _route_value(macro.get("alerta_vencimiento"))
-
-    return html.Div(
-        [
-            html.Div(
-                [
-                    html.Div(
-                        [
-                            html.Span("MACRO", className="cascade-tag"),
-                            html.Span(
-                                _route_value(macro.get("id_registro")),
-                                className="cascade-code",
-                            ),
-                        ],
-                        className="cascade-eyebrow",
-                    ),
-                    html.H4(
-                        _route_value(macro.get("nombre")),
-                        className="cascade-selected-title",
-                    ),
-                ]
-            ),
-            html.Span(
-                alerta,
-                className=_status_class(alerta),
-            ),
-        ],
-        className="cascade-selected-head",
-    )
-
-
-def _route_detail_grid(item):
-    """
-    Campos reales de HOJA_RUTA.
-    No calcula ni completa ninguna variable.
-    """
-    return html.Div(
-        [
-            _route_metric("Fecha inicio", item.get("fecha_inicio")),
-            _route_metric("Fecha fin", item.get("fecha_fin")),
-            _route_metric(
-                "Fecha efectiva finalización",
-                item.get("fecha_efectiva_finalizacion"),
-            ),
-            _route_metric("% Avance", item.get("avance")),
-            _route_metric("Estado", item.get("estado")),
-            _route_metric("Responsable", item.get("responsable")),
-            _route_metric(
-                "Requiere Atención Ministra",
-                item.get("requiere_atencion_ministra"),
-            ),
-            _route_metric(
-                "Alerta de vencimiento",
-                item.get("alerta_vencimiento"),
-            ),
-            _route_metric(
-                "Observaciones",
-                item.get("observaciones"),
-                wide=True,
-            ),
-        ],
-        className="cascade-detail-grid",
-    )
-
-
-def _find_component(rm, component_name):
-    for comp in (rm or {}).get("componentes", []):
-        if str(comp.get("nombre", "")) == str(component_name):
-            return comp
-    return None
-
-
-def _find_macro(rm, component_name, macro_id):
-    comp = _find_component(rm, component_name)
-    if not comp:
-        return None
-
-    for macro in comp.get("macros", []):
-        if str(macro.get("id_registro", "")) == str(macro_id):
-            return macro
-    return None
-
-
-def _find_micro(rm, component_name, macro_id, micro_id):
-    macro = _find_macro(rm, component_name, macro_id)
-    if not macro:
-        return None
-
-    for micro in macro.get("micros", []):
-        if str(micro.get("id_registro", "")) == str(micro_id):
-            return micro
-    return None
-
-
-def prett_section(rm):
-    """
-    Navegación ejecutiva:
-        Componente -> Macro -> Micro -> detalle
-    Nada se despliega masivamente al inicio.
-    """
-    componentes = (rm or {}).get("componentes", [])
-
-    if not componentes:
-        return html.Div(
-            "No se encontraron registros de Componente/Macro/Micro en HOJA_RUTA.",
-            className="info-alert",
-        )
-
-    component_options = [
-        {
-            "label": str(comp.get("nombre", "")),
-            "value": str(comp.get("nombre", "")),
-        }
-        for comp in componentes
-        if str(comp.get("nombre", "")).strip()
-    ]
-
-    return html.Div(
-        [
-            # Los datos ya procesados se guardan en el navegador para que
-            # los cambios Componente/Macro/Micro sean instantáneos.
-            dcc.Store(
-                id="route-roadmap-store",
-                data=rm,
-                storage_type="memory",
-            ),
-
-            html.Div(
-                [
-                    html.Div(
-                        [
-                            html.Div(
-                                "Seguimiento operativo",
-                                className="cascade-kicker",
-                            ),
-                            html.H3(
-                                "Desagregación por componente",
-                                className="cascade-section-title",
-                            ),
-                            html.P(
-                                "Seleccione un componente y avance por las etapas Macro "
-                                "hasta consultar el detalle Micro.",
-                                className="cascade-section-subtitle",
-                            ),
-                        ]
-                    ),
-                    html.Div(
-                        [
-                            html.Span(
-                                str(len(component_options)),
-                                className="cascade-count-number",
-                            ),
-                            html.Span(
-                                "componente" if len(component_options) == 1 else "componentes",
-                                className="cascade-count-label",
-                            ),
-                        ],
-                        className="cascade-count",
-                    ),
-                ],
-                className="cascade-header",
-            ),
-
-            # PASO 1
-            html.Div(
-                [
-                    html.Div(
-                        [
-                            html.Span("1", className="cascade-step-number"),
-                            html.Div(
-                                [
-                                    html.Div(
-                                        "Componente",
-                                        className="cascade-step-title",
-                                    ),
-                                    html.Div(
-                                        "Seleccione el componente que desea revisar",
-                                        className="cascade-step-help",
-                                    ),
-                                ]
-                            ),
-                        ],
-                        className="cascade-step-heading",
-                    ),
-                    dcc.Dropdown(
-                        id="route-component-select",
-                        options=component_options,
-                        value=None,
-                        clearable=True,
-                        searchable=False,
-                        placeholder="Seleccione un componente",
-                        className="cascade-dropdown",
-                    ),
-                ],
-                className="cascade-step-card",
-            ),
-
-            # PASOS SIGUIENTES
-            html.Div(id="route-macro-area"),
-            html.Div(id="route-micro-area"),
-            html.Div(id="route-activity-detail"),
-        ],
-        className="route-cascade-shell",
-    )
-
-
-def _strip_synthesis_date(texto):
-    if not texto: return texto
-    return re.sub(r"^\s*\d{1,2}[/-]\d{1,2}[/-]\d{2,4}\s*[—–-]\s*", "", str(texto)).strip()
-
-def _context_card(label,value):
-    return html.Div([html.Div(label,className="context-label"),html.Div(value if value not in [None,"","nan"] else "—",className="context-value")],className="context-card")
-
-def detail_component(name: str, embedded=False):
-    proyectos = load_presupuesto()
-    p = proyectos.get(name)
-
-    if not p:
-        return card(
-            html.Div(
-                "No se encontró el proyecto seleccionado.",
-                className="alert",
-            )
-        )
-
-    fichas, roadmaps = load_details_for_projects(proyectos)
-    ficha = fichas.get(name)
-    rm = roadmaps.get(name)
-
-    es_prett = bool(
-        ficha
-        and ficha.get("es_prett")
-    )
-
-    blocks = []
-
-    # ---------------------------------------------------------
-    # ENCABEZADO
-    # ---------------------------------------------------------
-    if embedded:
-        blocks.extend([
-            html.H2(
-                "Detalle del proyecto seleccionado",
-                className="detail-main-title",
-            ),
-            html.H3(
-                name,
-                className="detail-project-name",
-            ),
-        ])
-    else:
-        blocks.extend([
-            dcc.Link(
-                "← Volver a proyectos",
-                href="/proyectos",
-                className="back-link",
-            ),
-            header_block(
-                name,
-                "Seguimiento consolidado del proyecto",
-            ),
-        ])
-
-    # ---------------------------------------------------------
-    # DATOS DEL PROYECTO
-    # ---------------------------------------------------------
-    if ficha:
-        objetivo = ficha.get("objetivo", "")
-        periodo = ficha.get("periodo_prioridad", "")
-
-        # PRETT tiene un único campo:
-        # "Oficio último Dictamen de Prioridad o actualización de prioridad".
-        if ficha.get("es_prett"):
-            blocks.append(
-                html.Div(
-                    [
-                        html.Div(
-                            [
-                                html.Div(
-                                    "Objetivo general",
-                                    className="context-label",
-                                ),
-                                html.Div(
-                                    _display(objetivo),
-                                    className="context-value objective-text",
-                                ),
-                            ],
-                            className="context-card context-objective",
-                        ),
-
-                        html.Div(
-                            [
-                                _context_card(
-                                    "Oficio último Dictamen de Prioridad o actualización de prioridad",
-                                    ficha.get("oficio_ultimo_dictamen", ""),
-                                ),
-                                _context_card(
-                                    "Fecha de emisión",
-                                    ficha.get("fecha_emision_dictamen", ""),
-                                ),
-                                _context_card(
-                                    "Período de prioridad",
-                                    periodo,
-                                ),
-                                _context_card(
-                                    "Unidad responsable",
-                                    ficha.get("unidad_responsable", ""),
-                                ),
-                            ],
-                            className="project-context-secondary prett-context-secondary",
-                        ),
-                    ],
-                    className="project-context-block",
-                )
-            )
-
-        else:
-            # Otros proyectos conservan exclusivamente lo que proviene
-            # de Banco de Proyectos.
-            blocks.append(
-                html.Div(
-                    [
-                        html.Div(
-                            [
-                                html.Div(
-                                    "Objetivo general",
-                                    className="context-label",
-                                ),
-                                html.Div(
-                                    _display(objetivo),
-                                    className="context-value objective-text",
-                                ),
-                            ],
-                            className="context-card context-objective",
-                        ),
-                        html.Div(
-                            [
-                                _context_card(
-                                    "Dictamen de prioridad",
-                                    ficha.get("dictamen_prioridad", ""),
-                                ),
-                                _context_card(
-                                    "Oficio",
-                                    ficha.get("oficio", ""),
-                                ),
-                                _context_card(
-                                    "Período de prioridad",
-                                    periodo,
-                                ),
-                            ],
-                            className="project-context-secondary",
-                        ),
-                    ],
-                    className="project-context-block",
-                )
-            )
-
-    # ---------------------------------------------------------
-    # VALORES PRESUPUESTARIOS
-    # ---------------------------------------------------------
-    blocks.append(
-        html.Div(
-            "Valores presupuestarios",
-            className="project-values-title",
-        )
-    )
-
-    blocks.append(
-        html.Div(
+    def boton(codigo, nombre):
+        return html.Button(
             [
-                kpi_card(
-                    "💵",
-                    fmt_money(p["codificado"]),
-                    "Codificado",
-                    "#E9F3FF",
-                ),
-                kpi_card(
-                    "📝",
-                    fmt_money(p["comprometido"]),
-                    "Comprometido",
-                    "#F1ECFF",
-                ),
-                kpi_card(
-                    "✅",
-                    fmt_money(p["devengado"]),
-                    "Devengado",
-                    "#E8F7F0",
-                ),
-                kpi_card(
-                    "📊",
-                    f"{p['pct_ejecucion']}%",
-                    "Ejecución",
-                    PURPLE_100,
-                ),
+                html.Span(icono(codigo), className="portada-boton-icono"),
+                html.Span(nombre, className="portada-boton-texto"),
+                html.Span("›", className="portada-boton-flecha"),
             ],
-            className="detail-kpi-grid",
+            id={"type": "home-card", "index": codigo},
+            className="portada-boton",
+            n_clicks=0,
+            type="button",
         )
+
+    return html.Main(
+        className="portada-pagina",
+        children=[
+            html.Section(
+                className="portada-contenido",
+                children=[
+                    html.Div(
+                        className="portada-ilustracion-contenedor",
+                        children=html.Img(
+                            src=app.get_asset_url("portada-minedec.png"),
+                            className="portada-ilustracion",
+                            alt="Educación, deporte y cultura en el Ecuador",
+                        ),
+                    ),
+                    html.Img(
+                        src=app.get_asset_url("logo-minedec.png"),
+                        className="portada-logo",
+                        alt="Ministerio de Educación, Deporte y Cultura",
+                    ),
+                    html.Nav(
+                        [boton(codigo, nombre)
+                         for codigo, nombre in SECCIONES_PRINCIPALES],
+                        className="portada-menu",
+                        **{"aria-label": "Secciones principales"},
+                    ),
+                ],
+            ),
+            html.Div(className="portada-onda-inferior"),
+        ],
     )
 
-    # ---------------------------------------------------------
-    # DEVENGADO A LA FECHA
-    # Solo PRETT usa esta sección específica de su ficha.
-    # ---------------------------------------------------------
-    if es_prett and ficha.get("devengado_a_fecha"):
-        blocks.append(
-            card(
-                [
-                    html.H3(
-                        "Devengado a la fecha",
-                        className="section-title",
-                    ),
-                    html.P(
-                        "Síntesis descriptiva del devengado registrado en la ficha del proyecto",
-                        className="section-subtitle",
-                    ),
-                    html.Div(
-                        ficha.get("devengado_a_fecha"),
-                        className="summary-box",
-                    ),
-                    html.Div(
-                        [
-                            html.Span(
-                                [
-                                    html.Strong("CUP: "),
-                                    ficha.get("cup", "—"),
-                                ]
-                            ),
-                            html.Span(
-                                [
-                                    html.Strong(
-                                        "Gerente/responsable: "
-                                    ),
-                                    ficha.get(
-                                        "gerente",
-                                        "—",
-                                    ),
-                                ]
-                            ),
-                            html.Span(
-                                [
-                                    html.Strong(
-                                        "Período de prioridad: "
-                                    ),
-                                    ficha.get(
-                                        "periodo_prioridad",
-                                        "—",
-                                    ),
-                                ]
-                            ),
-                        ],
-                        className="meta-three",
-                    ),
-                ]
-            )
+
+def portada_indicadores():
+    iconos = {
+        "pnd": "⌖",
+        "kpi-estrategicos": "◇",
+        "kpi-institucionales": "◫",
+    }
+
+    def opcion(codigo, nombre):
+        return html.Button(
+            [
+                html.Span(iconos[codigo], className="portada-boton-icono"),
+                html.Span(nombre, className="portada-boton-texto"),
+                html.Span("›", className="portada-boton-flecha"),
+            ],
+            id={"type": "indicator-home-card", "index": codigo},
+            className="portada-boton indicador-portada-boton",
+            n_clicks=0,
+            type="button",
         )
 
+    return html.Main(
+        className="indicadores-pagina",
+        children=[
+            html.Section(
+                className="indicadores-cabecera",
+                children=[
+                    html.Button(
+                        "← Volver a la portada",
+                        id="btn-volver-portada",
+                        className="btn-volver-portada",
+                        n_clicks=0,
+                    ),
+                    html.Div([
+                        html.Span("INDICADORES", className="indicadores-etiqueta"),
+                        html.H2("Seguimiento de indicadores institucionales"),
+                        html.P("Seleccione el grupo de indicadores que desea consultar."),
+                    ]),
+                    html.Img(
+                        src=app.get_asset_url("logo-minedec.png"),
+                        className="indicadores-logo",
+                        alt="MINEDEC",
+                    ),
+                ],
+            ),
+            html.Section(
+                [opcion(codigo, nombre)
+                 for codigo, nombre in SECCIONES_INDICADORES],
+                className="indicadores-opciones",
+            ),
+        ],
+    )
+
+
+def menu_lateral(seccion_activa=None, vice_activo=None, indicador_activo=None):
+    items = []
+    # Cada ambiente conserva únicamente su propia navegación. Al consultar
+    # indicadores no se muestran Visión Ejecutiva, Presupuesto ni Inventario.
+    secciones_menu = (SECCIONES_INDICADORES if seccion_activa in
+                      {codigo for codigo, _ in SECCIONES_INDICADORES}
+                      else [(seccion_activa, dict(SECCIONES).get(
+                          seccion_activa, "Módulo"))])
+    for codigo, nombre in secciones_menu:
+        activo = codigo == seccion_activa
+        items.append(html.Button([
+            html.Span(ICONOS[codigo], className="side-icon"), html.Span(nombre),
+            html.Span("⌄" if activo else "", className="side-chevron")
+        ], id={"type": "side-section", "index": codigo}, n_clicks=0,
+           className="side-section active" if activo else "side-section"))
+        if activo and codigo in SECCIONES_CON_DATOS:
+            df, _ = obtener_datos(codigo)
+            cfg = SECCIONES_CON_DATOS[codigo]
+            if not df.empty and codigo in SECCIONES_INDICADORES_PLANOS:
+                # Pocos indicadores: se listan directo, sin el paso intermedio
+                # de escoger primero un viceministerio.
+                indicadores = df[cfg["indicador_col"]].dropna().unique()
+                items.append(html.Div([
+                    html.Button([
+                            html.Span(f"{j+1:02d}", className="indicator-index"), html.Span(indicador)
+                        ], id={"type": "indicator-button", "index": indicador}, n_clicks=0, title=indicador,
+                           className="indicator-button selected" if indicador == indicador_activo else "indicator-button")
+                    for j, indicador in enumerate(indicadores)
+                ], className="indicator-group open"))
+            elif not df.empty:
+                if codigo == "vision":
+                    opciones_vice = (df[[cfg["vice_col"], "Orden sección"]].drop_duplicates()
+                                     .sort_values("Orden sección")[cfg["vice_col"]].tolist())
+                else:
+                    opciones_vice = sorted(df[cfg["vice_col"]].dropna().unique())
+                    if codigo == "presupuesto":
+                        opciones_vice = [
+                            x for x in opciones_vice
+                            if _normalizar_encabezado_presupuesto(x)
+                            not in {"SIN_CLASIFICACION", "SIN_CLASIFICAR", "NO_APLICA"}
+                        ]
+                        opciones_vice = sorted(
+                            opciones_vice,
+                            key=lambda x: (
+                                str(x).strip().lower() == "coordinaciones generales",
+                                str(x).lower(),
+                            ),
+                        )
+                        opciones_vice = ["General"] + opciones_vice
+                for vice in opciones_vice:
+                    abierto = vice == vice_activo
+                    items.append(html.Button([
+                        html.Span("▾" if abierto else "▸"), html.Span(vice)
+                    ], id={"type": "vice-button", "index": vice}, n_clicks=0,
+                       className="vice-button selected" if abierto else "vice-button", title=vice))
+                    if codigo in {"vision", "presupuesto"}:
+                        continue
+                    indicadores = df.loc[df[cfg["vice_col"]] == vice, cfg["indicador_col"]].unique()
+                    items.append(html.Div([
+                        html.Button([
+                                html.Span(f"{j+1:02d}", className="indicator-index"), html.Span(indicador)
+                            ], id={"type": "indicator-button", "index": indicador}, n_clicks=0, title=indicador,
+                               className="indicator-button selected" if indicador == indicador_activo else "indicator-button")
+                        for j, indicador in enumerate(indicadores)
+                    ], id={"type": "indicator-group", "index": vice},
+                       className="indicator-group open" if abierto else "indicator-group"))
+    return html.Aside([
+        html.Img(src=app.get_asset_url("logo-minedec.png"), className="sidebar-logo"),
+        html.P("PANEL INSTITUCIONAL", className="sidebar-kicker"),
+        html.Button([html.Span("←"), html.Span("Volver al panel principal")],
+                    id="side-back", className="side-back", n_clicks=0),
+        html.Div(items, className="sidebar-menu"),
+    ], className="module-sidebar")
+
+
+def primer_texto(grupo, columna, defecto="No registrado"):
+    valores = grupo[columna].dropna()
+    if valores.empty:
+        return defecto
+    texto = str(valores.iloc[0]).strip()
+    return texto if texto and texto.lower() != "nan" else defecto
+
+
+def formato_valor(valor):
+    """Formato general: enteros sin decimales y cifras decimales con dos."""
+    if pd.isna(valor):
+        return "No registrado"
+    numero = float(valor)
+    if numero.is_integer():
+        return f"{int(numero):,}".replace(",", ".")
+    return f"{numero:,.2f}".replace(",", "X").replace(".", ",").replace("X", ".")
+
+
+def formato_conteo(valor):
+    """Corrige conteos como 1.693 cuando representan 1.693 unidades."""
+    if pd.isna(valor):
+        return "No registrado"
+    numero = float(valor)
+    if 0 < abs(numero) < 10 and not numero.is_integer():
+        numero *= 1000
+    return f"{int(round(numero)):,}".replace(",", ".")
+
+
+def fecha_ficha(grupo, columna):
+    """Muestra una fecha del Excel como dd/mm/aaaa, incluso si aún está vacía."""
+    if columna not in grupo.columns:
+        return "No registrada"
+    valores = grupo[columna].dropna()
+    valores = valores[valores.astype(str).str.strip().ne("")]
+    if valores.empty:
+        return "No registrada"
+    valor = valores.iloc[0]
+    try:
+        if isinstance(valor, (int, float)) and 20000 < float(valor) < 80000:
+            fecha = pd.to_datetime(valor, unit="D", origin="1899-12-30")
+        else:
+            fecha = pd.to_datetime(valor, errors="coerce", dayfirst=True)
+        if pd.notna(fecha):
+            return fecha.strftime("%d/%m/%Y")
+    except (TypeError, ValueError, OverflowError):
+        pass
+    return str(valor).strip() or "No registrada"
+
+
+def etiqueta_periodo(valor):
+    """Muestra el período tal cual viene en el Excel: año simple (2025) o
+    rango de año lectivo (2024-2025), sin forzar una conversión numérica."""
+    if pd.isna(valor):
+        return "No registrado"
+    if isinstance(valor, (int, float)) and float(valor).is_integer():
+        return str(int(valor))
+    return str(valor).strip()
+
+
+def ficha(etiqueta, valor, clase=""):
+    return html.Div([html.Span(etiqueta), html.Strong(valor)], className=f"detail-item {clase}".strip())
+
+
+def ficha_con_periodo(etiqueta, valor, periodo):
+    """Muestra el año de referencia junto a numeradores y denominadores."""
+    contenido = [html.Span(etiqueta), html.Strong(valor)]
+    if pd.notna(periodo) and str(periodo).strip():
+        contenido.append(
+            html.Small(
+                f"Año de referencia: {etiqueta_periodo(periodo)}",
+                className="metric-year",
+            )
+        )
+    return html.Div(contenido, className="detail-item count-card")
+
+
+def normalizar_latex(texto, ecuacion_principal=False):
+    """Adapta el LaTeX del Excel al formato que interpreta dcc.Markdown."""
+    texto = str(texto)
+
+    # MathJax no implementa entornos de documento como itemize. Los convertimos
+    # a viñetas Markdown y conservamos el LaTeX en línea de cada definición.
+    texto = re.sub(r"\\begin\s*\{itemize\}", "", texto, flags=re.IGNORECASE)
+    texto = re.sub(r"\\end\s*\{itemize\}", "", texto, flags=re.IGNORECASE)
+    texto = re.sub(r"(?m)^\s*\\item\s*", "- ", texto)
+
+    # dcc.Markdown procesa de forma consistente los delimitadores con dólares.
+    # Los reemplazos deben ignorar expresiones como ``\\[9pt]``: en LaTeX eso
+    # es un salto de fila con separación vertical, no el inicio de una fórmula.
+    texto = re.sub(r"(?<!\\)\\\(", "$ ", texto)
+    texto = re.sub(r"(?<!\\)\\\)", " $", texto)
+    texto = re.sub(r"(?<!\\)\\\[", "$$", texto)
+    texto = re.sub(r"(?<!\\)\\\]", "$$", texto)
+
+    # Corrige comandos escritos en mayúsculas en algunas celdas del Excel.
+    comandos = {
+        "sum": "sum", "frac": "frac", "times": "times", "cdot": "cdot",
+        "sqrt": "sqrt", "left": "left", "right": "right", "big": "Big",
+        "text": "text", "mathrm": "mathrm", "operatorname": "operatorname",
+    }
+
+    def corregir_comando(coincidencia):
+        comando = coincidencia.group(1)
+        corregido = comandos.get(comando.lower())
+        return rf"\{corregido}" if corregido else coincidencia.group(0)
+
+    texto = re.sub(r"\\([A-Za-z]+)", corregir_comando, texto)
+
+    # No se reescriben siglas ni identificadores. Las fórmulas de los tres
+    # Excel ya son LaTeX válido y MathJax debe recibirlas tal como fueron
+    # registradas. Transformaciones generales sobre textos como NOPP_t,
+    # Pe4Egb_{S,M} o RU_{\text{previos},t} terminaban actuando también dentro
+    # de \mathrm, \operatorname y \text, duplicando comandos y superponiendo
+    # letras, subíndices y superíndices.
+
+    # En el apartado Fórmula, cada expresión ocupa una línea independiente.
+    if ecuacion_principal:
+        texto = re.sub(
+            r"(?<!\$)\$(?!\$)(.+?)(?<!\$)\$(?!\$)",
+            r"$$\1$$",
+            texto,
+            flags=re.DOTALL,
+        )
+    return texto
+
+
+def ficha_multilinea(etiqueta, texto, clase="full"):
+    """Pestaña desplegable, estilo documento, para fórmulas LaTeX extensas."""
+    if texto is None or (isinstance(texto, float) and pd.isna(texto)) or not str(texto).strip():
+        return html.Div(
+            [html.Span(etiqueta), html.Strong("No registrada")],
+            className=f"detail-item {clase}".strip(),
+        )
+
+    texto_latex = str(texto).strip()
+
+    # Presentación editorial para las medianas de comportamiento sedentario.
+    # En la matriz vienen como dos expresiones separadas y muy cargadas de
+    # subíndices. Se unifican en una sola función por casos, como aparecería en
+    # un documento técnico o PDF, sin modificar las definiciones posteriores.
+    edad_mediana = re.search(r"Med_\{cs\}\^\{(\d+\s*-\s*\d+)\}", texto_latex, re.IGNORECASE)
+    donde_mediana = re.search(r"\\textbf\{\s*(?:Dónde|Donde)\s*:\s*\}", texto_latex,
+                              flags=re.IGNORECASE)
+    if edad_mediana and donde_mediana:
+        edad = edad_mediana.group(1).replace(" ", "")
+        definiciones = texto_latex[donde_mediana.start():]
+        ecuacion = rf"""\textbf{{Fórmula:}}
+
+$$
+\operatorname{{Med}}_{{cs}}^{{{edad}}}=
+\begin{{cases}}
+\dfrac{{\mathrm{{cs}}_{{n/2}}^{{{edad}}}+\mathrm{{cs}}_{{(n/2)+1}}^{{{edad}}}}}{{2}},
+& \text{{si }} n \text{{ es par}},\\[9pt]
+\mathrm{{cs}}_{{(n+1)/2}}^{{{edad}}},
+& \text{{si }} n \text{{ es impar}}.
+\end{{cases}}
+$$"""
+        texto_latex = ecuacion + "\n\n" + definiciones
+    bloques = []
+    en_formula = False
+    for bloque in texto_latex.split("\n\n"):
+        bloque = bloque.strip()
+        if not bloque:
+            continue
+        titulo = re.fullmatch(r"\\textbf\{\s*(Fórmula|Formula)\s*:\s*\}", bloque,
+                              flags=re.IGNORECASE)
+        donde = re.fullmatch(r"\\textbf\{\s*(Dónde|Donde)\s*:\s*\}", bloque,
+                             flags=re.IGNORECASE)
+        if titulo:
+            bloques.append(html.Strong("Fórmula:", className="formula-section-title"))
+            en_formula = True
+        elif donde:
+            bloques.append(html.Strong("Donde:", className="formula-section-title"))
+            en_formula = False
+        else:
+            bloques.append(dcc.Markdown(
+                normalizar_latex(bloque, ecuacion_principal=en_formula),
+                mathjax=True,
+                className="formula-text formula-equation" if en_formula else "formula-text",
+                dangerously_allow_html=False,
+            ))
+
+    return html.Details([
+        html.Summary([
+            html.Span("∑", className="formula-accordion-icon"),
+            html.Strong(etiqueta),
+            html.Span("Ver fórmula", className="formula-accordion-help"),
+            html.Span("⌄", className="formula-accordion-chevron"),
+        ], className="formula-static-header"),
+        html.Div(bloques, className="formula-accordion-body formula-content"),
+    ], className=f"detail-item {clase} formula-static formula-accordion".strip())
+
+
+def ficha_metrica(etiqueta, valor, año, unidad):
+    """Presenta cifra y período; la unidad ya consta en su ficha independiente."""
+    unidad_texto = str(unidad or "").strip()
+    sufijo = "%" if "porcentaje" in unidad_texto.lower() else ""
+    return html.Div([
+        html.Span(etiqueta),
+        html.Div([html.Strong(formato_valor(valor)), html.B(sufijo)], className="metric-value"),
+        html.Small(f"Período de referencia: {etiqueta_periodo(año)}", className="metric-year"),
+    ], className="detail-item highlight metric-card")
+
+
+def ficha_metrica_periodo(etiqueta, valor, periodo, unidad):
+    """Variante para KPI: el período puede ser un año simple o un año lectivo (2024-2025)."""
+    unidad_texto = str(unidad or "").strip()
+    sufijo = "%" if "porcentaje" in unidad_texto.lower() else ""
+    return html.Div([
+        html.Span(etiqueta),
+        html.Div([html.Strong(formato_valor(valor)), html.B(sufijo)], className="metric-value"),
+        html.Small(f"Período: {etiqueta_periodo(periodo)}", className="metric-year"),
+    ], className="detail-item highlight metric-card")
+
+
+def clase_alerta(alerta):
+    if pd.isna(alerta):
+        return "status-empty"
+    texto = str(alerta).lower()
+    if "sobre" in texto: return "status-over"
+    if "igual" in texto: return "status-equal"
+    if "incumpl" in texto: return "status-under"
+    return "status-empty"
+
+
+def formato_texto_barra(valor, unidad):
+    """Etiqueta de una barra: agrega '%' cuando la unidad es Porcentaje, para
+    no mostrar '90' en un gráfico que representa 90%."""
+    if pd.isna(valor):
+        return None
+    texto = formato_valor(valor)
+    if "porcentaje" in str(unidad or "").lower():
+        texto = f"{texto}%"
+    return f"<b>{texto}</b>"
+
+
+# ---------------------------------------------------------------------------
+# Plan Nacional de Desarrollo · gráfico y ficha
+# ---------------------------------------------------------------------------
+def crear_grafico_pnd(grupo):
+    grupo = grupo.sort_values("_orden_periodo")
+    años = list(grupo["Año"].map(etiqueta_periodo))
+    unidad = primer_texto(grupo, "Unidad de medida", "")
+
+    # Posiciones reales dentro de cada año. Una barra sola queda centrada y
+    # ancha; cuando coinciden varias, se separan sin amontonar sus etiquetas.
+    posiciones = list(range(len(grupo)))
+
+    fig = go.Figure()
+    fig.add_bar(x=posiciones, y=grupo["Línea base"], name="Línea base",
+                marker=dict(color="#80BBBF", line=dict(color="#446381", width=1.4)),
+                text=[formato_texto_barra(v, unidad) for v in grupo["Línea base"]], textposition="outside",
+                textfont=dict(size=10, color="#232D5A", family="Arial"), constraintext="none",
+                width=.34, offset=-.17, cliponaxis=False, customdata=años,
+                hovertemplate="Período %{customdata}<br>Línea base: %{y:,.2f}<extra></extra>")
+    fig.add_bar(x=posiciones, y=grupo["Meta"], name="Meta",
+                marker=dict(color="#F1B620", line=dict(color="#C88F00", width=1.4)),
+                text=[formato_texto_barra(v, unidad) for v in grupo["Meta"]], textposition="outside",
+                textfont=dict(size=10, color="#232D5A", family="Arial"), constraintext="none",
+                width=.34, offset=-.36, cliponaxis=False, customdata=años,
+                hovertemplate="Período %{customdata}<br>Meta: %{y:,.2f}<extra></extra>")
+    fig.add_bar(x=posiciones, y=grupo["Estimador"], name="Estimador",
+                marker=dict(color="#4F449A", line=dict(color="#232D5A", width=1.4)),
+                text=[formato_texto_barra(v, unidad) for v in grupo["Estimador"]],
+                textposition="outside",
+                textfont=dict(size=10, color="#232D5A", family="Arial"), constraintext="none",
+                width=.34, offset=.02, cliponaxis=False, customdata=años,
+                hovertemplate="Período %{customdata}<br>Estimador: %{y:,.2f}<extra></extra>")
+    candidatos = pd.concat([grupo["Línea base"], grupo["Meta"], grupo["Estimador"]]).dropna()
+    techo = candidatos.max() * 1.18 if not candidatos.empty else None
+    fig.update_layout(
+        barmode="overlay", height=380,
+        margin=dict(l=55, r=25, t=60, b=45), paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="#fff",
+        font=dict(family="Arial", color="#232D5A", size=13),
+        title=dict(text="Evolución del indicador", x=.02, font=dict(size=20)),
+        legend=dict(orientation="h", y=1.13, x=1, xanchor="right"),
+        xaxis=dict(title="Año / período lectivo", showgrid=False, fixedrange=True,
+                   tickmode="array", tickvals=posiciones, ticktext=años,
+                   range=[-.55, len(años) - .45]),
+        yaxis=dict(title=unidad or "Valor", gridcolor="#E9EBF3",
+                   zeroline=False, fixedrange=True, range=[0, techo] if techo else None),
+    )
+    return fig
+
+
+def detalle_indicador_pnd(indicador):
+    grupo = DATA_PND.loc[DATA_PND["NOMBRE DEL INDICADOR"] == indicador].sort_values("_orden_periodo").copy()
+    unidad = primer_texto(grupo, "Unidad de medida", "")
+    linea = grupo.dropna(subset=["Línea base"])
+    metas = grupo.dropna(subset=["Meta"])
+
+    campos = [ficha("Definición", primer_texto(grupo, "Definición"), "full")]
+    formula_documento = None
+    if "Fórmula de Cálculo" in grupo.columns:
+        formula = primer_texto(grupo, "Fórmula de Cálculo", "")
+        if formula:
+            formula_documento = ficha_multilinea("Fórmula de cálculo", formula, "full")
+    metricas = []
+    if linea.empty:
+        metricas.append(ficha("Línea base", "No registrada", "highlight"))
     else:
-        # Para proyectos que no son PRETT se conserva la síntesis
-        # de seguimiento disponible en Banco de Proyectos.
-        synthesis = ""
+        metricas.append(ficha_metrica("Línea base", linea.iloc[0]["Línea base"], linea.iloc[0]["Año"], unidad))
+    if metas.empty:
+        metricas.append(ficha("Meta final", "No registrada", "highlight"))
+    else:
+        metricas.append(ficha_metrica("Meta final", metas.iloc[-1]["Meta"], metas.iloc[-1]["Año"], unidad))
+    campos += [
+        ficha("Periodicidad", primer_texto(grupo, "Periodicidad")),
+        ficha("Unidad de medida", primer_texto(grupo, "Unidad de medida")),
+        ficha("Fecha de reporte", fecha_ficha(grupo, "Fecha de Transferencia")),
+    ]
+    campos.append(ficha("Fuente de datos", primer_texto(grupo, "Fuente de datos"), "full source"))
+    columnas_ficha = max(1, len(campos) - 2)
 
-        if ficha:
-            if ficha.get("logros"):
-                synthesis = _strip_synthesis_date(
-                    ficha["logros"][-1].get(
-                        "texto",
-                        "",
-                    )
-                )
-            elif ficha.get("objetivo"):
-                synthesis = ficha.get(
-                    "objetivo",
-                    "",
-                )
+    estados = []
+    for _, fila in grupo.iterrows():
+        año = etiqueta_periodo(fila["Año"])
+        clase = clase_alerta(fila["Alerta"])
+        alerta = str(fila["Alerta"]) if pd.notna(fila["Alerta"]) else "Sin información registrada"
+        estados.append(html.Div([
+            html.Span(str(año), className="status-year-label"),
+            html.Button("i", id={"type": "status-year", "index": año},
+                        className=f"status-mini {clase}", n_clicks=0,
+                        title=f"{año}: {alerta}", **{"aria-label": f"Consultar información de {año}"})
+        ], className="status-year-item"))
 
-        state = [
-            html.H3(
-                "Estado de ejecución del proyecto",
-                className="section-title",
+    return html.Div([
+        html.Div([html.P("PLAN NACIONAL DE DESARROLLO", className="content-kicker"),
+                  html.H1(indicador), html.P(primer_texto(grupo, "VICEMINISTERIO"), className="content-subtitle")],
+                 className="content-heading"),
+        html.Div([
+            html.Section([html.H2("Ficha del indicador"),
+                          html.Div(campos, className=f"details-grid cols-{columnas_ficha}")],
+                         className="indicator-detail-card", style={"marginTop": "18px"}),
+            html.Section([
+                html.Div(metricas, className="metric-summary-row"),
+                dcc.Graph(figure=crear_grafico_pnd(grupo), config={"displayModeBar": False, "responsive": True},
+                          className="indicator-chart", style={"width": "100%", "height": "380px"}),
+                html.P("Seleccione el botón de un período para consultar su cumplimiento y observación.",
+                       className="status-help"),
+                html.Div(estados, className="status-row",
+                         style={"gridTemplateColumns": f"repeat({len(estados)}, minmax(0, 1fr))"}),
+                html.Div("Seleccione un período para consultar su observación.", id="observation-area",
+                         className="observation-area"),
+            ], className="chart-card"),
+        ], className="indicator-workspace"),
+        html.Section(formula_documento, className="formula-document formula-document-bottom")
+        if formula_documento else None,
+    ], className="pnd-content")
+
+
+def contenido_pnd(vice=None, indicador=None):
+    if ERROR_PND:
+        return html.Div([html.H2("Base no disponible"), html.P(ERROR_PND)], className="load-error")
+    elif indicador:
+        return detalle_indicador_pnd(indicador)
+    elif vice:
+        return html.Div([html.H1(vice), html.P("Seleccione uno de sus indicadores en el menú lateral.")],
+                        className="module-welcome")
+    return html.Div([html.P("PANEL INSTITUCIONAL", className="content-kicker"),
+                     html.H1("Plan Nacional de Desarrollo"),
+                     html.P("Seleccione un viceministerio y luego el indicador que desea consultar.")],
+                    className="module-welcome")
+
+
+# ---------------------------------------------------------------------------
+# KPI's Estratégicos y KPI's Institucionales · gráfico y ficha compartidos
+# (misma estructura tipo PND: Línea base / Meta / Estimador por período,
+# con eje de dos niveles: mes arriba, año agrupado debajo).
+# ---------------------------------------------------------------------------
+def preparar_periodos_visuales(grupo):
+    """Ordena y abrevia períodos para evitar etiquetas inclinadas o saturadas."""
+    grupo = grupo.copy()
+    # Un indicador debe tener una sola categoría por año y mes/semestre.
+    # Se conserva la primera fila registrada y se evita repetir barras y botones.
+    grupo = grupo.drop_duplicates(subset=["Año", "Mes"], keep="first").copy()
+    grupo["_orden_visual"] = grupo["_orden_periodo"]
+    grupo["Periodo_corto"] = (grupo["Periodo"].astype(str)
+                                .str.replace("Enero-Junio", "Ene-Jun", regex=False)
+                                .str.replace("Julio-Diciembre", "Jul-Dic", regex=False))
+    grupo["Periodo_grafico"] = grupo["Periodo_corto"]
+
+    es_semestral = grupo["Mes"].dropna().astype(str).str.contains("-", regex=False).any()
+    if es_semestral:
+        años_con_semestre = set(grupo.loc[grupo["Mes"].notna(), "Año"].astype(str))
+        es_cierre = grupo["Mes"].isna() & grupo["Año"].astype(str).isin(años_con_semestre)
+        # El cierre anual se ubica después de Julio-Diciembre, no antes de los semestres.
+        grupo.loc[es_cierre, "_orden_visual"] = (
+            grupo.loc[es_cierre, "Año"].map(orden_periodo) * 100 + 13
+        )
+        grupo.loc[es_cierre, "Periodo_corto"] = "Línea base " + grupo.loc[es_cierre, "Año"].astype(str)
+
+    grupo = grupo.sort_values("_orden_visual", kind="stable")
+
+    # Evita que registros repetidos se dibujen en la misma coordenada. Plotly
+    # necesita una clave X única; la etiqueta visible puede seguir siendo amigable.
+    grupo["_ocurrencia_periodo"] = grupo.groupby("Periodo", sort=False).cumcount() + 1
+    grupo["_total_periodo"] = grupo.groupby("Periodo")["Periodo"].transform("size")
+    repetido = grupo["_total_periodo"] > 1
+    grupo.loc[repetido, "Periodo_corto"] = (
+        grupo.loc[repetido, "Periodo_corto"]
+        + " · " + grupo.loc[repetido, "_ocurrencia_periodo"].astype(str)
+    )
+    grupo["Periodo_id"] = (
+        grupo["Periodo"].astype(str) + "__" + grupo["_ocurrencia_periodo"].astype(str)
+    )
+
+    # Plotly interpreta <br> como salto de línea y mantiene horizontales las etiquetas.
+    grupo["Periodo_grafico"] = grupo["Periodo_corto"].str.replace(
+        r"^(Ene-Jun|Jul-Dic|[A-ZÁÉÍÓÚ][a-záéíóú]{2}|Línea base)\s+(.+)$",
+        r"\1<br>\2", regex=True
+    )
+    return grupo
+
+
+def crear_grafico_periodo(grupo):
+    grupo = preparar_periodos_visuales(grupo)
+    unidad = primer_texto(grupo, "Unidad de medida", "")
+    # En series mensuales hay hasta 13 categorías. Una escala tipográfica
+    # ligeramente menor evita cruces en portátiles sin sacrificar legibilidad.
+    etiqueta_size = 9 if len(grupo) >= 10 else 10
+    claves_periodo = list(grupo["Periodo_id"])
+    periodos = list(grupo["Periodo_grafico"])
+    periodos_completos = list(grupo["Periodo"])
+
+    fig = go.Figure()
+    fig.add_bar(x=claves_periodo, y=grupo["Línea base"], name="Línea base",
+                marker=dict(color="#80BBBF", line=dict(color="#446381", width=1.4)),
+                text=[formato_texto_barra(v, unidad) for v in grupo["Línea base"]],
+                textposition="outside", textfont=dict(size=etiqueta_size, color="#232D5A", family="Arial"), constraintext="none",
+                width=.34, offset=-.17, cliponaxis=False,
+                customdata=periodos_completos,
+                hovertemplate="%{customdata}<br>Línea base: %{y:,.2f}<extra></extra>")
+    fig.add_bar(x=claves_periodo, y=grupo["Meta"], name="Meta",
+                marker=dict(color="#F1B620", line=dict(color="#C88F00", width=1.4)),
+                text=[formato_texto_barra(v, unidad) for v in grupo["Meta"]],
+                textposition="outside", textfont=dict(size=etiqueta_size, color="#232D5A", family="Arial"),
+                constraintext="none", width=.34, offset=-.36, cliponaxis=False,
+                customdata=periodos_completos,
+                hovertemplate="%{customdata}<br>Meta: %{y:,.2f}<extra></extra>")
+    fig.add_bar(x=claves_periodo, y=grupo["Estimador"], name="Ejecutado",
+                marker=dict(color="#4F449A", line=dict(color="#232D5A", width=1.4)),
+                text=[formato_texto_barra(v, unidad) for v in grupo["Estimador"]],
+                textposition="outside", textfont=dict(size=etiqueta_size, color="#232D5A", family="Arial"),
+                constraintext="none", width=.34, offset=.02, cliponaxis=False,
+                customdata=periodos_completos,
+                hovertemplate="%{customdata}<br>Ejecutado: %{y:,.2f}<extra></extra>")
+
+    candidatos = pd.concat([grupo["Línea base"], grupo["Meta"], grupo["Estimador"]]).dropna()
+    techo = candidatos.max() * 1.22 if not candidatos.empty else None
+
+    fig.update_layout(
+        barmode="overlay", bargap=.20, height=380, autosize=True,
+        margin=dict(l=55, r=15, t=65, b=70), paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="#fff",
+        font=dict(family="Arial", color="#232D5A", size=13),
+        title=dict(text="Evolución del indicador", x=.02, font=dict(size=20)),
+        legend=dict(orientation="h", y=1.13, x=1, xanchor="right"),
+        # Categoría simple con orden forzado explícitamente: es la forma
+        # confiable de garantizar el orden cronológico. El eje "multicategory"
+        # ignoraba tanto categoryorder="trace" como categoryarray.
+        xaxis=dict(title="Período", showgrid=False, type="category", categoryorder="array",
+                   categoryarray=claves_periodo, tickmode="array",
+                   tickvals=claves_periodo, ticktext=periodos,
+                   fixedrange=True, tickangle=0,
+                   automargin=True, tickfont=dict(size=etiqueta_size)),
+        yaxis=dict(title=unidad or "Valor", gridcolor="#E9EBF3",
+                   zeroline=False, fixedrange=True, range=[0, techo] if techo else None),
+    )
+    return fig
+
+
+def detalle_indicador_periodo(df_fuente, indicador, kicker, obs_area_id, status_type):
+    grupo = df_fuente.loc[df_fuente["NOMBRE DEL INDICADOR"] == indicador].sort_values("_orden_periodo").copy()
+    grupo = preparar_periodos_visuales(grupo)
+    unidad = primer_texto(grupo, "Unidad de medida", "")
+    linea = grupo.dropna(subset=["Línea base"])
+    metas = grupo.dropna(subset=["Meta"])
+    periodicidad = primer_texto(grupo, "Periodicidad")
+    # Si la matriz registra rangos como Enero-Junio y Julio-Diciembre,
+    # cada rango representa una categoría semestral completa.
+    if grupo["Mes"].dropna().astype(str).str.contains("-", regex=False).any():
+        periodicidad = "Semestral"
+
+    campos = [ficha("Definición", primer_texto(grupo, "Definición"), "full")]
+    formula_documento = None
+    if "Fórmula de Cálculo" in grupo.columns:
+        formula = primer_texto(grupo, "Fórmula de Cálculo", "")
+        if formula:
+            formula_documento = ficha_multilinea("Fórmula de cálculo", formula, "full")
+    metricas = []
+    if linea.empty:
+        metricas.append(ficha("Línea base", "No registrada", "highlight"))
+    else:
+        metricas.append(ficha_metrica_periodo("Línea base", linea.iloc[0]["Línea base"],
+                                               linea.iloc[0]["Periodo"], unidad))
+    if metas.empty:
+        metricas.append(ficha("Meta", "No registrada", "highlight"))
+    else:
+        metricas.append(ficha_metrica_periodo("Meta", metas.iloc[-1]["Meta"], metas.iloc[-1]["Periodo"], unidad))
+    campos += [
+        ficha("Periodicidad", periodicidad),
+        ficha("Unidad de medida", primer_texto(grupo, "Unidad de medida")),
+        ficha("Fecha de reporte", fecha_ficha(grupo, "Fecha de Transferencia")),
+    ]
+    if "TIPO INDICADOR" in grupo.columns:
+        campos.append(ficha("Tipo de indicador", primer_texto(grupo, "TIPO INDICADOR")))
+    if "ENCARGADO" in grupo.columns:
+        campos.append(ficha("Encargado", primer_texto(grupo, "ENCARGADO")))
+    campos.append(ficha("Fuente de datos", primer_texto(grupo, "Fuente de datos"), "full source"))
+    columnas_ficha = max(1, len(campos) - 2)
+
+    estados = []
+    for _, fila in grupo.iterrows():
+        periodo = fila["Periodo"]
+        periodo_corto = fila["Periodo_corto"]
+        periodo_id = fila["Periodo_id"]
+        clase = clase_alerta(fila["Alerta"])
+        alerta = str(fila["Alerta"]) if pd.notna(fila["Alerta"]) else "Sin información registrada"
+        estados.append(html.Div([
+            html.Span(periodo_corto, className="status-year-label"),
+            html.Button("i", id={"type": status_type, "index": periodo_id},
+                        className=f"status-mini {clase}", n_clicks=0,
+                        title=f"{periodo}: {alerta}", **{"aria-label": f"Consultar información de {periodo}"})
+        ], className="status-year-item"))
+
+    return html.Div([
+        html.Div([html.P(kicker, className="content-kicker"),
+                  html.H1(indicador), html.P(primer_texto(grupo, "VICEMINISTERIO"), className="content-subtitle")],
+                 className="content-heading"),
+        html.Div([
+            html.Section([html.H2("Ficha del indicador"),
+                          html.Div(campos, className=f"details-grid cols-{columnas_ficha}")],
+                         className="indicator-detail-card", style={"marginTop": "18px"}),
+            html.Section([
+                html.Div(metricas, className="metric-summary-row"),
+                dcc.Graph(figure=crear_grafico_periodo(grupo), config={"displayModeBar": False, "responsive": True},
+                          className="indicator-chart", style={"width": "100%", "height": "380px"}),
+                html.P("Seleccione el botón de un período para consultar su cumplimiento y observación.",
+                       className="status-help"),
+                html.Div(estados, className="status-row",
+                         style={"gridTemplateColumns": f"repeat({len(estados)}, minmax(0, 1fr))"}),
+                html.Div("Seleccione un período para consultar su observación.", id=obs_area_id,
+                         className="observation-area"),
+            ], className="chart-card"),
+        ], className="indicator-workspace"),
+        html.Section(formula_documento, className="formula-document formula-document-bottom")
+        if formula_documento else None,
+    ], className="pnd-content")
+
+
+def detalle_indicador_kpi(indicador):
+    return detalle_indicador_periodo(DATA_KPI, indicador, "KPI´S ESTRATÉGICOS",
+                                      "observation-area-kpi", "status-periodo-kpi")
+
+
+def contenido_kpi(vice=None, indicador=None):
+    if ERROR_KPI:
+        return html.Div([html.H2("Base no disponible"), html.P(ERROR_KPI)], className="load-error")
+    elif indicador:
+        return detalle_indicador_kpi(indicador)
+    elif vice:
+        return html.Div([html.H1(vice), html.P("Seleccione uno de sus indicadores en el menú lateral.")],
+                        className="module-welcome")
+    return html.Div([html.P("PANEL INSTITUCIONAL", className="content-kicker"),
+                     html.H1("KPI´s Estratégicos"),
+                     html.P("Seleccione el indicador que desea consultar en el menú lateral.")],
+                    className="module-welcome")
+
+
+def detalle_indicador_kpi_inst(indicador):
+    return detalle_indicador_periodo(DATA_KPI_INST, indicador, "KPI´S INSTITUCIONALES",
+                                      "observation-area-kpi-inst", "status-periodo-inst")
+
+
+def contenido_kpi_inst(vice=None, indicador=None):
+    if ERROR_KPI_INST:
+        return html.Div([html.H2("Base no disponible"), html.P(ERROR_KPI_INST)], className="load-error")
+    elif indicador:
+        return detalle_indicador_kpi_inst(indicador)
+    elif vice:
+        return html.Div([html.H1(vice), html.P("Seleccione uno de sus indicadores en el menú lateral.")],
+                        className="module-welcome")
+    return html.Div([html.P("PANEL INSTITUCIONAL", className="content-kicker"),
+                     html.H1("KPI´s Institucionales"),
+                     html.P("Seleccione el indicador que desea consultar en el menú lateral.")],
+                    className="module-welcome")
+
+
+# ---------------------------------------------------------------------------
+# Visión Ejecutiva · menú de viceministerios (prototipo "MINEDEC · Prototipo
+# Ejecutivo"). Al entrar se presentan los 5 botones; "Gestión Educativa" arma
+# las tarjetas de cobertura con las 4 bases reales, sin montos; el resto de
+# viceministerios no tiene fuente todavía y se muestra "en construcción".
+# ---------------------------------------------------------------------------
+def vision_tabs_nav(activo):
+    """Menú de los 5 viceministerios. En la pantalla de entrada (sin
+    viceministerio elegido) se ve como lista vertical de botones; una vez
+    elegido uno, se compacta en una franja superior tipo pestañas."""
+    compacto = activo is not None
+    estilo_nav = None if compacto else {
+        "display": "grid", "gridTemplateColumns": "repeat(5, minmax(170px, 1fr))",
+        "gap": "9px", "width": "100%", "maxWidth": "none", "overflowX": "auto",
+        "paddingBottom": "3px",
+    }
+    estilo_fila = None if compacto else {
+        "minWidth": "170px", "padding": "4px", "display": "flex",
+        "border": "1px solid #e1e4ed", "borderRadius": "12px", "background": "#fff",
+        "boxShadow": "0 6px 16px rgba(24,37,87,.05)",
+    }
+    estilo_boton = None if compacto else {
+        "width": "100%", "minHeight": "54px", "padding": "10px 12px",
+        "border": "none", "borderRadius": "999px", "background": "#e9ecfb",
+        "color": "#3b3f91", "fontSize": "14px", "fontWeight": "800",
+        "textAlign": "center", "cursor": "pointer",
+    }
+    return html.Nav(
+        [html.Div(
+            html.Button(nombre, id={"type": "vision-tab", "index": codigo}, n_clicks=0,
+                        className="vision-vice-pill active" if codigo == activo else "vision-vice-pill",
+                        type="button", style=estilo_boton),
+            className="vision-vice-row", style=estilo_fila,
+        ) for codigo, nombre in VISION_TABS],
+        className="vision-vice-menu vision-vice-menu-compacta" if compacto else "vision-vice-menu",
+        style=estilo_nav,
+        **{"aria-label": "Viceministerios de Visión Ejecutiva"},
+    )
+
+
+def tarjeta_gestion_educativa(codigo, titulo, subtitulo, valor, detalles=None,
+                              unidad=None, filtros=None, contenido_id=None, valor_id=None):
+    return html.Article([
+        html.Span(className="vision-card-icon-mark"),
+        html.Span(titulo, className="vision-card-label"),
+        html.Div([
+            html.Strong(
+                valor,
+                className="vision-card-total",
+                **({"id": valor_id} if valor_id is not None else {}),
             ),
-            html.P(
-                "Síntesis descriptiva de avances",
-                className="section-subtitle",
-            ),
-            html.Div(
-                synthesis
-                or "No existe una síntesis descriptiva registrada.",
-                className="summary-box",
-            ),
+            html.Span(unidad, className="vision-card-unit") if unidad else None,
+        ], className="vision-card-value-row"),
+        html.Div(
+            detalles,
+            className="vision-card-details",
+            **({"id": contenido_id} if contenido_id is not None else {}),
+        ) if detalles else None,
+        html.P(subtitulo) if subtitulo else None,
+        html.Div(filtros, className="vision-card-filters") if filtros else None,
+    ], className=f"vision-exec-card {codigo}")
+
+
+# Eje 2 · Educación Superior. La primera sección se alimenta de la matriz
+# "Mapeo - Rendicion de cuentas.xlsx"; la segunda recoge la agenda entregada
+# en las diapositivas y se presenta separadamente como cartera futura.
+EJE2_PROGRAMAS_RESPALDO = [
+    {"direccion": "Dirección de Admisión", "programa": "Cupos Aceptados en Educación Superior",
+     "beneficiarios": 194000, "tipo": "Estudiantes"},
+    {"direccion": "Dirección de Diseño y Evaluación de Política Pública de Fortalecimiento del Talento Humano",
+     "programa": "BECAUSE HE IS NICE", "beneficiarios": 400000, "tipo": "Ciudadanos"},
+    {"direccion": "Dirección de Gestión Académica de Tercer y Cuarto Nivel",
+     "programa": "ValidaTec (Validación de Trayectoria para obtener tercer nivel)",
+     "beneficiarios": 120, "tipo": "Docentes"},
+    {"direccion": "Dirección de Cooperación y Asuntos Internacionales",
+     "programa": "Becas Técnicas y tecnológicas financiadas por aliados",
+     "beneficiarios": 5000, "tipo": "Estudiantes"},
+]
+
+# Totales nacionales de Educación Superior mostrados en la portada
+# institucional MINEDEC 2026. Se mantienen separados de los programas y
+# servicios porque describen el tamaño del sistema, no sus beneficiarios.
+DATOS_GENERALES_EDUCACION_SUPERIOR = {
+    "estudiantes": 1004175,
+    "estudiantes_itts": 138613,
+    "estudiantes_uep": 865562,
+    "docentes": 47145,
+    "docentes_itts": 9320,
+    "docentes_uep": 37825,
+    "instituciones": 257,
+    "instituciones_itts": 193,
+    "instituciones_uep": 64,
+}
+
+
+def tarjetas_datos_educacion_superior():
+    """Resumen nacional de estudiantes, docentes e instituciones superiores."""
+    d = DATOS_GENERALES_EDUCACION_SUPERIOR
+
+    def desglose(valor_itts, valor_uep):
+        return [
+            html.Div([
+                html.Span("ITTS"),
+                html.Strong(formato_valor(valor_itts)),
+            ], className="vision-mini-stat"),
+            html.Div([
+                html.Span("UEP"),
+                html.Strong(formato_valor(valor_uep)),
+            ], className="vision-mini-stat secondary"),
         ]
 
-        if ficha:
-            state.append(
-                html.Div(
-                    [
-                        html.Span(
-                            [
-                                html.Strong("CUP: "),
-                                ficha.get("cup", "—"),
-                            ]
-                        ),
-                        html.Span(
-                            [
-                                html.Strong(
-                                    "Gerente/responsable: "
-                                ),
-                                ficha.get(
-                                    "gerente",
-                                    "—",
-                                ),
-                            ]
-                        ),
-                        html.Span(
-                            [
-                                html.Strong(
-                                    "Período de prioridad: "
-                                ),
-                                ficha.get(
-                                    "periodo_prioridad",
-                                    "—",
-                                ),
-                            ]
-                        ),
-                    ],
-                    className="meta-three",
-                )
-            )
+    subtitulo = None
+    return [
+        tarjeta_gestion_educativa(
+            "superior-instituciones", "Instituciones de Educación Superior", subtitulo,
+            formato_valor(d["instituciones"]),
+            detalles=desglose(d["instituciones_itts"], d["instituciones_uep"]),
+        ),
+        tarjeta_gestion_educativa(
+            "superior-estudiantes", "Estudiantes", subtitulo,
+            formato_valor(d["estudiantes"]),
+            detalles=desglose(d["estudiantes_itts"], d["estudiantes_uep"]),
+        ),
+        tarjeta_gestion_educativa(
+            "superior-docentes", "Docentes", subtitulo,
+            formato_valor(d["docentes"]),
+            detalles=desglose(d["docentes_itts"], d["docentes_uep"]),
+        ),
+    ]
 
-        blocks.append(card(state))
+EJE2_PROYECTOS_FUTUROS = [
+    {"mes": "Octubre", "titulo": "Entrega de 595 becas",
+     "descripcion": "Becas de especialización y posgrado para ampliar las oportunidades de formación.",
+     "beneficiarios": 595, "inversion": 1785778.00},
+    {"mes": "Octubre", "titulo": "Reconocimiento de títulos Ecuador–España",
+     "descripcion": "Convenio de homologación y reconocimiento bilateral de títulos académicos.",
+     "beneficiarios": None, "inversion": None},
+    {"mes": "Octubre", "titulo": "Inicio de construcción de Casa U",
+     "descripcion": "Espacios en Azuay, El Oro y Chimborazo junto con la Universidad de Cuenca, UTMACH y UNACH.",
+     "beneficiarios": 1000, "inversion": 20136155.55},
+    {"mes": "Octubre", "titulo": "Universidad Pública de Santo Domingo de los Tsáchilas",
+     "descripcion": "Inicio de la construcción de la primera fase de la nueva universidad pública.",
+     "beneficiarios": 243, "inversion": 5638691.00},
+    {"mes": "Noviembre", "titulo": "Entrega de becas técnicas y tecnológicas",
+     "descripcion": "Nuevas oportunidades de formación técnica y tecnológica para jóvenes.",
+     "beneficiarios": 2550, "inversion": 5236916.00},
+]
 
-    # ---------------------------------------------------------
-    # COMPONENTE
-    # El componente solo aparece si ESTE proyecto tiene roadmap.
-    # ---------------------------------------------------------
-    if rm and rm.get("componentes"):
-        blocks.append(
-            prett_section(rm)
-        )
 
-    elif es_prett:
-        blocks.append(
-            html.Div(
-                "La ficha PRETT está relacionada con este proyecto, "
-                "pero HOJA_RUTA no contiene componentes utilizables.",
-                className="info-alert",
-            )
-        )
+def cargar_programas_educacion_superior():
+    """Lee únicamente las filas de Educación Superior de la matriz oficial."""
+    archivo = buscar_archivo("Mapeo - Rendicion de cuentas")
+    if archivo is None:
+        return EJE2_PROGRAMAS_RESPALDO, "Se muestra el último corte disponible; publique el Excel para actualizarlo."
+    try:
+        df = pd.read_excel(archivo)
+        columnas = {_sin_tildes(c): c for c in df.columns}
+        campos = {"vice": columnas.get("viceministerio"), "direccion": columnas.get("direccion"),
+                  "programa": columnas.get("programa o servicio"),
+                  "beneficiarios": columnas.get("beneficiarios"),
+                  "tipo": columnas.get("tipo beneficiario")}
+        if any(v is None for v in campos.values()):
+            raise ValueError("la matriz no conserva las cinco columnas esperadas")
+        mascara = df[campos["vice"]].map(_sin_tildes).str.contains("educacion superior", na=False)
+        programas = []
+        for _, fila in df.loc[mascara].iterrows():
+            beneficiarios = pd.to_numeric(fila[campos["beneficiarios"]], errors="coerce")
+            programas.append({"direccion": str(fila[campos["direccion"]]).strip(),
+                              "programa": str(fila[campos["programa"]]).strip(),
+                              "beneficiarios": int(beneficiarios) if pd.notna(beneficiarios) else 0,
+                              "tipo": str(fila[campos["tipo"]]).strip()})
+        if not programas:
+            raise ValueError("no se encontraron filas de Educación Superior")
+        return programas, None
+    except Exception as exc:
+        return EJE2_PROGRAMAS_RESPALDO, f"Se muestra el último corte disponible ({exc})."
 
+
+def cargar_programas_viceministerio(nombre_viceministerio):
+    """Obtiene de la misma matriz los programas del viceministerio solicitado."""
+    archivo = buscar_archivo("Mapeo - Rendicion de cuentas")
+    if archivo is None:
+        return [], "No se encontró la matriz de rendición de cuentas."
+    try:
+        df = pd.read_excel(archivo)
+        columnas = {_sin_tildes(c): c for c in df.columns}
+        campos = {"vice": columnas.get("viceministerio"), "direccion": columnas.get("direccion"),
+                  "programa": columnas.get("programa o servicio"),
+                  "beneficiarios": columnas.get("beneficiarios"),
+                  "tipo": columnas.get("tipo beneficiario")}
+        if any(v is None for v in campos.values()):
+            raise ValueError("la matriz no conserva las cinco columnas esperadas")
+        objetivo = _sin_tildes(nombre_viceministerio)
+        mascara = df[campos["vice"]].map(_sin_tildes).eq(objetivo)
+        datos = []
+        for _, fila in df.loc[mascara].iterrows():
+            beneficiarios = pd.to_numeric(fila[campos["beneficiarios"]], errors="coerce")
+            datos.append({"direccion": str(fila[campos["direccion"]]).strip(),
+                          "programa": str(fila[campos["programa"]]).strip(),
+                          "beneficiarios": int(beneficiarios) if pd.notna(beneficiarios) else 0,
+                          "tipo": str(fila[campos["tipo"]]).strip()})
+        return datos, None if datos else f"No existen registros para {nombre_viceministerio}."
+    except Exception as exc:
+        return [], f"No se pudo leer el consolidado ({exc})."
+
+
+def _stats_eje2(datos):
+    resumen = [(formato_valor(len(datos)), "Programas y servicios"),
+               (formato_valor(sum(d["beneficiarios"] for d in datos)), "Beneficiarios registrados"),
+               (formato_valor(len({d["direccion"] for d in datos})), "Direcciones responsables"),
+               (formato_valor(len({d["tipo"] for d in datos})), "Perfiles beneficiarios")]
+    return html.Div([html.Div([html.Strong(v), html.Span(e)], className="eje1-stat") for v, e in resumen],
+                    className="eje1-stats-grid eje2-stats-grid")
+
+
+def _tarjetas_programas_eje2(datos):
+    """Presenta cada programa con el mismo lenguaje visual de las cifras."""
+    tarjetas = []
+    colores = ["azul", "verde", "amarillo", "morado"]
+    for i, dato in enumerate(datos):
+        clave_programa = _sin_tildes(dato["programa"])
+        es_dece = clave_programa.startswith("profesionales dece")
+        es_comunidades = clave_programa.startswith("comunidades seguras")
+        titulo = ("Profesionales DECE (Apoyo Psicológico)"
+                  if es_dece else dato["programa"])
+        if es_comunidades:
+            unidad = "Comunidad Educativa"
+        elif es_dece:
+            unidad = "DECEs contratados"
+        else:
+            unidad = str(dato["tipo"]).strip()
+        contenido = [
+            html.Span(className="vision-card-icon-mark"),
+            html.Span(titulo, className="vision-card-label"),
+            html.Div([
+                html.Strong(formato_valor(dato["beneficiarios"])),
+                html.Span(unidad, className="unidad-sin-mayusculas" if es_dece else None),
+                ], className="vision-card-value-row programa-card-resultado"),
+        ]
+        if es_dece:
+            contenido.append(html.P("La brecha nacional se ha reducido al 45%",
+                                    className="programa-card-destacado"))
+        tarjetas.append(html.Article(
+            contenido,
+            className=f"vision-exec-card programa-resumen-card programa-{colores[i % len(colores)]}",
+        ))
+    clase_columnas = " programas-3-columnas" if len(tarjetas) == 3 else ""
     return html.Div(
-        blocks,
-        className="detail-container",
+        tarjetas,
+        className=("vision-exec-grid gestion-educativa-grid "
+                   f"programas-servicios-grid{clase_columnas}"),
     )
 
 
-def detail_page(project_name: str):
-    return app_shell(detail_component(project_name, embedded=False))
+def _cartera_futura_eje2(proyectos):
+    stats = [(formato_valor(len(proyectos)), "Acciones programadas"),
+             (formato_valor(sum(p["beneficiarios"] or 0 for p in proyectos)), "Beneficiarios directos"),
+             (_moneda_corta(sum(p["inversion"] or 0 for p in proyectos)), "Inversión asociada")]
+    tarjetas = []
+    for i, p in enumerate(proyectos, 1):
+        meta = []
+        if p["beneficiarios"] is not None:
+            meta.append(html.Span(
+                f"{formato_valor(p['beneficiarios'])} beneficiarios",
+                style={"padding": "6px 9px", "borderRadius": "7px", "color": "#473286",
+                       "background": "#efedf8", "fontSize": "12px", "fontWeight": "900"}))
+        if p["inversion"] is not None:
+            meta.append(html.Span(
+                _moneda_corta(p["inversion"]),
+                style={"padding": "6px 9px", "borderRadius": "7px", "color": "#795b11",
+                       "background": "#fff0c2", "fontSize": "12px", "fontWeight": "900"}))
+        es_noviembre = p["mes"] == "Noviembre"
+        tarjetas.append(html.Article([
+            html.Div([
+                html.Span(p["mes"], className="eje2-project-month",
+                          style={"padding": "5px 10px", "borderRadius": "999px",
+                                 "color": "#241259" if es_noviembre else "#ffffff",
+                                 "background": "#f4b91e" if es_noviembre else "#503a98",
+                                 "fontSize": "9px", "fontWeight": "900",
+                                 "letterSpacing": ".08em", "textTransform": "uppercase"}),
+                html.Span(f"{i:02d}", className="eje2-project-number",
+                          style={"color": "#c9cde0", "fontSize": "29px", "fontWeight": "900"})
+            ], className="eje2-project-top",
+               style={"display": "flex", "alignItems": "center", "justifyContent": "space-between"}),
+            html.H3(p["titulo"], style={"margin": "11px 0 6px", "color": "#17245b",
+                                        "fontSize": "13px", "lineHeight": "1.2"}),
+            html.P(p["descripcion"], style={"minHeight": "42px", "margin": "0 0 13px",
+                                            "color": "#59627d", "fontSize": "11px",
+                                            "lineHeight": "1.45"}),
+            html.Div(meta, className="eje2-project-meta",
+                     style={"display": "flex", "flexWrap": "wrap", "gap": "6px"}) if meta else
+            html.Div("Hito normativo", className="eje2-project-meta eje2-project-meta-single",
+                     style={"display": "inline-flex", "padding": "6px 9px", "borderRadius": "7px",
+                            "color": "#473286", "background": "#efedf8", "fontSize": "10px",
+                            "fontWeight": "800"}),
+        ], className="eje2-project-card",
+           style={"minWidth": "0", "padding": "13px", "border": "1px solid #e1e4ed",
+                  "borderTop": f"4px solid {'#f4b91e' if es_noviembre else '#503a98'}",
+                  "borderRadius": "13px", "background": "#fffdf7" if es_noviembre else "#ffffff",
+                  "boxShadow": "0 7px 18px rgba(24, 37, 87, .07)"}))
+    return html.Section([
+        html.Div([
+            html.Div([
+                html.Strong(v, style={
+                    "fontSize": "clamp(24px, 2vw, 34px)",
+                    "whiteSpace": "nowrap", "letterSpacing": "-.02em"
+                }),
+                html.Span(e)
+            ], className="eje1-stat") for i, (v, e) in enumerate(stats)
+        ],
+                 className="eje1-stats-grid eje2-future-stats"),
+        html.Div(tarjetas, className="eje2-project-grid",
+                 style={"display": "grid", "gridTemplateColumns": "repeat(5, minmax(230px, 1fr))",
+                        "gap": "10px", "alignItems": "stretch", "overflowX": "auto",
+                        "paddingBottom": "6px"}),
+        html.P("Cifras consolidadas de la agenda presentada para octubre y noviembre. El hito de "
+               "reconocimiento de títulos no registra beneficiarios ni inversión en la fuente.",
+               className="eje2-source-note")], className="eje2-future-section")
 
 
-# =============================================================================
-# 14. APP LAYOUT / ROUTING
-# =============================================================================
+def pagina_educacion_superior():
+    programas, aviso = cargar_programas_educacion_superior()
+    # Orden solicitado para la presentación ejecutiva: la tarjeta de becas
+    # técnicas se muestra antes de ValidaTec, sin alterar los datos del Excel.
+    prioridad_programas = {
+        "cupos aceptados en educacion superior": 1,
+        "because he is nice": 2,
+        "becas tecnicas y tecnologicas financiadas por aliados": 3,
+        "validatec (validacion de trayectoria para obtener tercer nivel)": 4,
+    }
+    programas = sorted(
+        programas,
+        key=lambda p: prioridad_programas.get(
+            _sin_tildes(p.get("programa", "")), 99
+        ),
+    )
+    return html.Section(className="vision-exec-page educacion-superior-page", children=[
+        html.Div(className="vision-exec-header vision-exec-header-compacta", children=[
+            html.Div(className="vision-title-mark"),
+            html.Div([html.H1(
+                          "EJE 2 • BECAS Y OPORTUNIDADES PARA JÓVENES",
+                          className="gestion-educativa-titulo-eje",
+                          style={
+                              "fontSize": "clamp(15px, 1.15vw, 20px)",
+                              "lineHeight": "1.2",
+                              "whiteSpace": "normal",
+                              "maxWidth": "1240px",
+                          },
+                      ),
+                      html.P("Programas vigentes y agenda priorizada para ampliar el acceso, reconocer trayectorias "
+                             "académicas y fortalecer la formación técnica, tecnológica y universitaria.")])]),
+        html.H2("Educación Superior en cifras", className="vision-eje-banner"),
+        html.Div(
+            className="vision-exec-grid gestion-educativa-grid datos-generales-grid "
+                      "educacion-superior-cifras-grid",
+            children=tarjetas_datos_educacion_superior(),
+        ),
+        html.H2("Programas y servicios de Educación Superior", className="vision-eje-banner"),
+        _tarjetas_programas_eje2(programas),
+        html.P(aviso, className="eje2-source-note") if aviso else None,
+    ])
+
+
+EJES_VICEMINISTERIALES = {
+    "educacion": {
+        "numero": 3, "vice_excel": "Educación", "titulo": "Educación para el Nuevo Ecuador",
+        "introduccion": "Aprendizajes, convivencia, transformación digital y servicios que fortalecen la educación.",
+        "resumen": [("8", "Líneas de acción consolidadas"), ("Octubre · Noviembre", "Agenda prevista"),
+                    ("USD 3.864.343", "Inversión y autogestión")],
+        "acciones": [
+            {"icono": "✦", "mes": "Octubre", "titulo": "Plan Nacional para el Fortalecimiento de los Aprendizajes",
+             "descripcion": "Plan nacional enfocado en Lectura y Matemática, Ciencias y Pensamiento Computacional.",
+             "detalle": "Quito · modalidad de autogestión"},
+            {"icono": "▤", "mes": "Octubre", "titulo": "Guía «Que no te cuenten cuentos»",
+             "descripcion": "1.000 guías orientadas a la cultura de paz.", "detalle": "Guayaquil · USD 7.500 aprox."},
+            {"icono": "⌘", "mes": "Octubre", "titulo": "Transformación Digital para la Educación",
+             "descripcion": "Alianza con Google para fortalecer capacidades desde educación básica hasta superior.",
+             "detalle": "Primera fase 2026: USD 9,6 millones · alcance: USD 2,8 millones"},
+            {"icono": "⚙", "mes": "Octubre–Noviembre", "titulo": "Robótica Educativa para reducir la brecha digital",
+             "descripcion": "Fase 2: entrega de kits, capacitación docente y 69 clubes en 47 cantones.",
+             "detalle": "Inversión total: USD 159.843"},
+            {"icono": "▥", "mes": "Noviembre", "titulo": "Entrega de 222 ambientes de lectura",
+             "descripcion": "Ambientes implementados en instituciones educativas rurales de 58 distritos.",
+             "detalle": "La Concordia · 222 instituciones · USD 697.000"},
+            {"icono": "⌾", "mes": "Octubre–Noviembre", "titulo": "Plan ESCUDO / Comunidades Educativas",
+             "descripcion": "Prevención, protección y seguridad escolar en 102 cantones y 14 provincias priorizadas.",
+             "detalle": "1.264.863 estudiantes · 5.293 instituciones"},
+            {"icono": "▣", "mes": "Octubre–Noviembre", "titulo": "Concursos Nacionales de Comprensión Lectora",
+             "descripcion": "Concursos de alcance nacional mediante alianzas estratégicas.",
+             "detalle": "1.000 estudiantes"},
+            {"icono": "◉", "mes": "Octubre–Noviembre", "titulo": "Fortalecimiento de los DECE",
+             "descripcion": "Avance en la contratación de profesionales para Sierra y Amazonía.",
+             "detalle": "Meta: 1.000 profesionales · inversión aprox. USD 3 millones"},
+        ],
+    },
+    "deporte": {
+        "numero": 4, "vice_excel": "Deporte", "titulo": "Deporte para el Nuevo Ecuador",
+        "introduccion": "Programas de recreación, actividad física e infraestructura deportiva con alcance territorial.",
+        "resumen": [("4", "Programas estratégicos"), ("98.500", "Beneficiarios directos"),
+                    ("USD 2.120.195,10", "Inversión ejecutada")],
+        "acciones": [
+            {"icono": "▧", "mes": "Octubre–Noviembre", "titulo": "Programa «Pinta tu Cancha»",
+             "descripcion": "Pintado de canchas comunitarias e institucionales mediante autogestión.",
+             "detalle": "8.300 beneficiarios · 6 provincias · 9 intervenciones"},
+            {"icono": "⌂", "mes": "Octubre–Noviembre", "titulo": "Infraestructura deportiva",
+             "descripcion": "Rehabilitación, adecuación y mantenimiento de escenarios deportivos emblemáticos.",
+             "detalle": "85.720 beneficiarios · USD 2.088.465,10 · 14 inauguraciones"},
+            {"icono": "●", "mes": "Octubre–Noviembre", "titulo": "Programa «Actívate»",
+             "descripcion": "Eventos y festivales orientados a promover actividad física en adultos y adultos mayores.",
+             "detalle": "2.930 beneficiarios · USD 24.692 · 6 actividades"},
+            {"icono": "★", "mes": "Octubre–Noviembre", "titulo": "Programa «Vamos a la Cancha»",
+             "descripcion": "Práctica deportiva para niñas, niños y adolescentes de 5 a 17 años.",
+             "detalle": "1.550 beneficiarios · USD 7.038 · 6 actividades"},
+        ],
+    },
+    "cultura": {
+        "numero": 5, "vice_excel": "Cultura", "titulo": "Cultura para el Nuevo Ecuador",
+        "introduccion": "Circulación artística, memoria social, lectura y fortalecimiento de capacidades culturales.",
+        "resumen": [("11", "Actividades totales"), ("181.915", "Beneficiarios directos"),
+                    ("USD 1.297.399,25", "Inversión total ejecutada")],
+        "acciones": [
+            {"icono": "✦", "mes": "Octubre–Noviembre", "titulo": "Arte en mi Ciudad",
+             "descripcion": "Dos ediciones mensuales de actividades artísticas abiertas a la comunidad.",
+             "detalle": "3.000 beneficiarios"},
+            {"icono": "◈", "mes": "Octubre–Noviembre", "titulo": "Arte en mi Escuela",
+             "descripcion": "Sensibilización, mediación y formación artística en instituciones educativas.",
+             "detalle": "8 provincias"},
+            {"icono": "▤", "mes": "Octubre", "titulo": "Feria Académica Elige Crear (3.ª edición)",
+             "descripcion": "Encuentro académico y cultural desarrollado en Azuay.", "detalle": "2.000 beneficiarios"},
+            {"icono": "▥", "mes": "Octubre", "titulo": "Feria Internacional del Libro Quito",
+             "descripcion": "Promoción del libro, la lectura y la circulación editorial.",
+             "detalle": "45.000 beneficiarios · USD 400.000"},
+            {"icono": "⌂", "mes": "Octubre", "titulo": "Ludobiblioteca del Complejo Ingapirca",
+             "descripcion": "Entrega de un espacio cultural y educativo en Cañar.",
+             "detalle": "5.525 beneficiarios · USD 57.699,25"},
+            {"icono": "♨", "mes": "Octubre", "titulo": "IV Encuentro de Cocinas Iberoamericanas",
+             "descripcion": "Encuentro para la puesta en valor del patrimonio alimentario.",
+             "detalle": "322.925 beneficiarios · USD 30.000"},
+            {"icono": "▶", "mes": "Octubre", "titulo": "Cine al Río MAAC",
+             "descripcion": "Programación cinematográfica con una edición mensual.", "detalle": "700 beneficiarios"},
+            {"icono": "▣", "mes": "Noviembre", "titulo": "Reapertura Showroom MUNA",
+             "descripcion": "Reapertura del espacio expositivo del Museo Nacional.",
+             "detalle": "Pichincha · 1.000 beneficiarios · USD 10.000"},
+            {"icono": "◎", "mes": "Noviembre", "titulo": "Fortalecimiento de capacidades del REMAB",
+             "descripcion": "Capacitación para fortalecer la gestión de la red.",
+             "detalle": "Pichincha · 20 beneficiarios capacitados"},
+            {"icono": "♫", "mes": "Noviembre", "titulo": "Festival Internacional de Artes Vivas de Loja",
+             "descripcion": "Programación nacional e internacional de artes vivas.",
+             "detalle": "160.000 beneficiarios · USD 829.700"},
+            {"icono": "◇", "mes": "Noviembre", "titulo": "Remodelación integral del Museo de Ibarra",
+             "descripcion": "Primera piedra para la intervención integral del museo.",
+             "detalle": "187.536 beneficiarios potenciales"},
+        ],
+    },
+}
+
+
+def _tarjetas_acciones_eje(acciones):
+    tarjetas = []
+    for i, accion in enumerate(acciones, 1):
+        tarjetas.append(html.Article([
+            html.Div([
+                html.Span(accion["icono"], className="eje-card-icon"),
+                html.Span(accion["mes"], className="eje2-project-month"),
+                html.Span(f"{i:02d}", className="eje2-project-number"),
+            ], className="eje-card-top"),
+            html.H3(accion["titulo"]), html.P(accion["descripcion"]),
+            html.Div(accion["detalle"], className="eje-card-detail"),
+        ], className="eje-action-card"))
+    return html.Div(tarjetas, className="eje-actions-grid eje-actions-grid-4")
+
+
+def pagina_eje_viceministerial(codigo):
+    eje = EJES_VICEMINISTERIALES[codigo]
+    programas, aviso = cargar_programas_viceministerio(eje["vice_excel"])
+    return html.Section(className="vision-exec-page eje-viceministerial-page", children=[
+        html.Div(className="vision-exec-header vision-exec-header-compacta", children=[
+            html.Div(className="vision-title-mark"),
+            html.Div([html.H1(
+                          f"EJE {eje['numero']} • {eje['titulo'].upper()}",
+                          className="gestion-educativa-titulo-eje",
+                          style={
+                              "fontSize": "clamp(15px, 1.15vw, 20px)",
+                              "lineHeight": "1.2",
+                              "whiteSpace": "normal",
+                              "maxWidth": "1240px",
+                          },
+                      ),
+                      html.P(eje["introduccion"])])]),
+        html.H2(f"Programas y servicios de {eje['vice_excel']}", className="vision-eje-banner"),
+        html.Div(
+            _tarjetas_programas_eje2(programas),
+            className="eje-programas-fila-unica",
+        ) if programas else None,
+        html.P(aviso, className="eje2-source-note") if aviso else None,
+    ])
+
+
+# Cifras generales del sistema educativo nacional (año lectivo 2025-2026),
+# tal como las proporcionó la Viceministra — no provienen de las 4 bases de
+# abajo (que son por programa), sino del portal de Datos Abiertos del
+# Ministerio. Son un valor fijo hasta que se conecte una base propia.
+DATOS_GENERALES_GESTION_EDUCATIVA = {
+    "anio_lectivo": "2025-2026",
+    "instituciones": 16215,
+    "estudiantes_mujeres": 2005491,
+    "estudiantes_hombres": 2034159,
+    "docentes_total": 217693,
+    "docentes_mujeres": 157629,
+    "docentes_hombres": 60064,
+}
+
+DATOS_ABIERTOS_MINEDEC_URL = "https://educacion.gob.ec/datos-abiertos-minedec/"
+
+
+def tarjetas_datos_generales(epja=None):
+    """Cifras de Educación Media y, cuando existe, la fila EPJA del Excel."""
+    d = DATOS_GENERALES_GESTION_EDUCATIVA
+    subtitulo = f"Año lectivo {d['anio_lectivo']}"
+    tarjetas = [
+        tarjeta_gestion_educativa(
+            "generales", "Instituciones Educativas (IE)", subtitulo,
+            formato_valor(d["instituciones"]),
+        ),
+        tarjeta_gestion_educativa(
+            "generales", "Estudiantes", subtitulo,
+            formato_valor(d["estudiantes_mujeres"] + d["estudiantes_hombres"]),
+            detalles=[
+                html.Div([html.Span("Mujeres"), html.Strong(formato_valor(d["estudiantes_mujeres"]))],
+                         className="vision-mini-stat"),
+                html.Div([html.Span("Hombres"), html.Strong(formato_valor(d["estudiantes_hombres"]))],
+                         className="vision-mini-stat secondary"),
+            ],
+        ),
+        tarjeta_gestion_educativa(
+            "generales", "Docentes", subtitulo,
+            formato_valor(d["docentes_total"]),
+            detalles=[
+                html.Div([html.Span("Mujeres"), html.Strong(formato_valor(d["docentes_mujeres"]))],
+                         className="vision-mini-stat"),
+                html.Div([html.Span("Hombres"), html.Strong(formato_valor(d["docentes_hombres"]))],
+                         className="vision-mini-stat secondary"),
+            ],
+        ),
+    ]
+    if epja is not None:
+        tarjetas.append(tarjeta_gestion_educativa(
+            "epja", "Educación para Jóvenes y Adultos (EPJA)",
+            "Programa de Gestión Educativa",
+            formato_valor(epja["beneficiarios"]),
+            unidad=str(epja["tipo"]).strip(),
+        ))
+    return tarjetas
+
+
+# ---------------------------------------------------------------------------
+# Eje 1 · Infraestructura educativa (Fortalecimiento de la Infraestructura,
+# Equipamiento y Alimentación Escolar). No proviene de ninguna de las 4 bases
+# conectadas — son los registros puntuales de infraestructura que la
+# Viceministra pasó a mano; se dejan aquí como fuente única hasta que exista
+# una base propia. A diferencia de Cobertura, aquí SÍ se muestra la inversión
+# (pedido explícito: esto es para presumir metas/logros, no cobertura de
+# programas). Cada registro trae lat/lon aproximados de su provincia para el
+# mapa (sin necesidad de un archivo geográfico externo).
+EJE1_INSTITUCIONES = [
+    {"institucion": "Unidad Educativa Puerto Limón", "beneficiarios": 1510,
+     "inversion": 647584.59, "provincia": "Santo Domingo de los Tsáchilas",
+     "canton": "Santo Domingo de los Tsáchilas", "lat": -0.2530, "lon": -79.1719},
+    {"institucion": "Unidad Educativa Jaime del Hierro", "beneficiarios": 733,
+     "inversion": 308154.49, "provincia": "Santo Domingo de los Tsáchilas",
+     "canton": "Santo Domingo de los Tsáchilas", "lat": -0.2530, "lon": -79.1719},
+    {"institucion": "Unidad Educativa \"Velasco Ibarra\"", "beneficiarios": 639,
+     "inversion": 395258.71, "provincia": "Manabí", "canton": "Portoviejo",
+     "lat": -1.0546, "lon": -80.4525},
+    {"institucion": "Unidad Educativa Provincia de Manabí", "beneficiarios": 823,
+     "inversion": 216434.73, "provincia": "Manabí", "canton": "Puerto López",
+     "lat": -1.0546, "lon": -80.4525},
+    {"institucion": "Unidad Educativa Las Mercedes", "beneficiarios": 631,
+     "inversion": 509222.24, "provincia": "Manabí", "canton": "24 de Mayo",
+     "lat": -1.0546, "lon": -80.4525},
+    {"institucion": "Unidad Educativa Bosco Wisuma", "beneficiarios": 700,
+     "inversion": 43472.62, "provincia": "Morona Santiago", "canton": "Morona",
+     "lat": -2.3086, "lon": -78.1114},
+    {"institucion": "Unidad Educativa 2 de Octubre", "beneficiarios": 129,
+     "inversion": 199281.21, "provincia": "Napo", "canton": "Tena",
+     "lat": -1.0021, "lon": -77.8140},
+]
+
+# Programa de Alimentación Escolar: resumen provincial entregado para la
+# presentación ejecutiva. Se mantiene separado de las inauguraciones porque
+# su unidad de análisis es la provincia y no la institución individual.
+PMA_PROVINCIAS = [
+    {"provincia": "Esmeraldas", "instituciones": 6, "beneficiarios": 5654,
+     "inversion": 930280.85},
+    {"provincia": "Pichincha", "instituciones": 9, "beneficiarios": 13999,
+     "inversion": 2094137.13},
+    {"provincia": "Tungurahua", "instituciones": 3, "beneficiarios": 1206,
+     "inversion": 203108.06},
+    {"provincia": "Santo Domingo de los Tsáchilas", "instituciones": 2,
+     "beneficiarios": 3978, "inversion": 674679.66},
+    {"provincia": "Los Ríos", "instituciones": 2, "beneficiarios": 3653,
+     "inversion": 598117.78},
+    {"provincia": "Santa Elena", "instituciones": 15, "beneficiarios": 6220,
+     "inversion": 1053251.35},
+    {"provincia": "Azuay", "instituciones": 1, "beneficiarios": 975,
+     "inversion": 145942.94},
+    {"provincia": "El Oro", "instituciones": 3, "beneficiarios": 3509,
+     "inversion": 630482.80},
+    {"provincia": "Guayas", "instituciones": 2, "beneficiarios": 4226,
+     "inversion": 669398.40},
+]
+
+
+def _moneda_corta(valor):
+    """Formato de moneda consistente con el resto del panel (ver _moneda,
+    más abajo, para Ejecución Presupuestaria)."""
+    return "$ " + f"{float(valor):,.2f}".replace(",", "X").replace(".", ",").replace("X", ".")
+
+
+def franja_stats_eje1(registros):
+    total_instituciones = len(registros)
+    total_beneficiarios = sum(r["beneficiarios"] for r in registros)
+    total_inversion = sum(r["inversion"] for r in registros)
+    total_provincias = len({r["provincia"] for r in registros})
+    datos = [
+        (formato_valor(total_instituciones), "Instituciones Educativas"),
+        (formato_valor(total_beneficiarios), "Estudiantes Beneficiados"),
+        (_moneda_corta(total_inversion), "Inversión Total"),
+        (formato_valor(total_provincias), "Provincias"),
+    ]
+    return html.Div([
+        html.Div([html.Strong(valor), html.Span(etiqueta)], className="eje1-stat")
+        for valor, etiqueta in datos
+    ], className="eje1-stats-grid")
+
+
+def tabla_eje1(registros):
+    """La tabla va detrás de un <details>/<summary> (igual que las fórmulas
+    del panel): colapsada por defecto, se despliega con un clic — pedido
+    explícito del usuario, no mostrar la tabla de entrada."""
+    filas = [
+        html.Tr([
+            html.Td(r["institucion"]), html.Td(formato_valor(r["beneficiarios"])),
+            html.Td(_moneda_corta(r["inversion"])), html.Td(r["provincia"]), html.Td(r["canton"]),
+        ]) for r in registros
+    ]
+    tabla = html.Table([
+        html.Thead(html.Tr([html.Th("Institución"), html.Th("Beneficiarios"), html.Th("Inversión"),
+                             html.Th("Provincia"), html.Th("Cantón")])),
+        html.Tbody(filas),
+    ], className="eje1-tabla")
+    return html.Details([
+        html.Summary([
+            html.Span("Ver tabla de instituciones"),
+            html.Span("⌄", className="eje1-tabla-chevron"),
+        ], className="eje1-tabla-header"),
+        html.Div(tabla, className="eje1-tabla-body"),
+    ], className="eje1-tabla-accordion")
+
+
+def _sin_tildes(texto):
+    normalizado = unicodedata.normalize("NFKD", str(texto).strip().lower())
+    return "".join(c for c in normalizado if not unicodedata.combining(c))
+
+
+_GEOJSON_PROVINCIAS_CACHE = None
+
+
+def _cargar_geojson_provincias():
+    """Carga provincias_ecuador.geojson (generado por
+    procesar_mapa_provincias.py a partir del shapefile oficial de CONALI).
+    Se cachea en memoria; si el archivo no existe todavía, devuelve None y
+    el mapa cae de vuelta al modo de burbujas por coordenadas."""
+    global _GEOJSON_PROVINCIAS_CACHE
+    if _GEOJSON_PROVINCIAS_CACHE is not None:
+        return _GEOJSON_PROVINCIAS_CACHE
+    # El archivo puede estar junto a app.py o dentro de assets. No se guarda
+    # un fallo en caché: si el procesador genera el GeoJSON mientras la app
+    # está abierta, una actualización posterior podrá encontrarlo.
+    raices = (BASE_DIR, BASE_DIR / "assets", Path.cwd(), Path.cwd() / "assets")
+    candidatos = [raiz / "provincias_ecuador.geojson" for raiz in raices]
+
+    # GitHub/Posit Cloud puede conservar el archivo dentro de una subcarpeta
+    # diferente o con otra combinación de mayúsculas y minúsculas.
+    vistos = set()
+    for raiz in (BASE_DIR, Path.cwd()):
+        try:
+            for ruta in raiz.rglob("*"):
+                if (ruta.is_file()
+                        and ruta.name.casefold() == "provincias_ecuador.geojson"
+                        and ".git" not in ruta.parts):
+                    candidatos.append(ruta)
+        except OSError:
+            continue
+
+    for ruta in candidatos:
+        try:
+            ruta_resuelta = ruta.resolve()
+        except OSError:
+            continue
+        if ruta_resuelta in vistos or not ruta_resuelta.is_file():
+            continue
+        vistos.add(ruta_resuelta)
+        try:
+            with open(ruta_resuelta, "r", encoding="utf-8-sig") as f:
+                contenido = json.load(f)
+            if contenido.get("type") == "FeatureCollection" and contenido.get("features"):
+                _GEOJSON_PROVINCIAS_CACHE = contenido
+                return _GEOJSON_PROVINCIAS_CACHE
+        except (OSError, UnicodeError, json.JSONDecodeError, AttributeError):
+            continue
+    return None
+
+
+def mapa_eje1(registros):
+    """Mapa coroplético de provincias: colorea con los límites reales de
+    Ecuador (shapefile oficial de CONALI, procesado por
+    procesar_mapa_provincias.py) las provincias donde hubo intervenciones.
+    Si todavía no se generó el GeoJSON, usa un mapa de burbujas como
+    respaldo para que la página nunca se rompa."""
+    agregados = {}
+    for r in registros:
+        prov = agregados.setdefault(r["provincia"], {
+            "lat": r["lat"], "lon": r["lon"], "instituciones": 0, "beneficiarios": 0,
+        })
+        prov["instituciones"] += 1
+        prov["beneficiarios"] += r["beneficiarios"]
+
+    geojson = _cargar_geojson_provincias()
+
+    if geojson:
+        texto_hover = {}
+        resaltadas = []  # (nombre, lon, lat, instituciones) de las provincias con intervención
+        nombres_resaltados = set()
+        for feat in geojson["features"]:
+            nombre = feat["properties"]["nombre"]
+            match = None
+            for clave_prov, datos in agregados.items():
+                if _sin_tildes(clave_prov) == _sin_tildes(nombre):
+                    match = datos
+                    break
+            if match:
+                nombres_resaltados.add(nombre)
+                texto_hover[nombre] = (
+                    f"<b>{nombre.title()}</b><br>{match['instituciones']} institución(es)<br>"
+                    f"{formato_valor(match['beneficiarios'])} estudiantes"
+                )
+                resaltadas.append((
+                    nombre.title(),
+                    feat["properties"]["centroide_lon"],
+                    feat["properties"]["centroide_lat"],
+                    match["instituciones"],
+                ))
+            else:
+                texto_hover[nombre] = f"<b>{nombre.title()}</b><br>Sin intervenciones registradas"
+
+        # Tres capas sólidas: provincias sin intervención en blanco y las
+        # cuatro provincias destacadas repartidas entre amarillo y azul.
+        feats_base = geojson["features"]
+        # Distribución tomada del diseño original:
+        # amarillo = Manabí y Morona Santiago;
+        # violeta = Santo Domingo de los Tsáchilas y Napo.
+        amarillas = {"manabi", "morona santiago"}
+        azules = {"santo domingo de los tsachilas", "napo"}
+        feats_amarillas = [
+            f for f in feats_base
+            if _sin_tildes(f["properties"]["nombre"]) in amarillas
+        ]
+        feats_azules = [
+            f for f in feats_base
+            if _sin_tildes(f["properties"]["nombre"]) in azules
+        ]
+        feats_normales = [
+            f for f in feats_base
+            if _sin_tildes(f["properties"]["nombre"]) not in amarillas | azules
+        ]
+
+        def _trazo(features, color):
+            nombres = [f["properties"]["nombre"] for f in features]
+            return go.Choropleth(
+                geojson={"type": "FeatureCollection", "features": features},
+                locations=nombres,
+                featureidkey="properties.nombre",
+                z=[1] * len(nombres),
+                zmin=0, zmax=1,
+                colorscale=[[0, color], [1, color]],
+                showscale=False,
+                marker_line_color="#28345f",
+                marker_line_width=1.0,
+                text=[texto_hover[n] for n in nombres],
+                hoverinfo="text",
+            )
+
+        fig = go.Figure()
+        if feats_normales:
+            fig.add_trace(_trazo(feats_normales, "#ffffff"))
+        if feats_amarillas:
+            fig.add_trace(_trazo(feats_amarillas, "#f8bd20"))
+        if feats_azules:
+            fig.add_trace(_trazo(feats_azules, "#4d3a94"))
+
+        if resaltadas:
+            fig.add_trace(go.Scattergeo(
+                lon=[r[1] for r in resaltadas],
+                lat=[r[2] for r in resaltadas],
+                mode="markers",
+                marker=dict(size=5, color="#17245b", line=dict(width=1, color="#ffffff")),
+                hoverinfo="skip",
+                showlegend=False,
+            ))
+        fig.update_geos(
+            scope="south america",
+            lataxis_range=[-5.6, 2.0],
+            lonaxis_range=[-82.3, -74.2],
+            showcountries=False,
+            showland=False,
+            showocean=True, oceancolor="#ffffff",
+            resolution=50,
+            bgcolor="#ffffff",
+            fitbounds=False,
+            projection_scale=1,
+        )
+        fig.update_layout(margin=dict(l=28, r=28, t=10, b=10), height=400,
+                           paper_bgcolor="#ffffff", plot_bgcolor="#ffffff",
+                           autosize=True, showlegend=False)
+        return dcc.Graph(figure=fig, config={"displayModeBar": False, "responsive": True},
+                          className="eje1-mapa", style={"width": "100%", "height": "400px"})
+
+    # --- Respaldo: mapa de burbujas por coordenadas (sin GeoJSON) ---
+    provincias = list(agregados)
+    etiqueta_pin = [
+        f"{p}<br>{agregados[p]['instituciones']} "
+        f"{'institución' if agregados[p]['instituciones'] == 1 else 'instituciones'}"
+        for p in provincias
+    ]
+    fig = go.Figure(go.Scattergeo(
+        lat=[agregados[p]["lat"] for p in provincias],
+        lon=[agregados[p]["lon"] for p in provincias],
+        text=etiqueta_pin,
+        textposition="top center",
+        textfont=dict(size=12, color="#28304f", family="Arial Black, Arial"),
+        hovertext=[f"<b>{p}</b><br>{agregados[p]['instituciones']} institución(es)<br>"
+                   f"{formato_valor(agregados[p]['beneficiarios'])} estudiantes" for p in provincias],
+        mode="markers+text",
+        marker=dict(
+            size=[22 + agregados[p]["instituciones"] * 7 for p in provincias],
+            color="#f8bd20",
+            opacity=1,
+            line=dict(width=2.5, color="#503a98"),
+            symbol="circle",
+        ),
+        hoverinfo="text",
+    ))
+    fig.update_geos(
+        scope="south america",
+        lataxis_range=[-5.6, 1.8],
+        lonaxis_range=[-82, -74.8],
+        showcountries=True, countrycolor="#9aa2bd",
+        showland=True, landcolor="#f5f6fa",
+        showocean=True, oceancolor="#eef1fb",
+        showsubunits=True, subunitcolor="#c7cbe0",
+        countrywidth=1.4,
+        resolution=50,
+        bgcolor="rgba(0,0,0,0)",
+    )
+    fig.update_layout(margin=dict(l=10, r=10, t=30, b=10), height=420,
+                       paper_bgcolor="rgba(0,0,0,0)")
+    return dcc.Graph(figure=fig, config={"displayModeBar": False}, className="eje1-mapa")
+
+
+def seccion_eje1_infraestructura():
+    registros = EJE1_INSTITUCIONES
+    return html.Div([
+        html.P("Infraestructura educativa", className="eje1-subtitulo"),
+        franja_stats_eje1(registros),
+        html.Div([
+            html.Div(tabla_eje1(registros), className="eje1-col-tabla"),
+            html.Div([mapa_eje1(registros)], className="eje1-mapa-wrap eje1-col-mapa"),
+        ], className="eje1-fila-detalle"),
+    ], className="eje1-seccion")
+
+
+def franja_stats_pma(registros):
+    datos = [
+        (formato_valor(sum(r["instituciones"] for r in registros)), "Instituciones Educativas"),
+        (formato_valor(sum(r["beneficiarios"] for r in registros)), "Estudiantes Beneficiarios"),
+        (_moneda_corta(sum(r["inversion"] for r in registros)), "Inversión Total"),
+        (formato_valor(len(registros)), "Provincias"),
+    ]
+    return html.Div([
+        html.Div([html.Strong(valor), html.Span(etiqueta)], className="eje1-stat")
+        for valor, etiqueta in datos
+    ], className="eje1-stats-grid pma-stats-grid")
+
+
+def tabla_pma(registros):
+    filas = [
+        html.Tr([
+            html.Td(r["provincia"]),
+            html.Td(formato_valor(r["instituciones"])),
+            html.Td(formato_valor(r["beneficiarios"])),
+            html.Td(_moneda_corta(r["inversion"])),
+        ]) for r in registros
+    ]
+    tabla = html.Table([
+        html.Thead(html.Tr([
+            html.Th("Provincia"), html.Th("N.° IE"),
+            html.Th("Beneficiarios"), html.Th("Inversión PMA"),
+        ])),
+        html.Tbody(filas),
+    ], className="eje1-tabla pma-tabla")
+    return html.Details([
+        html.Summary([
+            html.Span("Ver tabla por provincias"),
+            html.Span("⌄", className="eje1-tabla-chevron"),
+        ], className="eje1-tabla-header"),
+        html.Div(tabla, className="eje1-tabla-body"),
+    ], className="eje1-tabla-accordion")
+
+
+def mapa_pma(registros):
+    geojson = _cargar_geojson_provincias()
+    if not geojson:
+        # Respaldo visible cuando el despliegue no incluyó el GeoJSON. Evita
+        # dejar un cuadro vacío y mantiene las nueve provincias identificadas.
+        centros = {
+            "esmeraldas": (0.73, -79.15), "pichincha": (-0.18, -78.47),
+            "tungurahua": (-1.25, -78.62),
+            "santo domingo de los tsachilas": (-0.25, -79.17),
+            "los rios": (-1.42, -79.47), "santa elena": (-2.23, -80.86),
+            "azuay": (-2.90, -79.01), "el oro": (-3.26, -79.96),
+            "guayas": (-2.20, -79.89),
+        }
+        amarillas = {"esmeraldas", "pichincha", "los rios", "santa elena", "azuay"}
+        claves = [_sin_tildes(r["provincia"]) for r in registros]
+        fig = go.Figure(go.Scattergeo(
+            lat=[centros[c][0] for c in claves],
+            lon=[centros[c][1] for c in claves],
+            text=[f"<b>{r['provincia']}</b><br>{r['instituciones']} IE" for r in registros],
+            hovertext=[
+                f"<b>{r['provincia']}</b><br>{r['instituciones']} instituciones"
+                f"<br>{formato_valor(r['beneficiarios'])} beneficiarios"
+                f"<br>{_moneda_corta(r['inversion'])}" for r in registros
+            ],
+            mode="markers+text", textposition="top center",
+            textfont=dict(size=10, color="#17245b"), hoverinfo="text",
+            marker=dict(
+                size=[14 + min(r["instituciones"], 10) * 2 for r in registros],
+                color=["#f8bd20" if c in amarillas else "#4d3a94" for c in claves],
+                line=dict(width=2, color="#ffffff"), opacity=1,
+            ),
+        ))
+        fig.update_geos(
+            scope="south america", lataxis_range=[-5.6, 2.0],
+            lonaxis_range=[-82.3, -74.2], showcountries=True,
+            countrycolor="#9aa2bd", showland=True, landcolor="#f5f6fa",
+            showocean=True, oceancolor="#ffffff", resolution=50,
+            bgcolor="#ffffff",
+        )
+        fig.update_layout(
+            margin=dict(l=10, r=10, t=20, b=10), height=420,
+            paper_bgcolor="#ffffff", plot_bgcolor="#ffffff", showlegend=False,
+        )
+        return dcc.Graph(
+            figure=fig, config={"displayModeBar": False, "responsive": True},
+            className="eje1-mapa", style={"width": "100%", "height": "420px"},
+        )
+
+    por_provincia = {_sin_tildes(r["provincia"]): r for r in registros}
+    # Distribución tomada de la lámina original del PMA.
+    amarillas = {"esmeraldas", "pichincha", "los rios", "santa elena", "azuay"}
+    azules = {
+        "santo domingo de los tsachilas", "tungurahua", "guayas", "el oro",
+    }
+    seleccionadas = amarillas | azules
+
+    normales, feats_amarillas, feats_azules = [], [], []
+    etiquetas = []
+    hover = {}
+    for feat in geojson["features"]:
+        nombre = feat["properties"]["nombre"]
+        clave = _sin_tildes(nombre)
+        dato = por_provincia.get(clave)
+        if dato:
+            hover[nombre] = (
+                f"<b>{dato['provincia']}</b><br>{dato['instituciones']} instituciones"
+                f"<br>{formato_valor(dato['beneficiarios'])} beneficiarios"
+                f"<br>{_moneda_corta(dato['inversion'])}"
+            )
+            etiqueta = "Santo Domingo" if clave == "santo domingo de los tsachilas" else dato["provincia"]
+            etiquetas.append((
+                feat["properties"]["centroide_lon"],
+                feat["properties"]["centroide_lat"],
+                f"<b>{etiqueta}</b><br>{dato['instituciones']} IE",
+            ))
+        else:
+            hover[nombre] = f"<b>{nombre.title()}</b><br>Sin cobertura priorizada"
+
+        if clave in amarillas:
+            feats_amarillas.append(feat)
+        elif clave in azules:
+            feats_azules.append(feat)
+        elif clave not in seleccionadas:
+            normales.append(feat)
+
+    def _capa(features, color):
+        nombres = [f["properties"]["nombre"] for f in features]
+        return go.Choropleth(
+            geojson={"type": "FeatureCollection", "features": features},
+            locations=nombres, featureidkey="properties.nombre",
+            z=[1] * len(nombres), zmin=0, zmax=1,
+            colorscale=[[0, color], [1, color]], showscale=False,
+            marker_line_color="#4d4f83", marker_line_width=.85,
+            text=[hover[n] for n in nombres], hoverinfo="text",
+        )
+
+    fig = go.Figure()
+    fig.add_trace(_capa(normales, "#ffffff"))
+    fig.add_trace(_capa(feats_amarillas, "#f8bd20"))
+    fig.add_trace(_capa(feats_azules, "#4d3a94"))
+    fig.add_trace(go.Scattergeo(
+        lon=[e[0] for e in etiquetas], lat=[e[1] for e in etiquetas],
+        mode="markers", text=[e[2] for e in etiquetas],
+        marker=dict(size=5, color="#17245b", line=dict(width=1, color="#ffffff")),
+        hovertemplate="%{text}<extra></extra>", showlegend=False,
+    ))
+    fig.update_geos(
+        scope="south america", lataxis_range=[-5.6, 2.0], lonaxis_range=[-82.3, -74.2],
+        showcountries=False, showland=False, showocean=True, oceancolor="#ffffff",
+        resolution=50, bgcolor="#ffffff", fitbounds=False,
+    )
+    fig.update_layout(
+        margin=dict(l=20, r=20, t=8, b=8), height=420,
+        paper_bgcolor="#ffffff", plot_bgcolor="#ffffff", showlegend=False,
+    )
+    return dcc.Graph(
+        figure=fig, config={"displayModeBar": False, "responsive": True},
+        className="eje1-mapa", style={"width": "100%", "height": "420px"},
+    )
+
+
+def seccion_pma():
+    registros = PMA_PROVINCIAS
+    return html.Div([
+        html.H2(
+            "Alimentación escolar: inversión que llega al territorio",
+            className="vision-eje-banner",
+        ),
+        html.P(
+            "Por provincia priorizada un plato de comida con inversión",
+            className="eje1-subtitulo pma-subtitulo",
+        ),
+        franja_stats_pma(registros),
+        html.Div([
+            html.Div(tabla_pma(registros), className="eje1-col-tabla"),
+            html.Div([mapa_pma(registros)], className="eje1-mapa-wrap eje1-col-mapa"),
+        ], className="eje1-fila-detalle pma-fila-detalle"),
+    ], className="eje1-seccion pma-seccion")
+
+
+def seccion_proximamente(titulo, descripcion):
+    """Placeholder visual para secciones que todavía no tienen contenido ni
+    fuente de datos, pero ya reservan su lugar en la página."""
+    return html.Div([
+        html.H2(titulo),
+        html.P(descripcion),
+    ], className="vision-proximamente")
+
+
+# (código CSS, fuente, título, subtítulo, clave principal, unidad, subgrupo)
+TARJETAS_GESTION_EDUCATIVA = [
+    ("alimentacion", "Alimentación Escolar", "Alimentación Escolar",
+     "Raciones entregadas por cantón", "beneficiarios", "Estudiantes", None),
+    ("uniformes", "Uniformes Escolares", "Uniformes Escolares",
+     "Entrega de uniformes por cantón", "beneficiarios", "Estudiantes", None),
+    ("textos", "Textos Escolares", "Textos Escolares",
+     "Entrega de textos por cantón", "beneficiarios", "Estudiantes", None),
+    ("mobiliario", "Mobiliario y Transporte Escolar", "Mobiliario Escolar",
+     "Instituciones atendidas con mobiliario", "estudiantes", "Estudiantes", "mobiliario"),
+    ("transporte", "Mobiliario y Transporte Escolar", "Transporte Escolar",
+     "Estudiantes atendidos con transporte", "estudiantes", "Estudiantes", "transporte"),
+]
+
+
+def _detalles_tarjeta_gestion(dato):
+    detalles = [html.Div([
+        html.Span("Instituciones"),
+        html.Strong(formato_valor(dato.get("instituciones", 0)))
+    ], className="vision-mini-stat secondary")]
+    return detalles
+
+
+def pagina_gestion_educativa():
+    """Una tarjeta por cada una de las 4 bases reales, mostrando exactamente
+    lo que cada una tiene (beneficiarios/instituciones y su cobertura por
+    provincia) — nunca el monto de inversión. No se inventan tarjetas de
+    Matrícula, Permanencia o Riesgos de continuidad: esas requieren la base
+    de matrícula estudiantil, que todavía no está conectada aquí."""
+    resumen = RESUMEN_GESTION_EDUCATIVA
+    pendientes = PENDIENTES_GESTION_EDUCATIVA
+    programas_gestion, aviso_programas = cargar_programas_viceministerio("Gestión Educativa")
+    epja = next((p for p in programas_gestion
+                 if "epja" in _sin_tildes(p.get("programa", ""))), None)
+    programas_gestion = [p for p in programas_gestion
+                         if "epja" not in _sin_tildes(p.get("programa", ""))
+                         and "alimentacion escolar y bienestar" not in
+                         _sin_tildes(p.get("programa", ""))]
+
+    def dato(nombre_legible, clave):
+        return resumen.get(nombre_legible, {}).get(clave)
+
+    tarjetas = []
+    for (codigo, nombre_legible, titulo, subtitulo, clave_principal,
+         etiqueta_principal, subgrupo) in TARJETAS_GESTION_EDUCATIVA:
+        fuente_completa = resumen.get(nombre_legible, {})
+        fuente = (fuente_completa.get("por_recurso", {}).get(subgrupo, {})
+                  if subgrupo else fuente_completa)
+        valor_principal = fuente.get(clave_principal)
+        if valor_principal is None and clave_principal == "estudiantes":
+            valor_principal = fuente.get("beneficiarios")
+        detalles = _detalles_tarjeta_gestion(fuente)
+        tarjetas.append(tarjeta_gestion_educativa(
+            codigo, titulo, subtitulo,
+            formato_valor(valor_principal) if valor_principal is not None else "Sin fuente",
+            detalles=detalles, unidad=etiqueta_principal,
+        ))
+
+    pie = None
+    if pendientes:
+        pie = html.Div([
+            html.Strong("Fuentes por complementar: "),
+            html.Span("aún no se pudieron leer las bases de " + "; ".join(pendientes) + "."),
+        ], className="vision-exec-footer-aviso")
+
+    return html.Section(className="vision-exec-page gestion-educativa-page", children=[
+        html.Div(className="vision-exec-header vision-exec-header-compacta", children=[
+            html.Div(className="vision-title-mark"),
+            html.Div([
+                html.H1(
+                    "EJE 1 • FORTALECIMIENTO DE LA INFRAESTRUCTURA, "
+                    "EQUIPAMIENTO Y ALIMENTACIÓN ESCOLAR",
+                    className="gestion-educativa-titulo-eje",
+                    style={
+                        "fontSize": "clamp(15px, 1.15vw, 20px)",
+                        "lineHeight": "1.2",
+                        "whiteSpace": "normal",
+                        "maxWidth": "1240px",
+                    },
+                ),
+                html.P("Totales nacionales del sistema educativo y, por separado, la cobertura de Alimentación, "
+                       "Uniformes, Textos Escolares, Mobiliario y Transporte Escolar. No "
+                       "incluye montos de inversión. Matrícula, permanencia y riesgos de continuidad requieren "
+                       "la base de matrícula estudiantil, todavía no conectada a esta vista."),
+            ]),
+        ]),
+
+        html.H2("Información de Educación Media", className="vision-eje-banner"),
+        html.Div(
+                 className="vision-exec-grid gestion-educativa-grid datos-generales-grid "
+                           "educacion-media-cifras-grid",
+                 children=tarjetas_datos_generales(epja)),
+
+        html.H2("Programas y servicios de Gestión Educativa", className="vision-eje-banner"),
+        html.P("Cifras consolidadas de los programas y servicios institucionales.",
+               className="eje1-subtitulo"),
+        _tarjetas_programas_eje2(programas_gestion) if programas_gestion else None,
+        html.P(aviso_programas, className="eje2-source-note") if aviso_programas else None,
+
+        html.H2("Recursos educativos y complementarios",
+                className="vision-eje-banner"),
+        html.Div(className="vision-exec-grid gestion-educativa-grid", children=tarjetas),
+        pie,
+    ])
+
+
+# ---------------------------------------------------------------------------
+# Visión Ejecutiva · infografía institucional estática
+# ---------------------------------------------------------------------------
+def tabla_vision(grupo):
+    """Convierte el formato largo del Excel en una tabla HTML ordenada."""
+    indicadores = (grupo[["Indicador", "Orden indicador"]].drop_duplicates()
+                    .sort_values("Orden indicador")["Indicador"].tolist())
+    filas = (grupo[["Etiqueta fila", "Orden fila"]].drop_duplicates()
+             .sort_values("Orden fila"))
+    omitir_etiqueta = len(filas) == 1 and filas.iloc[0]["Etiqueta fila"].strip().lower() == "nacional"
+
+    encabezados = ([] if omitir_etiqueta else [html.Th("Categoría")])
+    encabezados += [html.Th(indicador) for indicador in indicadores]
+    cuerpo = []
+    for _, fila in filas.iterrows():
+        etiqueta = fila["Etiqueta fila"]
+        celdas = [] if omitir_etiqueta else [html.Td(etiqueta, className="vision-row-label")]
+        for indicador in indicadores:
+            valor = grupo.loc[(grupo["Etiqueta fila"] == etiqueta)
+                              & (grupo["Indicador"] == indicador), "Valor"]
+            celdas.append(html.Td(formato_valor(valor.iloc[0]) if not valor.empty else "—"))
+        clase_fila = "vision-national-row" if str(etiqueta).strip().lower() == "nacional" else ""
+        cuerpo.append(html.Tr(celdas, className=clase_fila))
+    return html.Div(html.Table([
+        html.Thead(html.Tr(encabezados)), html.Tbody(cuerpo)
+    ], className="vision-table"), className="vision-table-wrap")
+
+
+def tarjeta_tabla_vision(grupo):
+    titulo = grupo["Tabla"].iloc[0]
+    seccion_tabla = primer_texto(grupo, "Sección", "")
+    es_informacion_general = str(titulo).strip().lower() == "educación y gestión"
+    if es_informacion_general:
+        titulo = "Información General"
+    if str(titulo).strip().lower() == "deportistas identificados":
+        titulo = "Deportistas"
+    titulo_normalizado = str(titulo).strip().lower()
+    es_instituto_tecnico = "institutos técnicos y tecnológicos superiores" in titulo_normalizado
+    fuente = primer_texto(grupo, "Fuente", "No registrada")
+    nota = primer_texto(grupo, "Nota", "")
+    pie = [html.Div([
+        html.Strong(f"Fuente: {fuente}"),
+        html.Strong("Año lectivo: 2025–2026") if es_informacion_general else None,
+        html.Strong(f"Año: {'2025' if es_instituto_tecnico else '2024'}")
+        if seccion_tabla == "Educación Superior" else None,
+    ], className="vision-source-main")]
+    if nota:
+        pie.append(html.P([html.Strong("Nota: "), nota]))
+    return html.Article([
+        html.H3(titulo), tabla_vision(grupo), html.Div(pie, className="vision-source")
+    ], className="vision-table-card")
+
+
+def contenido_resumen_minedec():
+    """Muestra la infografía institucional (imagen) sin recortes ni deformación."""
+    return html.Section(
+        className="vision-image-page",
+        children=[
+            html.Div(
+                className="vision-image-frame",
+                children=html.Img(
+                    src=app.get_asset_url("vision-ejecutiva-moderna.png"),
+                    className="vision-image-original",
+                    alt="Infografía MINEDEC 2026",
+                    style={"width": "100%", "height": "auto", "display": "block"},
+                ),
+            ),
+        ],
+    )
+
+
+def contenido_vision(tab=None):
+    """Al entrar a Visión Ejecutiva se presenta el menú de los 5 viceministerios
+    y nada más, hasta que se elige uno; hoy solo "Gestión Educativa" tiene
+    contenido real, el resto está en construcción."""
+    tab = tab if tab in dict(VISION_TABS) else None
+    menu = vision_tabs_nav(tab)
+    if tab is None:
+        return html.Div([
+            html.H1(
+                "MINISTERIO DE EDUCACIÓN, DEPORTE Y CULTURA",
+                className="vision-landing-title",
+                style={
+                    "margin": "0",
+                    "color": "#4e3cab",
+                    "fontSize": "clamp(25px, 2.35vw, 40px)",
+                    "fontWeight": "900",
+                    "lineHeight": "1.08",
+                    "letterSpacing": ".01em",
+                    "textAlign": "center",
+                },
+            ),
+            html.Div(menu, className="vision-landing-menu", style={"width": "100%", "marginTop": "0"}),
+            html.Div([
+                html.Img(
+                    src=app.get_asset_url("vision-ejecutiva-portada.png"),
+                    className="vision-landing-image",
+                    alt="Resumen ejecutivo MINEDEC 2026",
+                    style={"display": "block", "width": "100%", "height": "auto",
+                           "objectFit": "contain",
+                           "borderRadius": "14px", "background": "#fff",
+                           "boxShadow": "0 12px 28px rgba(24,37,87,.10)"},
+                ),
+            ], className="vision-landing-visual",
+               style={"width": "100%", "minWidth": "0", "display": "flex",
+                      "alignItems": "flex-start", "justifyContent": "center",
+                      "position": "relative", "aspectRatio": "1909 / 1079",
+                      "overflow": "hidden",
+                      "flex": "1 1 auto", "borderRadius": "14px"}),
+        ], className="vision-landing",
+           style={"minHeight": "calc(100vh - 92px)", "padding": "18px 28px 26px",
+                  "display": "flex", "flexDirection": "column", "gap": "14px",
+                  "alignItems": "stretch", "boxSizing": "border-box", "background": "#f5f6fa"})
+    if tab == "gestion-educativa":
+        cuerpo = pagina_gestion_educativa()
+    elif tab == "educacion-superior":
+        cuerpo = pagina_educacion_superior()
+    elif tab in EJES_VICEMINISTERIALES:
+        cuerpo = pagina_eje_viceministerial(tab)
+    else:
+        cuerpo = html.Div([
+            html.H1(dict(VISION_TABS)[tab]),
+            html.P("Esta sección está en construcción: aún no se ha definido ni cargado su fuente de datos."),
+        ], className="module-welcome")
+    return html.Div([menu, cuerpo])
+
+
+# ---------------------------------------------------------------------------
+# Ejecución Presupuestaria · resumen y detalle por viceministerio
+# ---------------------------------------------------------------------------
+def _moneda(valor):
+    return "$ " + f"{float(valor):,.2f}".replace(",", "X").replace(".", ",").replace("X", ".")
+
+
+def _formatear_fecha_actualizacion():
+    """Devuelve únicamente la fecha de corte; la hora HTTP no es informativa."""
+    crudo = (PRESUPUESTO_META.get("fecha") or "").strip()
+    if not crudo:
+        return None
+    try:
+        fecha = parsedate_to_datetime(crudo)  # Encabezado HTTP, con zona horaria.
+        fecha = fecha.astimezone().replace(tzinfo=None) if fecha.tzinfo else fecha
+        # El servidor de descarga informa en GMT; Ecuador es GMT-5.
+        fecha = fecha - timedelta(hours=5)
+        return fecha.strftime("%d/%m/%Y")
+    except (TypeError, ValueError):
+        pass
+    for patron in ("%d/%m/%Y %H:%M", "%d/%m/%Y"):
+        try:
+            fecha = datetime.strptime(crudo, patron)
+            return fecha.strftime("%d/%m/%Y")
+        except ValueError:
+            continue
+    return crudo
+
+
+def _columna_agrupacion_presupuesto(df, agrupar_por="gasto"):
+    """Escoge la mejor columna disponible para agrupar el detalle: por grupo de
+    gasto (por defecto) o por proyecto, según lo que exista en el Excel ESIGEF."""
+    if agrupar_por == "proyecto":
+        candidatas = ["NOM_PROYECTO", "PROYECTO", "NOMBRE_PROYECTO", "DESCRIPCION_PROYECTO"]
+    else:
+        candidatas = [
+            "NOM_GRUPO", "GRUPO", "GRUPO_GASTO", "NOMBRE_GRUPO",
+            "NOM_ITEM", "ITEM", "NOM_PROGRAMA", "TIPO",
+        ]
+    return next((col for col in candidatas if col in df.columns), "Viceministerio")
+
+
+def _filtrar_alcance_presupuesto(df, alcance="Total"):
+    """Filtra Corriente/Inversión tolerando variantes de escritura."""
+    if df.empty or alcance in (None, "Total") or "TIPO" not in df.columns:
+        return df.copy()
+    patron = "INVERSION" if alcance == "Inversión" else "CORRIENTE"
+    tipo_normalizado = (df["TIPO"].fillna("").astype(str)
+                        .map(_normalizar_encabezado_presupuesto))
+    return df.loc[tipo_normalizado.str.contains(patron, na=False)].copy()
+
+
+def _etiqueta_columna_agrupacion(agrupar_por="gasto"):
+    return "Proyecto" if agrupar_por == "proyecto" else "Grupo de gasto"
+
+
+def _resumen_grupos_presupuesto(df, agrupar_por="gasto"):
+    """Consolida partidas individuales y calcula ejecución y semáforo, agrupando
+    por grupo de gasto o por proyecto según `agrupar_por`."""
+    etiqueta_columna = _etiqueta_columna_agrupacion(agrupar_por)
+    if df.empty:
+        return pd.DataFrame(columns=[
+            "POA/PAI", etiqueta_columna, "CODIFICADO", "COMPROMISO",
+            "DEVENGADO", "SALDO_DISPONIBLE", "EJECUCION", "SEMAFORO",
+        ])
+    columna = _columna_agrupacion_presupuesto(df, agrupar_por)
+    trabajo = df.copy()
+    trabajo[etiqueta_columna] = (trabajo[columna].fillna("No especificado")
+                                  .astype(str).str.strip().replace("", "No especificado"))
+    trabajo["POA/PAI"] = (trabajo["TIPO"].fillna("No especificado").astype(str).str.strip()
+                           if "TIPO" in trabajo.columns else "No especificado")
+    resumen = (trabajo.groupby(["POA/PAI", etiqueta_columna], dropna=False)[
+        ["CODIFICADO", "COMPROMISO", "DEVENGADO", "SALDO_DISPONIBLE"]
+    ].sum().reset_index())
+    resumen = resumen.loc[(resumen[["CODIFICADO", "COMPROMISO", "DEVENGADO"]]
+                           .abs().sum(axis=1) > 0)].copy()
+    resumen["EJECUCION"] = resumen.apply(
+        lambda r: (r["DEVENGADO"] / r["CODIFICADO"] * 100) if r["CODIFICADO"] else 0.0,
+        axis=1,
+    )
+    resumen["SEMAFORO"] = resumen["EJECUCION"].map(
+        lambda v: "Verde" if v >= 70 else "Amarillo" if v >= 40 else "Rojo"
+    )
+    return resumen.sort_values(["POA/PAI", "CODIFICADO"], ascending=[True, False])
+
+
+_PUNTO_SEMAFORO = {"Verde": "🟢", "Amarillo": "🟡", "Rojo": "🔴"}
+
+
+def _tabla_resumen_presupuesto(df, agrupar_por="gasto"):
+    resumen = _resumen_grupos_presupuesto(df, agrupar_por)
+    salida = resumen.copy()
+    for col in ["CODIFICADO", "COMPROMISO", "DEVENGADO", "SALDO_DISPONIBLE"]:
+        salida[col] = salida[col].map(_moneda)
+    salida["EJECUCION"] = salida["EJECUCION"].map(
+        lambda valor: f"{valor:.2f}%".replace(".", ",")
+    )
+    # Solo un punto de color (sin el nombre "Rojo"/"Amarillo"/"Verde" como texto).
+    salida["SEMAFORO"] = salida["SEMAFORO"].map(lambda v: _PUNTO_SEMAFORO.get(v, "⚪"))
+    salida = salida.rename(columns={
+        "CODIFICADO": "Codificado",
+        "COMPROMISO": "Comprometido",
+        "DEVENGADO": "Devengado",
+        "SALDO_DISPONIBLE": "Saldo disponible",
+        "EJECUCION": "Ejecución",
+        "SEMAFORO": "Semáforo",
+    })
+    return salida
+
+
+def _fila_total_presupuesto(df, agrupar_por="gasto"):
+    """Construye la fila TOTAL como un registro más de la tabla (mismas columnas)."""
+    etiqueta_columna = _etiqueta_columna_agrupacion(agrupar_por)
+    codificado = float(df["CODIFICADO"].sum()) if not df.empty else 0.0
+    compromiso = float(df["COMPROMISO"].sum()) if not df.empty else 0.0
+    devengado = float(df["DEVENGADO"].sum()) if not df.empty else 0.0
+    saldo = float(df["SALDO_DISPONIBLE"].sum()) if not df.empty else 0.0
+    ejecucion = (devengado / codificado * 100) if codificado else 0.0
+    semaforo = "Verde" if ejecucion >= 70 else "Amarillo" if ejecucion >= 40 else "Rojo"
+    return {
+        "POA/PAI": "TOTAL",
+        etiqueta_columna: "",
+        "Codificado": _moneda(codificado),
+        "Comprometido": _moneda(compromiso),
+        "Devengado": _moneda(devengado),
+        "Saldo disponible": _moneda(saldo),
+        "Ejecución": f"{ejecucion:.2f}%".replace(".", ","),
+        "Semáforo": _PUNTO_SEMAFORO.get(semaforo, "⚪"),
+    }
+
+
+def _tabla_con_total(df, agrupar_por="gasto"):
+    """Detalle por grupo/proyecto + una fila TOTAL final, lista para el DataTable."""
+    detalle = _tabla_resumen_presupuesto(df, agrupar_por)
+    registros = detalle.to_dict("records")
+    registros.append(_fila_total_presupuesto(df, agrupar_por))
+    return detalle, registros
+
+
+def _figura_ejecucion_general(df):
+    """Anillo con el porcentaje devengado respecto del codificado."""
+    codificado = float(df["CODIFICADO"].sum()) if not df.empty else 0.0
+    devengado = float(df["DEVENGADO"].sum()) if not df.empty else 0.0
+    porcentaje = min((devengado / codificado * 100) if codificado else 0.0, 100.0)
+    figura = go.Figure(go.Pie(
+        labels=["Ejecutado (devengado)", "Pendiente por ejecutar"],
+        values=[porcentaje, max(100 - porcentaje, 0)], hole=.68,
+        marker={"colors": ["#5442a3", "#e8eaf2"]},
+        textinfo="none", hovertemplate="%{label}: %{value:.2f}%<extra></extra>",
+    ))
+    figura.add_annotation(
+        text=f"<b>{porcentaje:.1f}%</b><br><span style='font-size:11px'>ejecutado</span>",
+        x=.5, y=.5, showarrow=False, font={"size": 24, "color": "#17245b"},
+    )
+    figura.update_layout(
+        title={"text": "Avance de ejecución presupuestaria", "x": .5,
+               "font": {"size": 16, "color": "#17245b"}},
+        height=300, margin=dict(l=20, r=20, t=55, b=48),
+        legend={"orientation": "h", "x": .5, "xanchor": "center", "y": -.05,
+                "font": {"size": 10}}, paper_bgcolor="white",
+        font={"family": "Arial", "color": "#17245b"},
+    )
+    return figura
+
+
+def _millones(valor):
+    return f"{valor:,.2f}".replace(",", "X").replace(".", ",").replace("X", ".")
+
+
+def _figura_montos_presupuesto(df):
+    """Barra con los montos consolidados (en millones de USD): Codificado,
+    Certificado (PRECOMPROMISO), Comprometido, Devengado y Saldo disponible."""
+    # Paleta validada (dataviz: banda de luminosidad, piso de croma, separación
+    # CVD y contraste vs. fondo) — reutiliza el morado del pastel de ejecución
+    # (#5442a3 = "Devengado") para mantener coherencia visual entre ambos gráficos.
+    metricas = [
+        ("Codificado", "CODIFICADO", "#2f6fed"),
+        ("Certificado", "PRECOMPROMISO", "#1f9e6f"),
+        ("Comprometido", "COMPROMISO", "#c9860a"),
+        ("Devengado", "DEVENGADO", "#5442a3"),
+        ("Saldo disponible", "SALDO_DISPONIBLE", "#de232d"),
+    ]
+    etiquetas = [nombre for nombre, _, _ in metricas]
+    colores = [color for _, _, color in metricas]
+    valores = [
+        (float(df[col].sum()) / 1_000_000) if (not df.empty and col in df.columns) else 0.0
+        for _, col, _ in metricas
+    ]
+    montos = [v * 1_000_000 for v in valores]
+    figura = go.Figure(go.Bar(
+        x=etiquetas, y=valores, marker={"color": colores},
+        text=[f"{_millones(v)} M" for v in valores], textposition="outside",
+        customdata=[_moneda(m) for m in montos],
+        hovertemplate="<b>%{x}</b><br>%{customdata}<extra></extra>",
+    ))
+    figura.update_layout(
+        title={"text": "Montos presupuestarios (millones de USD) · Inversión", "x": .5,
+               "font": {"size": 16, "color": "#17245b"}},
+        height=300, margin=dict(l=55, r=25, t=55, b=45),
+        paper_bgcolor="white", plot_bgcolor="white", showlegend=False,
+        font={"family": "Arial", "color": "#17245b"},
+    )
+    figura.update_xaxes(showgrid=False, tickfont={"size": 10.5})
+    # Se agrega un 20% de margen superior sobre el valor máximo para que la
+    # etiqueta "outside" de la barra más alta no quede recortada por el borde
+    # del gráfico.
+    tope = (max(valores) * 1.2) if valores and max(valores) > 0 else 1
+    figura.update_yaxes(title="Millones de USD", gridcolor="#e4e7f0",
+                        tickformat=",.1f", tickfont={"size": 10},
+                        range=[0, tope])
+    return figura
+
+
+def contenido_presupuesto(vice=None):
+    actualizado = _formatear_fecha_actualizacion()
+    insignia_actualizacion = (
+        html.Span([html.Span("Corte de datos: ", className="budget-updated-label"), actualizado],
+                  className="budget-updated-badge")
+        if actualizado else None
+    )
+    if ERROR_PRESUPUESTO or DATA_PRESUPUESTO.empty:
+        return html.Div([
+            html.Div([html.P("EJECUCIÓN PRESUPUESTARIA", className="content-kicker"),
+                      html.H1("Seguimiento presupuestario"),
+                      html.P("Información diaria del reporte ESIGEF.")], className="content-heading"),
+            html.Div([html.H2("Conexión pendiente"),
+                      html.P(ERROR_PRESUPUESTO or "No existen registros disponibles."),
+                      html.P("Verifique que el vínculo de OneDrive permita descargar el archivo sin iniciar sesión.")],
+                     className="load-error")
+        ], className="indicator-content")
+    if not vice:
+        return html.Div([
+            html.Div([html.P("EJECUCIÓN PRESUPUESTARIA", className="content-kicker"),
+                      html.H1("Seguimiento presupuestario"),
+                      html.P("Información consolidada de la ejecución presupuestaria."),
+                      insignia_actualizacion],
+                     className="content-heading"),
+            html.Div([html.H2("Seleccione un viceministerio"),
+                      html.P("Use el menú lateral para consultar su ejecución, composición y detalle presupuestario.")],
+                     className="module-welcome")
+        ], className="indicator-content")
+
+    es_general = vice == "General"
+    if es_general:
+        vice_normalizado = (DATA_PRESUPUESTO["Viceministerio"].fillna("").astype(str)
+                            .map(_normalizar_encabezado_presupuesto))
+        base = DATA_PRESUPUESTO.loc[
+            ~vice_normalizado.isin({"SIN_CLASIFICACION", "SIN_CLASIFICAR", "NO_APLICA", ""})
+        ].copy()
+    else:
+        base = DATA_PRESUPUESTO.loc[DATA_PRESUPUESTO["Viceministerio"] == vice].copy()
+    # Todo el módulo trabaja únicamente sobre Inversión (ya no existe la vista
+    # "Corriente"): tanto en General como en cada viceministerio.
+    grupo = _filtrar_alcance_presupuesto(base, "Inversión")
+    totales = grupo[PRESUPUESTO_MONETARIAS].sum()
+    codificado = float(totales["CODIFICADO"])
+    devengado = float(totales["DEVENGADO"])
+    ejecucion = (devengado / codificado * 100) if codificado else 0.0
+
+    certificado = float(totales["PRECOMPROMISO"]) if "PRECOMPROMISO" in totales else 0.0
+    compromiso = float(totales["COMPROMISO"])
+    saldo = float(totales["SALDO_DISPONIBLE"])
+    kpis = [
+        ("codificado", "Codificado", _moneda(codificado), "Presupuesto vigente"),
+        ("certificado", "Certificado", _moneda(certificado), "Precompromiso"),
+        ("comprometido", "Comprometido", _moneda(compromiso), "Obligaciones registradas"),
+        ("devengado", "Devengado", _moneda(devengado), "Monto ejecutado"),
+        ("saldo", "Saldo disponible", _moneda(saldo), "Recursos por utilizar"),
+        ("ejecucion", "% de ejecución", f"{ejecucion:.2f}%".replace(".", ","),
+         "Devengado / codificado"),
+    ]
+
+    iconos_kpi = {
+        "asignado": "<path d='M8 18h16M10 18V8h12v10M13 13h2m3 0h2M7 22h18'/>",
+        "codificado": "<path d='M9 5h10l4 4v14H9zM19 5v5h4M13 14h6m-6 4h6'/>",
+        "certificado": "<path d='M15 4l2.6 5.3 5.8.9-4.2 4.1 1 5.8-5.2-2.8-5.2 2.8 1-5.8-4.2-4.1 5.8-.9z'/><path d='M12 21l1.5 4M18 21l-1.5 4'/>",
+        "comprometido": "<path d='M6 13l5 5L22 7M5 4h20v20H5z'/>",
+        "devengado": "<circle cx='15' cy='15' r='10'/><path d='M11 15l3 3 6-7'/>",
+        "saldo": "<path d='M5 10h20v13H5zM8 10V7h14v3M9 16h8m4 0h1'/>",
+        "ejecucion": "<path d='M8 22L22 8M10 8h.01M20 22h.01'/><circle cx='10' cy='8' r='3'/><circle cx='20' cy='22' r='3'/>",
+    }
+
+    def icono_kpi(nombre):
+        svg = ("<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 30 30' "
+               "fill='none' stroke='#4d3a94' stroke-width='1.8' stroke-linecap='round' "
+               f"stroke-linejoin='round'>{iconos_kpi[nombre]}</svg>")
+        # Ancho/alto fijos: un <img> de SVG sin esos atributos puede caer al
+        # tamaño por defecto del navegador (300x150) y tapar el texto vecino.
+        return html.Img(src="data:image/svg+xml;utf8," + quote(svg), alt="",
+                        style={"width": "14px", "height": "14px", "display": "block"},
+                        **{"aria-hidden": "true"})
+
+    def punto(color):
+        return html.Span(style={
+            "display": "inline-block", "width": "6px", "height": "6px",
+            "borderRadius": "50%", "background": color, "marginRight": "3px",
+        })
+
+    leyenda_semaforo = html.Div([
+        html.Span("Semáforo:", style={"fontWeight": "700", "marginRight": "3px"}),
+        html.Span([punto("#df3e5b"), "menor a 40%"], style={"marginRight": "8px"}),
+        html.Span([punto("#efb629"), "40% a 69,99%"], style={"marginRight": "8px"}),
+        html.Span([punto("#2fbd83"), "70% o más"]),
+    ], style={
+        "textAlign": "center", "color": "#9aa1b3", "fontSize": "9px",
+        "marginTop": "8px", "display": "flex", "alignItems": "center",
+        "justifyContent": "center", "flexWrap": "wrap",
+    })
+
+    agrupar_por_inicial = "proyecto"
+    detalle_sin_total, registros_tabla = _tabla_con_total(grupo, agrupar_por_inicial)
+    columnas = list(detalle_sin_total.columns)
+    etiqueta_columna_inicial = _etiqueta_columna_agrupacion(agrupar_por_inicial)
+    titulo_pagina = "Visión general de la gestión" if es_general else vice
+    subtitulo_pagina = ("Resumen consolidado de la ejecución presupuestaria de Inversión."
+                        if es_general else "Ejecución presupuestaria de Inversión.")
+
+    texto_explicativo_style = {"fontSize": "13px", "color": "#4a5170", "margin": "0"}
+
+    # Misma visualización en General y en cada viceministerio: anillo de
+    # ejecución + montos consolidados (en millones), siempre solo Inversión.
+    visuales = html.Section([
+        html.Div([
+            html.H2("Resumen de ejecución"),
+            html.P("El porcentaje de ejecución corresponde a Devengado / Codificado × 100. "
+                   "Cifras de Inversión.", style=texto_explicativo_style),
+        ], className="budget-visual-header"),
+        html.Div([
+            html.Div(dcc.Graph(figure=_figura_ejecucion_general(grupo),
+                               config={"displayModeBar": False, "responsive": False},
+                               style={"height": "300px", "width": "100%"}),
+                     className="budget-panel", style={"height": "300px"}),
+            html.Div(dcc.Graph(figure=_figura_montos_presupuesto(grupo),
+                               config={"displayModeBar": False, "responsive": False},
+                               style={"height": "300px", "width": "100%"}),
+                     className="budget-panel", style={"height": "300px"}),
+        ], className="budget-general-chart-grid", style={
+            "display": "grid", "gridTemplateColumns": "minmax(280px, .65fr) minmax(0, 1.35fr)",
+            "gap": "14px",
+        }),
+        leyenda_semaforo,
+    ], className="budget-visual-section")
+
+    selector_tabla = html.Div([
+        html.Span("Solo Inversión", className="budget-investment-badge"),
+        dcc.RadioItems(
+            id="budget-table-scope",
+            options=[{"label": "Grupo de gasto", "value": "gasto"},
+                     {"label": "Proyecto", "value": "proyecto"}],
+            value=agrupar_por_inicial, inline=True, className="budget-table-filter",
+        ),
+    ], style={"display": "flex", "alignItems": "center", "gap": "10px", "flexWrap": "wrap"})
+
+    return html.Div([
+        html.Div([html.P("EJECUCIÓN PRESUPUESTARIA", className="content-kicker"),
+                  html.H1(titulo_pagina),
+                  html.P(subtitulo_pagina),
+                  insignia_actualizacion],
+                 className="content-heading"),
+        html.Div([
+            html.Div([
+                html.Span(icono_kpi(codigo), className="budget-kpi-icon", style={
+                    "display": "flex", "alignItems": "center", "justifyContent": "center",
+                    "width": "24px", "height": "24px", "flex": "0 0 24px",
+                    "borderRadius": "7px", "background": "rgba(241, 182, 32, .25)",
+                }),
+                html.Div([
+                    html.Span(titulo, style={
+                        "display": "block", "fontSize": "8.5px", "fontWeight": "800",
+                        "textTransform": "uppercase", "letterSpacing": ".02em",
+                        "color": "#7a6008", "whiteSpace": "normal",
+                    }),
+                    html.Strong(valor, style={
+                        "display": "block", "fontSize": "clamp(11px, .95vw, 14px)",
+                        "color": "#232d5a", "margin": "2px 0 1px", "overflowWrap": "anywhere",
+                    }),
+                    html.Small(nota, style={
+                        "display": "block", "fontSize": "8px", "color": "#806000",
+                    }),
+                ], style={"minWidth": "0"})
+            ], className="budget-kpi-card", style={
+                "display": "grid", "gridTemplateColumns": "24px minmax(0, 1fr)",
+                "alignItems": "center", "gap": "8px",
+                "minHeight": "64px", "padding": "8px 10px", "minWidth": "0",
+            })
+            for codigo, titulo, valor, nota in kpis
+        ], className="budget-kpi-grid", style={
+            "display": "grid",
+            "gridTemplateColumns": f"repeat({len(kpis)}, minmax(0, 1fr))",
+            "gap": "8px",
+        }),
+        visuales,
+        html.Section([
+            html.Div([html.H2("Detalle presupuestario"),
+                      html.Div([
+                          selector_tabla,
+                          html.Span(f"{len(detalle_sin_total):,} grupos".replace(",", "."),
+                                    id="budget-table-count"),
+                      ], className="budget-table-actions")],
+                     className="budget-table-title"),
+            dash_table.DataTable(
+                id="budget-detail-table",
+                data=registros_tabla,
+                columns=[{"name": c, "id": c} for c in columnas],
+                page_size=20, sort_action="none", filter_action="none",
+                fixed_rows={"headers": True},
+                style_table={"overflowX": "auto", "maxHeight": "620px"},
+                style_cell={"fontFamily": "Arial", "fontSize": "12px", "padding": "9px",
+                            "minWidth": "110px", "maxWidth": "300px", "whiteSpace": "normal",
+                            "textAlign": "right"},
+                style_cell_conditional=[
+                    {"if": {"column_id": "POA/PAI"}, "textAlign": "left", "fontWeight": "700"},
+                    {"if": {"column_id": ["Grupo de gasto", "Proyecto"]}, "textAlign": "left",
+                     "minWidth": "230px"},
+                    {"if": {"column_id": "Semáforo"}, "textAlign": "center", "fontSize": "15px",
+                     "minWidth": "60px", "maxWidth": "60px", "padding": "0"},
+                ],
+                style_header={"backgroundColor": "#17245b", "color": "white", "fontWeight": "800",
+                              "border": "1px solid #384273", "textAlign": "center"},
+                style_data_conditional=[
+                    {"if": {"row_index": "odd"}, "backgroundColor": "#f7f7fb"},
+                    {"if": {"filter_query": "{Ejecución} contains '0,00%'", "column_id": "Ejecución"},
+                     "color": "#b82043", "fontWeight": "800"},
+                    {"if": {"filter_query": '{POA/PAI} = "TOTAL"'}, "backgroundColor": "#17245b",
+                     "color": "#ffffff", "fontWeight": "800", "border": "1px solid #384273"},
+                ],
+            )
+        ], className="budget-table-card budget-table-full"),
+        html.P(f"Fuente: ESIGEF · {PRESUPUESTO_META.get('origen', '')}", className="budget-source")
+    ], className="indicator-content budget-content")
+
+
+# ---------------------------------------------------------------------------
+# Enrutamiento genérico de módulos
+# ---------------------------------------------------------------------------
+def contenido_inventario():
+    """Enlaces directos a los portales de datos abiertos por ámbito."""
+    enlaces = [
+        ("Educación Media", "https://educacion.gob.ec/datos-abiertos-minedec/"),
+        ("Educación Superior", "https://siau.senescyt.gob.ec/portal-de-indicadores-de-educacion-superior/"),
+        ("Cultura", "https://siic.culturaypatrimonio.gob.ec/que-es-la-cultura-en-cifras/"),
+    ]
+    return html.Div([
+        html.Div([html.P("INVENTARIO Y RECURSO DE INFORMACIÓN", className="content-kicker"),
+                  html.H1("Recursos de información abiertos"),
+                  html.P("Seleccione un ámbito para abrir su portal de datos en una pestaña nueva.")],
+                 className="content-heading"),
+        html.Div([
+            html.A(nombre, href=url, target="_blank", rel="noopener noreferrer", style={
+                "display": "flex", "alignItems": "center", "justifyContent": "center",
+                "flex": "1 1 220px", "minWidth": "220px", "minHeight": "90px",
+                "background": "#4f449a", "color": "#fff", "fontWeight": "800",
+                "fontSize": "15px", "borderRadius": "12px", "textDecoration": "none",
+                "boxShadow": "0 8px 20px rgba(35,45,90,.18)", "textAlign": "center",
+                "padding": "18px", "cursor": "pointer",
+            })
+            for nombre, url in enlaces
+        ], style={"display": "flex", "gap": "16px", "flexWrap": "wrap", "marginTop": "20px"}),
+    ], className="indicator-content")
+
+
+def contenido_documentacion():
+    """Repositorio documental exigido para el entregable E-02 (DP-SI-020)."""
+    icono_documento = (
+        "<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 48 48' "
+        "fill='none' stroke='#503a98' stroke-width='2.6' "
+        "stroke-linecap='round' stroke-linejoin='round'>"
+        "<path d='M13 6h15l8 8v28H13z'/><path d='M28 6v9h9'/>"
+        "<path d='M19 23h11M19 29h11M19 35h8'/></svg>"
+    )
+
+    def tarjeta_entregable(codigo, titulo, descripcion, formato, nombre_archivo):
+        return html.Article([
+            html.Div([
+                html.Span(
+                    html.Img(
+                        src="data:image/svg+xml;utf8," + quote(icono_documento),
+                        className="document-file-icon-svg", alt="",
+                    ),
+                    className="document-file-icon", **{"aria-hidden": "true"},
+                ),
+            ], className="document-card-top"),
+            html.H3(titulo),
+            html.P(descripcion),
+            html.Div([html.Span("Formato: "), html.Strong(formato)], className="document-format"),
+            html.Div([
+                html.Span("• Disponible", className="document-status available"),
+                html.A(
+                    [html.Span("Descargar archivo"), html.Span("↓", **{"aria-hidden": "true"})],
+                    href=app.get_relative_path(
+                        "/descargar-entregable/" + quote(nombre_archivo)
+                    ),
+                    className="document-action",
+                    download=nombre_archivo,
+                ),
+            ], className="document-card-actions"),
+        ], className="document-deliverable-card")
+
+    entregables = [
+        tarjeta_entregable(
+            "E-03", "Manual de usuario",
+            "Cómo navegar el portal, leer sus tableros, usar los filtros y descargar gráficos y tablas.",
+            "DOCX", "E-03_Manual_de_usuario.docx",
+        ),
+        tarjeta_entregable(
+            "E-04", "Diccionario de datos e indicadores",
+            "Variables de cada archivo de datos del portal y definición de cada indicador: fórmula, unidad, fuente y desagregaciones.",
+            "XLSX", "E-04_Diccionario_de_datos_e_indicadores_Anexo5.xlsx",
+        ),
+        tarjeta_entregable(
+            "E-05", "Fichas metodológicas de los indicadores",
+            "Archivo único con las fichas metodológicas de todos los indicadores publicados en el portal.",
+            "DOCX", "E-05_Fichas_metodologicas.docx",
+        ),
+        tarjeta_entregable(
+            "E-06", "Ficha de formalización",
+            "Anexo 4 con la ficha institucional para la formalización de la solución de información.",
+            "DOCX", "E-06_Anexo4_Ficha_formalizacion.docx",
+        ),
+    ]
+    return html.Div([
+        html.Section([
+            html.Div([
+                html.H1("Documentación"),
+                html.P("Manual de usuario, diccionario de datos e indicadores, fichas metodológicas y ficha de formalización de la solución de información."),
+            ]),
+        ], className="documentation-hero"),
+        html.Section([
+            html.Div([
+                html.H2("DOCUMENTOS DISPONIBLES"),
+            ], className="documentation-section-heading"),
+            html.Div(entregables, className="document-deliverables-grid"),
+        ], className="documentation-section"),
+    ], className="documentation-page")
+
+
+def contenido_seccion(seccion, vice=None, indicador=None):
+    if seccion == "vision":
+        return contenido_vision(vice)
+    if seccion == "pnd":
+        return contenido_pnd(vice, indicador)
+    if seccion == "kpi-estrategicos":
+        return contenido_kpi(vice, indicador)
+    if seccion == "kpi-institucionales":
+        return contenido_kpi_inst(vice, indicador)
+    if seccion == "presupuesto":
+        return contenido_presupuesto(vice)
+    if seccion == "inventario":
+        return contenido_inventario()
+    if seccion == "documentacion":
+        return contenido_documentacion()
+    return html.Div([html.H1(dict(SECCIONES).get(seccion, "Módulo")),
+                      html.P("Módulo preparado para la siguiente etapa.")],
+                     className="module-welcome")
+
+
+def modulo_seccion(seccion, vice=None, indicador=None):
+    return html.Div([menu_lateral(seccion, vice, indicador),
+                     html.Main(contenido_seccion(seccion, vice, indicador), id="module-detail",
+                               className="module-main")],
+                    className="module-layout")
+
 
 app.layout = html.Div([
-    dcc.Location(id="url", refresh="callback-nav"),
-    dcc.Store(
-        id="auth-store",
-        storage_type="session",
-        data={"authenticated": False},
-    ),
-    html.Div(id="page-content"),
-])
+    dcc.Store(id="active-section", data="home"), dcc.Store(id="selected-vice"),
+    dcc.Store(id="selected-indicator"),
+    dcc.Store(id="data-version", data={"pnd": VERSION_PND, "kpi-estrategicos": VERSION_KPI,
+                                        "kpi-institucionales": VERSION_KPI_INST,
+                                        "gestion-educativa": VERSION_GESTION_EDUCATIVA,
+                                        "vision": VERSION_VISION,
+                                        "presupuesto": VERSION_PRESUPUESTO}),
+    dcc.Interval(id="excel-watcher", interval=15000, n_intervals=0),
+    barra_superior(),
+    html.Div(id="main-content", children=portada()),
+    html.Div(id="mathjax-trigger", style={"display": "none"}),
+], className="app-shell")
 
 
-@app.callback(
-    Output("page-content", "children"),
-    Input("url", "pathname"),
-    Input("url", "search"),
-    Input("auth-store", "data"),
-)
-def route(pathname, search, auth_data):
-    authenticated = bool((auth_data or {}).get("authenticated", False))
-    pathname = pathname or "/"
-
-    if not authenticated:
-        return login_layout()
-
-    if pathname in ("/", "/inicio"):
-        return home_layout()
-
-    if pathname == "/proyectos":
-        return projects_layout()
-
-    if pathname == "/detalle":
-        params = parse_qs((search or "").lstrip("?"))
-        name = unquote(params.get("project", [""])[0])
-        return detail_page(name)
-
-    return home_layout()
-
-
-@app.callback(
-    Output("auth-store", "data", allow_duplicate=True),
-    Output("url", "pathname", allow_duplicate=True),
-    Output("login-error", "children"),
-    Input("login-button", "n_clicks"),
-    Input("password-input", "n_submit"),
-    State("password-input", "value"),
-    prevent_initial_call=True,
-)
-def do_login(n_clicks, n_submit, password):
-    if not n_clicks and not n_submit:
-        return no_update, no_update, no_update
-    if auth_ok(password or ""):
-        return {"authenticated": True}, "/inicio", ""
-    return no_update, no_update, "Contraseña incorrecta. Intenta nuevamente."
+@app.callback(Output("active-section", "data"), Output("selected-vice", "data", allow_duplicate=True),
+              Output("selected-indicator", "data", allow_duplicate=True),
+              Input("home-button", "n_clicks"),
+              Input({"type": "home-card", "index": ALL}, "n_clicks"),
+              Input({"type": "indicator-home-card", "index": ALL}, "n_clicks"),
+              Input({"type": "side-section", "index": ALL}, "n_clicks"),
+              State("active-section", "data"), prevent_initial_call=True)
+def cambiar_seccion(_home, _cards, _indicator_cards, _side, actual):
+    disparador = ctx.triggered_id
+    if disparador == "home-button":
+        return ("home", None, None) if _home else (actual, no_update, no_update)
+    if isinstance(disparador, dict):
+        tipo = disparador.get("type")
+        if tipo == "home-card":
+            valores = _cards
+        elif tipo == "indicator-home-card":
+            valores = _indicator_cards
+        else:
+            valores = _side
+        # La creación dinámica de botones produce eventos con cero clics.
+        # Se ignoran para que el usuario nunca sea expulsado de la pantalla actual.
+        if not valores or not any((v or 0) > 0 for v in valores):
+            return actual, no_update, no_update
+        nueva_seccion = disparador["index"]
+        if nueva_seccion == actual:
+            return actual, no_update, no_update
+        # Al cambiar de sección se limpia la selección de vice/indicador anterior,
+        # para no arrastrar un viceministerio que no existe en la nueva sección.
+        return nueva_seccion, None, None
+    return actual, no_update, no_update
 
 
-@app.callback(
-    Output("auth-store", "data", allow_duplicate=True),
-    Output("url", "pathname", allow_duplicate=True),
-    Input("logout-button", "n_clicks"),
-    prevent_initial_call=True,
-)
-def do_logout(n_clicks):
-    if n_clicks:
-        return {"authenticated": False}, "/"
-    return no_update, no_update
+@app.callback(Output("active-section", "data", allow_duplicate=True),
+              Input("btn-volver-portada", "n_clicks"), prevent_initial_call=True)
+def volver_desde_indicadores(n_clicks):
+    return "home" if n_clicks else no_update
 
 
-@app.callback(
-    Output("timeline-matrix-container", "children"),
-    Output("home-project-detail", "children", allow_duplicate=True),
-    Input("vice-radio", "value"),
-    prevent_initial_call=True,
-)
-def update_timeline_matrix(vice):
-    proyectos = load_presupuesto()
-    if not proyectos:
-        return (
-            html.Div(
-                "No se pudo leer MINEDEC 2.0 desde SharePoint.",
-                className="alert",
-            ),
-            "",
-        )
-
-    try:
-        df = load_ejecucion(proyectos)
-    except Exception:
-        df = pd.DataFrame()
-
-    # Al cambiar de viceministerio se limpia cualquier detalle previo.
-    return timeline_matrix_component(df, vice), ""
+@app.callback(Output("active-section", "data", allow_duplicate=True),
+              Input("side-back", "n_clicks"), prevent_initial_call=True)
+def volver_al_panel(n_clicks):
+    return "home" if n_clicks else no_update
 
 
-@app.callback(
-    Output("home-project-detail", "children"),
-    Input({"type":"timeline-project","index":ALL}, "n_clicks"),
-    State({"type":"timeline-project","index":ALL}, "value"),
-    prevent_initial_call=True,
-)
-def timeline_project_detail(clicks, values):
-    if not clicks or not values:
+@app.callback(Output("selected-vice", "data"), Output("selected-indicator", "data", allow_duplicate=True),
+              Input({"type": "vice-button", "index": ALL}, "n_clicks"),
+              State("selected-vice", "data"), State("active-section", "data"), prevent_initial_call=True)
+def seleccionar_vice(_clicks, actual, seccion):
+    cfg = SECCIONES_CON_DATOS.get(seccion)
+    df, _ = obtener_datos(seccion)
+    if (not isinstance(ctx.triggered_id, dict) or not cfg or df.empty or not _clicks
+            or not any((v or 0) > 0 for v in _clicks)):
+        return actual, no_update
+    vice = ctx.triggered_id["index"]
+    if not (seccion == "presupuesto" and vice == "General") and \
+            vice not in set(df[cfg["vice_col"]].dropna().unique()):
+        return actual, no_update
+    # Segundo clic sobre el mismo viceministerio: recoge el acordeón y limpia la ficha.
+    if vice == actual:
+        return None, None
+    if seccion == "presupuesto":
+        return vice, None
+    indicadores = df.loc[df[cfg["vice_col"]] == vice, cfg["indicador_col"]].dropna().unique()
+    primer_indicador = indicadores[0] if len(indicadores) else None
+    return vice, primer_indicador
+
+
+@app.callback(Output("selected-vice", "data", allow_duplicate=True),
+              Input({"type": "vision-tab", "index": ALL}, "n_clicks"),
+              State("active-section", "data"), prevent_initial_call=True)
+def seleccionar_pestana_vision(_clicks, seccion):
+    """Pestañas de Visión Ejecutiva (reutiliza el Store 'selected-vice', que
+    en esta sección no se usa para viceministerios sino para la pestaña
+    activa)."""
+    if (seccion != "vision" or not isinstance(ctx.triggered_id, dict)
+            or not _clicks or not any((v or 0) > 0 for v in _clicks)):
         return no_update
+    return ctx.triggered_id["index"]
 
-    triggered = ctx.triggered_id
-    if not isinstance(triggered, dict):
-        return no_update
 
-    try:
-        button_idx = int(triggered.get("index"))
-    except Exception:
-        return no_update
+@app.callback(Output("selected-indicator", "data"),
+              Input({"type": "indicator-button", "index": ALL}, "n_clicks"),
+              State("selected-vice", "data"), State("selected-indicator", "data"),
+              State("active-section", "data"), prevent_initial_call=True)
+def seleccionar_indicador(_clicks, vice, actual, seccion):
+    cfg = SECCIONES_CON_DATOS.get(seccion)
+    df, _ = obtener_datos(seccion)
+    plano = seccion in SECCIONES_INDICADORES_PLANOS
+    if (not isinstance(ctx.triggered_id, dict) or not cfg or (not vice and not plano) or not _clicks
+            or not any((v or 0) > 0 for v in _clicks)):
+        return actual
+    indicador = ctx.triggered_id["index"]
+    if plano:
+        indicadores_validos = set(df[cfg["indicador_col"]].dropna().unique())
+    else:
+        indicadores_validos = set(df.loc[df[cfg["vice_col"]] == vice, cfg["indicador_col"]].dropna().unique())
+    return indicador if indicador in indicadores_validos else actual
 
-    if button_idx < 0 or button_idx >= len(values):
-        return no_update
 
-    project = values[button_idx]
-    if not project:
-        return no_update
-
-    return detail_component(str(project), embedded=True)
-
+@app.callback(Output("main-content", "children"), Input("active-section", "data"),
+              Input("selected-vice", "data"), Input("selected-indicator", "data"),
+              Input("data-version", "data"))
+def mostrar_pantalla(seccion, vice, indicador, _version):
+    """Reconstruye la sección completa (menú lateral + contenido) en un solo callback.
+    Antes existían callbacks separados para el contenido y para las clases del acordeón,
+    y ambos se disparaban al cambiar de sección; como cada sección tiene un número distinto
+    de viceministerios, competían por actualizar los mismos botones con tamaños distintos
+    y Dash lanzaba 'Invalid number of output values'. Un único callback evita la carrera."""
+    if seccion == "home":
+        return portada()
+    if seccion == "indicadores":
+        return portada_indicadores()
+    return modulo_seccion(seccion, vice, indicador)
 
 
 @app.callback(
-    Output("route-macro-area", "children"),
-    Output("route-micro-area", "children"),
-    Output("route-activity-detail", "children"),
-    Input("route-component-select", "value"),
-    State("route-roadmap-store", "data"),
+    Output("budget-detail-table", "data"),
+    Output("budget-detail-table", "columns"),
+    Output("budget-table-count", "children"),
+    Input("budget-table-scope", "value"),
+    State("selected-vice", "data"),
     prevent_initial_call=True,
 )
-def route_select_component(component_name, rm):
-    if not component_name:
-        return "", "", ""
+def filtrar_tabla_presupuesto(agrupar_por, vice):
+    """Reagrupa la tabla por Grupo de gasto o por Proyecto; siempre solo
+    Inversión. La fila TOTAL viaja dentro de los mismos datos."""
+    agrupar_por = agrupar_por or "proyecto"
+    if not vice or DATA_PRESUPUESTO.empty:
+        detalle_vacio, registros_vacios = _tabla_con_total(pd.DataFrame(), agrupar_por)
+        columnas_vacias = [{"name": c, "id": c} for c in detalle_vacio.columns]
+        return registros_vacios, columnas_vacias, "0 grupos"
+    if vice == "General":
+        vice_normalizado = (DATA_PRESUPUESTO["Viceministerio"].fillna("").astype(str)
+                            .map(_normalizar_encabezado_presupuesto))
+        base = DATA_PRESUPUESTO.loc[
+            ~vice_normalizado.isin({"SIN_CLASIFICACION", "SIN_CLASIFICAR", "NO_APLICA", ""})
+        ].copy()
+    else:
+        base = DATA_PRESUPUESTO.loc[DATA_PRESUPUESTO["Viceministerio"] == vice].copy()
+    filtrado = _filtrar_alcance_presupuesto(base, "Inversión")
+    detalle, registros = _tabla_con_total(filtrado, agrupar_por)
+    columnas = [{"name": c, "id": c} for c in detalle.columns]
+    cantidad = f"{len(detalle):,} grupos".replace(",", ".")
+    return registros, columnas, cantidad
 
-    comp = _find_component(rm, component_name)
 
-    if not comp:
-        return (
-            html.Div(
-                "No se encontraron registros Macro para el componente seleccionado.",
-                className="info-alert",
-            ),
-            "",
-            "",
-        )
+@app.callback(Output("observation-area", "children"),
+              Input({"type": "status-year", "index": ALL}, "n_clicks"),
+              State("selected-indicator", "data"), prevent_initial_call=True)
+def mostrar_observacion(_clicks, indicador):
+    """Solo aplica al módulo PND, que registra alertas por año."""
+    if (not isinstance(ctx.triggered_id, dict) or not indicador or not _clicks
+            or not any((v or 0) > 0 for v in _clicks)):
+        return no_update
+    año = ctx.triggered_id["index"]
+    fila = DATA_PND.loc[(DATA_PND["NOMBRE DEL INDICADOR"] == indicador)
+                        & (DATA_PND["Año"].astype(str) == str(año))]
+    if fila.empty:
+        return "No existe información para el período seleccionado."
+    return [html.Strong(f"Observación {año} · {primer_texto(fila, 'Alerta', 'Sin clasificación')}"),
+            html.P(primer_texto(fila, "Observación", "Sin observación registrada."))]
 
-    macros = comp.get("macros", [])
 
-    macro_options = []
-    for macro in macros:
-        macro_id = str(macro.get("id_registro", "")).strip()
-        nombre = str(macro.get("nombre", "")).strip()
-        avance = str(macro.get("avance", "")).strip()
-
-        label = f"{macro_id} · {nombre}"
-        if avance:
-            label += f"   ·   {avance}"
-
-        macro_options.append({
-            "label": label,
-            "value": macro_id,
-        })
-
-    return (
-        html.Div(
-            [
-                html.Div(
-                    [
-                        html.Span("2", className="cascade-step-number"),
-                        html.Div(
-                            [
-                                html.Div(
-                                    "Etapa Macro",
-                                    className="cascade-step-title",
-                                ),
-                                html.Div(
-                                    f"{len(macro_options)} etapas disponibles en {component_name}",
-                                    className="cascade-step-help",
-                                ),
-                            ]
-                        ),
-                    ],
-                    className="cascade-step-heading",
-                ),
-                dcc.RadioItems(
-                    id="route-macro-select",
-                    options=macro_options,
-                    value=None,
-                    className="cascade-radio-list macro-radio-list",
-                    inputClassName="cascade-radio-input",
-                    labelClassName="cascade-radio-label",
-                ),
-            ],
-            className="cascade-step-card cascade-reveal",
-        ),
-        "",
-        "",
+@app.callback(Output("observation-area-kpi", "children"),
+              Input({"type": "status-periodo-kpi", "index": ALL}, "n_clicks"),
+              State("selected-indicator", "data"), prevent_initial_call=True)
+def mostrar_observacion_kpi(_clicks, indicador):
+    """Semáforo por período de KPI's Estratégicos (misma lógica que el PND, por Año+Mes)."""
+    if (not isinstance(ctx.triggered_id, dict) or not indicador or not _clicks
+            or not any((v or 0) > 0 for v in _clicks)):
+        return no_update
+    periodo_id = ctx.triggered_id["index"]
+    grupo = preparar_periodos_visuales(
+        DATA_KPI.loc[DATA_KPI["NOMBRE DEL INDICADOR"] == indicador]
     )
+    fila = grupo.loc[grupo["Periodo_id"] == periodo_id]
+    if fila.empty:
+        return "No existe información para el período seleccionado."
+    periodo = primer_texto(fila, "Periodo", "Período seleccionado")
+    return [html.Strong(f"Observación {periodo} · {primer_texto(fila, 'Alerta', 'Sin clasificación')}"),
+            html.P(primer_texto(fila, "Observación", "Sin observación registrada."))]
 
 
-@app.callback(
-    Output("route-micro-area", "children", allow_duplicate=True),
-    Output("route-activity-detail", "children", allow_duplicate=True),
-    Input("route-macro-select", "value"),
-    State("route-component-select", "value"),
-    State("route-roadmap-store", "data"),
-    prevent_initial_call=True,
-)
-def route_select_macro(macro_id, component_name, rm):
-    if not macro_id or not component_name:
-        return "", ""
-
-    macro = _find_macro(rm, component_name, macro_id)
-
-    if not macro:
-        return (
-            html.Div(
-                "No se encontró la etapa Macro seleccionada.",
-                className="info-alert",
-            ),
-            "",
-        )
-
-    micros = macro.get("micros", [])
-
-    micro_options = []
-    for micro in micros:
-        micro_id = str(micro.get("id_registro", "")).strip()
-        nombre = str(micro.get("nombre", "")).strip()
-        label = f"{micro_id} · {nombre}"
-
-        micro_options.append({
-            "label": label,
-            "value": micro_id,
-        })
-
-    # Resumen compacto del Macro.
-    # El detalle completo se reserva para la actividad Micro seleccionada,
-    # evitando repetir la misma información dos veces.
-    macro_card = html.Div(
-        [
-            _macro_summary_card(macro),
-            html.Div(
-                [
-                    html.Div(
-                        [
-                            html.Div("Período", className="macro-summary-label"),
-                            html.Div(
-                                f"{_route_value(macro.get('fecha_inicio'))}  →  "
-                                f"{_route_value(macro.get('fecha_fin'))}",
-                                className="macro-summary-value",
-                            ),
-                        ],
-                        className="macro-summary-item macro-summary-period",
-                    ),
-                    html.Div(
-                        [
-                            html.Div("Avance", className="macro-summary-label"),
-                            html.Div(
-                                _route_value(macro.get("avance")),
-                                className="macro-summary-value",
-                            ),
-                        ],
-                        className="macro-summary-item",
-                    ),
-                    html.Div(
-                        [
-                            html.Div("Estado", className="macro-summary-label"),
-                            html.Div(
-                                _route_value(macro.get("estado")),
-                                className="macro-summary-value",
-                            ),
-                        ],
-                        className="macro-summary-item",
-                    ),
-                    html.Div(
-                        [
-                            html.Div("Actividades Micro", className="macro-summary-label"),
-                            html.Div(
-                                str(len(micros)),
-                                className="macro-summary-value",
-                            ),
-                        ],
-                        className="macro-summary-item",
-                    ),
-                ],
-                className="macro-executive-summary",
-            ),
-        ],
-        className="cascade-selection-card",
+@app.callback(Output("observation-area-kpi-inst", "children"),
+              Input({"type": "status-periodo-inst", "index": ALL}, "n_clicks"),
+              State("selected-indicator", "data"), prevent_initial_call=True)
+def mostrar_observacion_kpi_inst(_clicks, indicador):
+    """Igual que el semáforo del PND, pero por período (Mes + Año) en vez de solo Año."""
+    if (not isinstance(ctx.triggered_id, dict) or not indicador or not _clicks
+            or not any((v or 0) > 0 for v in _clicks)):
+        return no_update
+    periodo_id = ctx.triggered_id["index"]
+    grupo = preparar_periodos_visuales(
+        DATA_KPI_INST.loc[DATA_KPI_INST["NOMBRE DEL INDICADOR"] == indicador]
     )
-
-    micro_selector = html.Div(
-        [
-            html.Div(
-                [
-                    html.Span("3", className="cascade-step-number"),
-                    html.Div(
-                        [
-                            html.Div(
-                                "Actividad Micro",
-                                className="cascade-step-title",
-                            ),
-                            html.Div(
-                                f"{len(micro_options)} actividades asociadas a esta etapa",
-                                className="cascade-step-help",
-                            ),
-                        ]
-                    ),
-                ],
-                className="cascade-step-heading",
-            ),
-
-            macro_card,
-
-            html.Div(
-                [
-                    html.Div(
-                        "Seleccione una actividad Micro para consultar su información",
-                        className="cascade-list-caption",
-                    ),
-                    dcc.RadioItems(
-                        id="route-micro-select",
-                        options=micro_options,
-                        value=None,
-                        className="cascade-radio-list micro-radio-list",
-                        inputClassName="cascade-radio-input",
-                        labelClassName="cascade-radio-label",
-                    )
-                    if micro_options
-                    else html.Div(
-                        "Esta etapa no tiene registros Micro asociados en HOJA_RUTA.",
-                        className="cascade-empty-state",
-                    ),
-                ],
-                className="cascade-micro-selector",
-            ),
-        ],
-        className="cascade-step-card cascade-reveal",
-    )
-
-    return micro_selector, ""
+    fila = grupo.loc[grupo["Periodo_id"] == periodo_id]
+    if fila.empty:
+        return "No existe información para el período seleccionado."
+    periodo = primer_texto(fila, "Periodo", "Período seleccionado")
+    return [html.Strong(f"Observación {periodo} · {primer_texto(fila, 'Alerta', 'Sin clasificación')}"),
+            html.P(primer_texto(fila, "Observación", "Sin observación registrada."))]
 
 
-@app.callback(
-    Output("route-activity-detail", "children", allow_duplicate=True),
-    Input("route-micro-select", "value"),
-    State("route-macro-select", "value"),
-    State("route-component-select", "value"),
-    State("route-roadmap-store", "data"),
-    prevent_initial_call=True,
-)
-def route_select_micro(micro_id, macro_id, component_name, rm):
-    if not micro_id or not macro_id or not component_name:
-        return ""
+@app.callback(Output("data-version", "data"), Input("excel-watcher", "n_intervals"),
+              State("data-version", "data"), prevent_initial_call=True)
+def actualizar_excel(_intervalo, version_actual):
+    """Recarga únicamente el Excel que cambió; no interrumpe los clics del usuario."""
+    global DATA_PND, ERROR_PND, VERSION_PND, DATA_KPI, ERROR_KPI, VERSION_KPI
+    global DATA_KPI_INST, ERROR_KPI_INST, VERSION_KPI_INST
+    global RESUMEN_GESTION_EDUCATIVA, PENDIENTES_GESTION_EDUCATIVA, VERSION_GESTION_EDUCATIVA
+    global DATA_PRESUPUESTO, ERROR_PRESUPUESTO, VERSION_PRESUPUESTO
+    version_actual = dict(version_actual or {})
+    cambio = False
 
-    micro = _find_micro(
-        rm,
-        component_name,
-        macro_id,
-        micro_id,
-    )
+    nueva_version_pnd = version_pnd()
+    if nueva_version_pnd and nueva_version_pnd != version_actual.get("pnd"):
+        nueva_data, nuevo_error = cargar_base_pnd()
+        if not nuevo_error and not nueva_data.empty:
+            DATA_PND, ERROR_PND, VERSION_PND = nueva_data, None, nueva_version_pnd
+            version_actual["pnd"] = nueva_version_pnd
+            cambio = True
 
-    if not micro:
-        return html.Div(
-            "No se encontró la actividad Micro seleccionada.",
-            className="info-alert",
-        )
+    nueva_version_kpi = version_kpi()
+    if nueva_version_kpi and nueva_version_kpi != version_actual.get("kpi-estrategicos"):
+        nueva_data, nuevo_error = cargar_base_kpi()
+        if not nuevo_error and not nueva_data.empty:
+            DATA_KPI, ERROR_KPI, VERSION_KPI = nueva_data, None, nueva_version_kpi
+            version_actual["kpi-estrategicos"] = nueva_version_kpi
+            cambio = True
 
-    alerta = _route_value(micro.get("alerta_vencimiento"))
+    nueva_version_kpi_inst = version_kpi_inst()
+    if nueva_version_kpi_inst and nueva_version_kpi_inst != version_actual.get("kpi-institucionales"):
+        nueva_data, nuevo_error = cargar_base_kpi_inst()
+        if not nuevo_error and not nueva_data.empty:
+            DATA_KPI_INST, ERROR_KPI_INST, VERSION_KPI_INST = nueva_data, None, nueva_version_kpi_inst
+            version_actual["kpi-institucionales"] = nueva_version_kpi_inst
+            cambio = True
 
-    return html.Div(
-        [
-            html.Div(
-                [
-                    html.Div(
-                        [
-                            html.Div(
-                                "Detalle de la actividad",
-                                className="cascade-kicker",
-                            ),
-                            html.H4(
-                                _route_value(micro.get("nombre")),
-                                className="cascade-activity-title",
-                            ),
-                            html.Div(
-                                _route_value(micro.get("id_registro")),
-                                className="cascade-activity-code",
-                            ),
-                        ]
-                    ),
-                    html.Span(
-                        alerta,
-                        className=_status_class(alerta),
-                    ),
-                ],
-                className="cascade-activity-head",
-            ),
-            _route_detail_grid(micro),
-        ],
-        className="cascade-activity-detail cascade-reveal",
-    )
+    # Las bases de Gestión Educativa (algunas en OneDrive) se vuelven a leer
+    # cada 15 minutos, igual que el presupuesto: no hay forma barata de saber
+    # si cambiaron sin descargarlas, así que se relee y se compara después.
+    if _intervalo % 60 == 0:
+        nuevo_resumen, nuevos_pendientes = cargar_resumen_gestion_educativa()
+        nueva_version_gestion_educ = version_gestion_educativa(nuevo_resumen, nuevos_pendientes)
+        if nueva_version_gestion_educ != version_actual.get("gestion-educativa"):
+            RESUMEN_GESTION_EDUCATIVA, PENDIENTES_GESTION_EDUCATIVA = nuevo_resumen, nuevos_pendientes
+            VERSION_GESTION_EDUCATIVA = nueva_version_gestion_educ
+            version_actual["gestion-educativa"] = nueva_version_gestion_educ
+            cambio = True
 
+    # SharePoint se consulta cada 15 minutos para evitar solicitudes innecesarias.
+    if _intervalo % 60 == 0:
+        nueva_data, nuevo_error = cargar_base_presupuesto()
+        nueva_version = version_presupuesto()
+        if (not nuevo_error and not nueva_data.empty
+                and nueva_version != version_actual.get("presupuesto")):
+            DATA_PRESUPUESTO, ERROR_PRESUPUESTO = nueva_data, None
+            VERSION_PRESUPUESTO = nueva_version
+            version_actual["presupuesto"] = nueva_version
+            cambio = True
 
-@app.callback(
-    Output("project-list", "children"),
-    Input("project-search", "value"),
-    Input("project-vice-filter", "value"),
-)
-def filter_projects(query, vice):
-    proyectos = load_presupuesto()
-    names = list(proyectos)
-    if query:
-        q = normalizar(query)
-        names = [n for n in names if q in normalizar(n)]
-    if vice and vice != "Todos":
-        names = [n for n in names if vice_short(proyectos[n].get("viceministerio")) == vice]
-    names.sort(key=lambda n: proyectos[n]["pct_ejecucion"])
-    if not names:
-        return card(html.Div("No se encontraron proyectos con los filtros seleccionados.", className="hint"))
-    return card([project_row(n, proyectos[n]) for n in names])
+    return version_actual if cambio else no_update
 
 
-# =============================================================================
-# 15. EJECUCIÓN
-# =============================================================================
+app.clientside_callback("function(n){if(n)window.print();return window.dash_clientside.no_update;}",
+                        Output("print-button", "title"), Input("print-button", "n_clicks"),
+                        prevent_initial_call=True)
 
-def _precalentar_cache_en_segundo_plano():
+
+app.clientside_callback(
     """
-    Al iniciar:
-    - carga presupuesto;
-    - pone inmediatamente en RAM la última ejecución procesada disponible;
-    - refresca SharePoint después, sin bloquear la interfaz.
-    """
-    try:
-        proyectos = load_presupuesto()
-
-        local = _leer_cache_ejecucion()
-        if not local.empty:
-            with _CACHE_LOCK:
-                _CACHE["ejecucion_mensual"] = (time.time(), local)
-
-        refrescar_ejecucion_en_segundo_plano()
-
-    except Exception:
-        pass
+    function(children) {
+        function ampliarEcuaciones() {
+            document.querySelectorAll(
+                '.formula-equation mjx-container, ' +
+                '.formula-markdown mjx-container[display="true"]'
+            ).forEach(function(ecuacion) {
+                ecuacion.style.setProperty('font-size', '16px', 'important');
+                ecuacion.style.setProperty('color', '#000', 'important');
+                ecuacion.style.setProperty('opacity', '1', 'important');
+            });
+        }
+        if (window.MathJax && window.MathJax.typesetPromise) {
+            setTimeout(function () {
+                window.MathJax.typesetPromise().then(function () {
+                    ampliarEcuaciones();
+                    setTimeout(ampliarEcuaciones, 120);
+                });
+            }, 60);
+        }
+        return window.dash_clientside.no_update;
+    }
+    """,
+    Output("mathjax-trigger", "children"),
+    Input("main-content", "children"),
+    prevent_initial_call=True,
+)
 
 
 if __name__ == "__main__":
-    host = os.getenv("DASH_HOST", "127.0.0.1")
-    port = int(os.getenv("PORT", "8050"))
-
-    threading.Thread(target=_precalentar_cache_en_segundo_plano, daemon=True).start()
-
-    run_kwargs = {
-        "debug": False,
-        "host": host,
-        "port": port,
-    }
-
-    try:
-        get_ipython  # noqa: F821
-        run_kwargs["jupyter_mode"] = "external"
-    except NameError:
-        pass
-
-    app.run(**run_kwargs)
+    app.run(debug=False, use_reloader=False, host="127.0.0.1", port=8050,
+            jupyter_mode="external")
