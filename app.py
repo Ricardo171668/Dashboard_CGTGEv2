@@ -2044,11 +2044,130 @@ def vision_tabs_nav(activo):
     )
 
 
+ICONOS_TARJETAS = {
+    "institucion": "<path d='M7 20h34M11 20v20m26-20v20M5 40h38M24 7 6 17h36z'/><path d='M17 25v9m7-9v9m7-9v9'/>",
+    "estudiantes": "<path d='m5 17 19-9 19 9-19 9z'/><path d='M12 21v10c7 6 17 6 24 0V21M43 17v13'/>",
+    "docentes": "<circle cx='17' cy='13' r='6'/><path d='M6 38c1-9 5-14 11-14s10 5 11 14M29 13h13v18H31M34 19h4m-4 6h4'/>",
+    "inclusion": "<circle cx='24' cy='8' r='4'/><path d='M10 16h28M24 13v12m0 0-9 15m9-15 9 15M15 20l-5 11m23-11 5 11'/>",
+    "alimentacion": "<circle cx='24' cy='25' r='14'/><path d='M24 11v28M10 25h28M5 9v12m4-12v12M7 21v18M41 9v30m0-30c-5 4-5 12 0 14'/>",
+    "uniformes": "<path d='m16 8 8 5 8-5 10 8-7 8-3-4v20H16V20l-3 4-7-8z'/><path d='M20 10c1 4 7 4 8 0'/>",
+    "textos": "<path d='M7 9h13c3 0 4 2 4 5v27c0-3-1-5-4-5H7zM41 9H28c-3 0-4 2-4 5v27c0-3 1-5 4-5h13z'/><path d='M12 16h7m-7 6h7m10-6h7m-7 6h7'/>",
+    "mobiliario": "<path d='M12 9h24v17H12zM9 26h30v6H9zM14 32v8m20-8v8'/><path d='M18 15h12'/>",
+    "transporte": "<path d='M7 14h29l6 9v13H6V20z'/><path d='M12 14v10h26M19 14v10'/><circle cx='14' cy='37' r='4'/><circle cx='35' cy='37' r='4'/>",
+    "epja": "<circle cx='15' cy='13' r='5'/><path d='M6 34c1-8 4-13 9-13s8 5 9 13M27 12h14v23H27zM31 18h6m-6 6h6m-6 6h4'/>",
+    "becas": "<path d='m5 16 19-9 19 9-19 9z'/><path d='M12 21v9c7 6 17 6 24 0v-9M40 18v11'/><path d='m35 36 3 2 4-3-1 5 3 3-5 1-2 4-2-4-5-1 4-3z'/>",
+    "psicologia": "<path d='M18 39h12M24 39v-7'/><path d='M16 31c-6-3-9-9-7-15 2-7 8-10 15-10s13 5 14 12c1 6-2 11-7 14'/><path d='M18 17c0-3 2-5 5-5 4 0 6 4 4 7 4 0 6 5 3 8-2 2-4 2-6 1-3 2-7 0-7-4-3-1-3-6 1-7'/>",
+    "seguridad": "<path d='M24 5 39 11v11c0 10-6 17-15 21C15 39 9 32 9 22V11z'/><path d='m17 24 5 5 10-11'/>",
+    "reinsercion": "<path d='m6 17 18-9 18 9-18 9z'/><path d='M13 22v9c6 5 15 6 22 1M36 25a12 12 0 1 1-7-11'/><path d='m35 8-6 6 8 2'/>",
+    "hospital": "<path d='M8 13h32v28H8zM15 13V7h18v6'/><path d='M24 19v15m-7-7h14'/>",
+    "bachillerato": "<path d='M8 9h24l8 8v22H8zM32 9v9h8'/><path d='M15 25h18M15 31h18'/><path d='m15 19 2 2 4-5'/>",
+    "safpi": "<path d='M6 22 24 8l18 14'/><path d='M10 20v20h28V20'/><circle cx='18' cy='25' r='4'/><circle cx='30' cy='25' r='4'/><path d='M13 37c1-5 3-8 5-8s4 3 5 8m2 0c1-5 3-8 5-8s4 3 5 8'/>",
+    "nap": "<path d='M7 39h9v-8h8v-8h8v-8h9'/><path d='m34 8 7 7-7 7'/><path d='M9 10h13v12H9zM13 14h5m-5 4h5'/>",
+    "cupos": "<rect x='8' y='7' width='32' height='34' rx='4'/><path d='M17 7v6m14-6v6M14 19h20'/><path d='m16 29 5 5 11-11'/>",
+    "internacional": "<circle cx='24' cy='24' r='17'/><path d='M7 24h34M24 7c5 5 8 11 8 17s-3 12-8 17c-5-5-8-11-8-17s3-12 8-17z'/><path d='m31 29 4 3 5-5'/>",
+    "validatec": "<path d='M9 8h25l6 6v26H9zM34 8v7h6'/><path d='M16 20h16M16 26h10'/><circle cx='30' cy='33' r='7'/><path d='m27 33 2 2 4-5'/>",
+    "tecnica": "<path d='m6 16 18-9 18 9-18 9zM12 21v9c7 6 17 6 24 0v-9'/><path d='M35 34l7 7m-1-9-9 9'/><circle cx='36.5' cy='36.5' r='5.5'/>",
+    "cultura": "<path d='M24 7c-10 0-18 7-18 16 0 8 6 14 13 14h4c2 0 3-2 2-4l-1-2c-1-2 1-4 3-4h5c6 0 10-4 10-9C42 11 34 7 24 7z'/><circle cx='14' cy='20' r='2'/><circle cx='20' cy='14' r='2'/><circle cx='29' cy='14' r='2'/><circle cx='35' cy='20' r='2'/>",
+    "deporte": "<circle cx='24' cy='24' r='18'/><path d='m24 14 7 5-3 8h-8l-3-8zM24 6v8M7 19l10 1M12 37l8-10m16 10-8-10m13-8-10 1'/>",
+    "digital": "<rect x='6' y='8' width='36' height='25' rx='3'/><path d='M16 41h16M24 33v8'/><path d='m17 22 5 5 10-11'/>",
+    "programa": "<circle cx='24' cy='24' r='17'/><circle cx='24' cy='24' r='9'/><path d='m24 7 3 6-3 4-3-4zM41 24l-6 3-4-3 4-3zM24 41l-3-6 3-4 3 4zM7 24l6-3 4 3-4 3z'/>",
+}
+
+PALETA_ICONOS_TARJETAS = {
+    "institucion": ("#b18400", "#fff7d6"), "estudiantes": ("#287bb5", "#eaf6ff"),
+    "docentes": ("#7b2f78", "#f8ecf7"), "inclusion": ("#3c6eab", "#eef5ff"),
+    "alimentacion": ("#16806d", "#e7f8f3"), "uniformes": ("#2f8f4e", "#eaf7ee"),
+    "textos": ("#b57d00", "#fff5d9"), "mobiliario": ("#633ba3", "#f1ecfb"),
+    "transporte": ("#247cb3", "#e8f5fc"), "epja": ("#6c3c9f", "#f3edfb"),
+    "becas": ("#8050b5", "#f3ecfb"), "psicologia": ("#b14d77", "#fbeef3"),
+    "seguridad": ("#267d65", "#e9f7f2"), "reinsercion": ("#356bb0", "#eaf2fc"),
+    "hospital": ("#b83d55", "#fdeef1"), "bachillerato": ("#4d56a7", "#eef0ff"),
+    "safpi": ("#9a4e85", "#faedf6"), "nap": ("#d07b18", "#fff1df"),
+    "cupos": ("#287bb5", "#eaf6ff"), "internacional": ("#347c72", "#eaf7f4"),
+    "validatec": ("#5a55a7", "#efeffb"), "tecnica": ("#b06a13", "#fff2df"),
+    "cultura": ("#a03f78", "#faedf5"), "deporte": ("#238071", "#e9f7f4"),
+    "digital": ("#3d67ad", "#ebf2fd"), "programa": ("#503a98", "#f1eefb"),
+}
+
+
+def _clave_icono_tarjeta(codigo="", titulo=""):
+    """Selecciona un símbolo semántico sin depender de nombres exactos del Excel."""
+    texto = _sin_tildes(f"{codigo} {titulo}")
+    reglas = [
+        (("safpi", "atencion familiar", "primera infancia"), "safpi"),
+        (("nap", "nivelacion y aceleracion"), "nap"),
+        (("cupos", "admision"), "cupos"),
+        (("because he is nice", "cooperacion", "asuntos internacionales"), "internacional"),
+        (("validatec", "validacion de trayectoria"), "validatec"),
+        (("becas tecnicas", "tecnologicas financiadas", "formacion tecnica"), "tecnica"),
+        (("robotica", "transformacion digital", "brecha digital"), "digital"),
+        (("deporte", "activate", "cancha"), "deporte"),
+        (("cultura", "arte", "museo", "cine", "festival"), "cultura"),
+        (("discapacidad", "necesidades educativas", "inclusion"), "inclusion"),
+        (("alimentacion",), "alimentacion"),
+        (("uniforme",), "uniformes"),
+        (("texto", "libro", "lectura"), "textos"),
+        (("mobiliario",), "mobiliario"),
+        (("transporte",), "transporte"),
+        (("institucion", "universidad", "infraestructura"), "institucion"),
+        (("docente", "profesional de la educacion"), "docentes"),
+        (("estudiante",), "estudiantes"),
+        (("epja", "jovenes y adultos"), "epja"),
+        (("beca",), "becas"),
+        (("dece", "psicolog"), "psicologia"),
+        (("comunidades seguras", "escudo", "seguridad"), "seguridad"),
+        (("reinsercion", "todos al aula"), "reinsercion"),
+        (("hospitalaria",), "hospital"),
+        (("bachillerato",), "bachillerato"),
+    ]
+    return next((icono for palabras, icono in reglas if any(p in texto for p in palabras)),
+                "programa")
+
+
+def icono_tarjeta(codigo="", titulo=""):
+    """Genera un icono SVG lineal, ligero y autónomo para cada tarjeta."""
+    clave = _clave_icono_tarjeta(codigo, titulo)
+    color, fondo = PALETA_ICONOS_TARJETAS[clave]
+    svg = (
+        "<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 48 48' "
+        f"fill='none' stroke='{color}' stroke-width='2.2' "
+        f"stroke-linecap='round' stroke-linejoin='round'>{ICONOS_TARJETAS[clave]}</svg>"
+    )
+    return html.Span(
+        html.Img(
+            src="data:image/svg+xml;utf8," + quote(svg), alt="",
+            style={"display": "block", "width": "24px", "height": "24px"},
+            **{"aria-hidden": "true"},
+        ),
+        className="vision-card-symbol",
+        style={
+            "display": "inline-flex", "width": "36px", "height": "36px",
+            "marginBottom": "0", "alignItems": "center", "justifyContent": "center",
+            "border": f"1px solid {color}33", "borderRadius": "11px",
+            "background": fondo, "boxShadow": f"0 5px 12px {color}1a",
+            "flex": "0 0 auto",
+        },
+    )
+
+
+def cabecera_tarjeta(codigo, titulo):
+    """Alinea símbolo y título en una misma fila, como una unidad visual."""
+    return html.Div([
+        icono_tarjeta(codigo, titulo),
+        html.Span(
+            titulo, className="vision-card-label",
+            style={"minHeight": "0", "margin": "0", "flex": "1 1 auto"},
+        ),
+    ], className="vision-card-title-row", style={
+        "display": "flex", "alignItems": "center", "gap": "10px",
+        "minWidth": "0", "marginBottom": "7px",
+    })
+
+
 def tarjeta_gestion_educativa(codigo, titulo, subtitulo, valor, detalles=None,
                               unidad=None, filtros=None, contenido_id=None, valor_id=None):
     return html.Article([
-        html.Span(className="vision-card-icon-mark"),
-        html.Span(titulo, className="vision-card-label"),
+        cabecera_tarjeta(codigo, titulo),
         html.Div([
             html.Strong(
                 valor,
@@ -2342,7 +2461,7 @@ def _tarjetas_programas_eje2(datos):
                   if es_dece else dato["programa"])
         unidad = ("Comunidad Educativa"
                   if es_comunidades else str(dato["tipo"]).strip())
-        contenido = [html.Span(className="vision-card-icon-mark")]
+        contenido = []
         if clave_detalle:
             contenido.extend(_control_anio_programa(clave_detalle))
         elif es_reinsercion:
@@ -2356,7 +2475,7 @@ def _tarjetas_programas_eje2(datos):
                 html.Div([html.Span("Período"), html.Strong("2022 a septiembre 2026")],
                          className="programa-periodo-fijo"),
             ])
-        contenido.append(html.Span(titulo, className="vision-card-label"))
+        contenido.append(cabecera_tarjeta("programa", titulo))
         if clave_detalle:
             periodo_inicial = PROGRAMAS_CON_DETALLE[clave_detalle]["filas"][-1][0]
             contenido.append(html.Div(
@@ -2387,11 +2506,10 @@ def _tarjetas_programas_eje2(datos):
     if incluye_reinsercion:
         for j, programa in enumerate(PROGRAMAS_GESTION_COMPLEMENTARIOS):
             tarjetas_complementarias.append(html.Article([
-                html.Span(className="vision-card-icon-mark"),
                 _ayuda_programa(programa["titulo"] + ".", programa["descripcion"]),
                 html.Div([html.Span("Año"), html.Strong(programa["periodo"])],
                          className="programa-periodo-fijo"),
-                html.Span(programa["titulo"], className="vision-card-label"),
+                cabecera_tarjeta("programa", programa["titulo"]),
                 html.Div([
                     html.Div([html.Span(etiqueta), html.Strong(valor)],
                              className="programa-metrica-periodo")
