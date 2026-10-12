@@ -23,8 +23,29 @@ NOMBRES_ENTREGABLES = {
     "E-03_Manual_de_usuario.docx",
     "E-04_Diccionario_de_datos_e_indicadores_Anexo5.xlsx",
     "E-05_Fichas_metodologicas.docx",
-    "E-06_Anexo4_Ficha_formalizacion.docx",
 }
+
+# Fuentes individuales de OneDrive. Se leen por HTTPS tanto localmente como
+# desde el servidor publicado a partir de GitHub.
+PND_DOWNLOAD_URL = (
+    "https://educacionec-my.sharepoint.com/:x:/g/personal/"
+    "ricardo_castellanos_educacion_gob_ec/"
+    "IQDzi44ILLX-SK4FCICFqdzTAdE_QO0OSjNVppH-qRznzq0"
+    "?e=TkTQu5&download=1"
+)
+KPI_ESTRATEGICOS_DOWNLOAD_URL = (
+    "https://educacionec-my.sharepoint.com/:x:/g/personal/"
+    "ricardo_castellanos_educacion_gob_ec/"
+    "IQAhMnqcBe4IQJP7ewr3ZObQAalNMmiIpYKi3jcTS3DuJpQ"
+    "?e=4Tfw34&download=1"
+)
+KPI_INSTITUCIONALES_DOWNLOAD_URL = (
+    "https://educacionec-my.sharepoint.com/:x:/g/personal/"
+    "ricardo_castellanos_educacion_gob_ec/"
+    "IQB3pmjVw-PZT5WJKBhUWYHlAcKdvPZcKeloHyma2JtFrwY"
+    "?e=xsKWf6&download=1"
+)
+VERSIONES_INDICADORES_REMOTOS = {}
 
 
 def directorios_entregables():
@@ -262,6 +283,19 @@ def etiqueta_mes(valor):
     return str(texto)
 
 
+def _origen_indicador_onedrive(url, nombre_archivo):
+    """Descarga una matriz de indicadores y registra su hash de contenido."""
+    try:
+        origen, version, _ = _descargar_excel_onedrive(url, nombre_archivo)
+        VERSIONES_INDICADORES_REMOTOS[nombre_archivo] = version
+        print(f"[OneDrive] {nombre_archivo}: descarga correcta ({version[:12]}).")
+        return origen, None
+    except Exception as exc:
+        mensaje = f"No fue posible descargar '{nombre_archivo}' desde OneDrive: {exc}"
+        print(f"[OneDrive] ERROR: {mensaje}")
+        return None, mensaje
+
+
 # ---------------------------------------------------------------------------
 # Carga de datos · Plan Nacional de Desarrollo
 # ---------------------------------------------------------------------------
@@ -270,10 +304,11 @@ def cargar_base_pnd():
     # La matriz vigente indicada por el usuario es "Indicadores_PND version 1".
     # Se conserva el nombre anterior únicamente como respaldo para despliegues
     # donde todavía no se haya reemplazado el archivo.
-    archivo = (buscar_archivo("Indicadores_PND version 1")
-               or buscar_archivo("Indicadores_PND"))
-    if not archivo:
-        return pd.DataFrame(), "No se encontró 'Indicadores_PND version 1.xlsx' junto a app.py."
+    archivo, error_origen = _origen_indicador_onedrive(
+        PND_DOWNLOAD_URL, "Indicadores_PND version 1.xlsx"
+    )
+    if error_origen:
+        return pd.DataFrame(), error_origen
     try:
         df = pd.read_excel(archivo, engine="openpyxl")
         df = df.loc[:, ~df.columns.astype(str).str.startswith("Unnamed")].copy()
@@ -312,9 +347,7 @@ def cargar_base_pnd():
 
 
 def version_pnd():
-    archivo = (buscar_archivo("Indicadores_PND version 1")
-               or buscar_archivo("Indicadores_PND version 1"))
-    return archivo.stat().st_mtime_ns if archivo else 0
+    return VERSIONES_INDICADORES_REMOTOS.get("Indicadores_PND version 1.xlsx", 0)
 
 
 # ---------------------------------------------------------------------------
@@ -326,15 +359,15 @@ def version_pnd():
 MES_ORDEN = {mes.lower(): i for i, mes in enumerate(MESES, start=1)}
 
 
-def cargar_base_tipo_pnd(prefijo, nombre_legible):
-    archivo = buscar_archivo(prefijo)
-    if not archivo:
-        return pd.DataFrame(), (
-            f"No se encontró '{nombre_legible}'. "
-            f"Carpeta de app.py: {BASE_DIR}. "
-            f"Carpeta de ejecución: {Path.cwd()}. "
-            f"Excel visibles: {diagnostico_excel()}."
-        )
+def cargar_base_tipo_pnd(prefijo, nombre_legible, url=None):
+    if url:
+        archivo, error_origen = _origen_indicador_onedrive(url, nombre_legible)
+        if error_origen:
+            return pd.DataFrame(), error_origen
+    else:
+        archivo = buscar_archivo(prefijo)
+        if not archivo:
+            return pd.DataFrame(), f"No se encontró '{nombre_legible}'."
     try:
         df = pd.read_excel(archivo, engine="openpyxl")
         df.columns = [" ".join(str(c).strip().split()) if not str(c).startswith("Unnamed") else c
@@ -432,24 +465,27 @@ def cargar_base_tipo_pnd(prefijo, nombre_legible):
 # Carga de datos · KPI's Estratégicos
 # ---------------------------------------------------------------------------
 def cargar_base_kpi():
-    return cargar_base_tipo_pnd("kpi_estratégicos", "kpi_estratégicos.xlsx")
+    return cargar_base_tipo_pnd(
+        "kpi_estratégicos", "kpi_estratégicos.xlsx", KPI_ESTRATEGICOS_DOWNLOAD_URL
+    )
 
 
 def version_kpi():
-    archivo = buscar_archivo("kpi_estratégicos")
-    return archivo.stat().st_mtime_ns if archivo else 0
+    return VERSIONES_INDICADORES_REMOTOS.get("kpi_estratégicos.xlsx", 0)
 
 
 # ---------------------------------------------------------------------------
 # Carga de datos · KPI's Institucionales
 # ---------------------------------------------------------------------------
 def cargar_base_kpi_inst():
-    return cargar_base_tipo_pnd("kpi_institucional", "KPI_INSTITUCIONALES.xlsx")
+    return cargar_base_tipo_pnd(
+        "kpi_institucional", "KPI_INSTITUCIONALES.xlsx",
+        KPI_INSTITUCIONALES_DOWNLOAD_URL,
+    )
 
 
 def version_kpi_inst():
-    archivo = buscar_archivo("kpi_institucional")
-    return archivo.stat().st_mtime_ns if archivo else 0
+    return VERSIONES_INDICADORES_REMOTOS.get("KPI_INSTITUCIONALES.xlsx", 0)
 
 
 # ---------------------------------------------------------------------------
@@ -727,8 +763,10 @@ def _descargar_excel_onedrive(url, nombre_archivo):
     '&download=1'. Reproduce la estrategia usada en Shiny/httr: sigue
     redirecciones y evita reutilizar una copia almacenada en caché. Devuelve
     (contenido_en_memoria, version_hash, fecha_ultima_modificacion)."""
+    separador_cache = "&" if "?" in url else "?"
+    url_sin_cache = f"{url}{separador_cache}_ts={int(datetime.now().timestamp())}"
     respuesta = requests.get(
-        url,
+        url_sin_cache,
         headers={
             "User-Agent": "Mozilla/5.0",
             "Cache-Control": "no-cache, no-store",
@@ -911,7 +949,7 @@ server = app.server
 @server.route("/descargar-entregable/<path:nombre_archivo>")
 def descargar_entregable(nombre_archivo):
     """Entrega los anexos oficiales desde la carpeta Quipux del proyecto."""
-    # Solo se exponen los entregables definidos por la aplicación.
+    # Solo se exponen los tres entregables definidos por la aplicación.
     if Path(nombre_archivo).name != nombre_archivo or nombre_archivo not in NOMBRES_ENTREGABLES:
         abort(404)
 
@@ -946,6 +984,44 @@ app.index_string = """<!DOCTYPE html>
         <title>{%title%}</title>
         {%favicon%}
         {%css%}
+        <style>
+        /* Información complementaria de SAFPI y NAP. Se mantiene la paleta y
+           la tipografía de las tarjetas institucionales existentes. */
+        .programa-con-ayuda { position: relative; overflow: visible !important; }
+        .programa-info-tooltip {
+          position: absolute; left: 14px; right: 14px; bottom: calc(100% + 9px);
+          z-index: 40; padding: 12px 14px; border: 1px solid #dfe3ef;
+          border-radius: 10px; background: #ffffff; color: #4d536b;
+          box-shadow: 0 10px 26px rgba(24,37,87,.18);
+          font-family: Arial, sans-serif; font-size: 12px; line-height: 1.5;
+          text-align: justify; opacity: 0; visibility: hidden;
+          transform: translateY(5px); transition: opacity .16s ease, transform .16s ease;
+          pointer-events: none;
+        }
+        .programa-con-ayuda:hover .programa-info-tooltip,
+        .programa-con-ayuda:focus-within .programa-info-tooltip {
+          opacity: 1; visibility: visible; transform: translateY(0);
+        }
+        .programa-tabla-details { margin-top: 12px; border-top: 1px solid #e4e7f0; }
+        .programa-tabla-details summary {
+          display: flex; align-items: center; justify-content: space-between;
+          padding: 9px 0 2px; color: #4f3c98; font-size: 11px;
+          font-weight: 800; cursor: pointer; list-style: none;
+        }
+        .programa-tabla-details summary::-webkit-details-marker { display: none; }
+        .programa-tabla-details summary::after { content: '⌄'; font-size: 16px; }
+        .programa-tabla-details[open] summary::after { content: '⌃'; }
+        .programa-tabla-wrap { margin-top: 8px; overflow-x: auto; }
+        .programa-tabla { width: 100%; border-collapse: collapse; font-size: 10px; color: #202a59; }
+        .programa-tabla th, .programa-tabla td {
+          padding: 5px 6px; border: 1px solid #d7dbe8; text-align: right;
+          white-space: nowrap;
+        }
+        .programa-tabla th { background: #f1eff9; color: #3f3188; font-weight: 800; }
+        .programa-tabla th:first-child, .programa-tabla td:first-child { text-align: left; }
+        .programa-tabla-nota { margin: 7px 0 0 !important; color: #59627d !important;
+          font-size: 9px !important; line-height: 1.35 !important; text-align: justify; }
+        </style>
         <script>
         window.MathJax = {
           tex: {
@@ -1980,6 +2056,67 @@ def _stats_eje2(datos):
                     className="eje1-stats-grid eje2-stats-grid")
 
 
+PROGRAMAS_CON_DETALLE = {
+    "safpi": {
+        "descripcion": (
+            "Servicio de Atención Familiar para la Primera Infancia (SAFPI). "
+            "Promueve el desarrollo integral de niñas y niños de 3 y 4 años que no asisten "
+            "a una institución educativa, mediante el fortalecimiento del acompañamiento de "
+            "sus familias y la participación de la comunidad. Esta iniciativa forma parte de "
+            "la estrategia del Ministerio de Educación, Deporte y Cultura para ampliar la "
+            "cobertura y mejorar la calidad educativa."
+        ),
+        "filas": [
+            ("2023-2024", "18.563", "746", "$ 9.537.415,44"),
+            ("2024-2025", "19.142", "746", "$ 9.544.875,44"),
+            ("2025-2026", "20.564", "747", "$ 9.565.140,18"),
+            ("2026-2027*", "20.669", "752", "$ 9.638.187,88"),
+        ],
+        "nota": "*Nota: En el régimen Sierra-Amazonía se sigue levantando información de niños y niñas.",
+    },
+    "nap": {
+        "descripcion": (
+            "Nivelación y Aceleración Pedagógica (NAP). Es un servicio de educación formal "
+            "que permite nivelar los conocimientos y habilidades de niñas, niños y adolescentes "
+            "con escolaridad inconclusa y rezago escolar, mediante un proceso acelerado que "
+            "facilita su reincorporación al grado o curso correspondiente a su edad."
+        ),
+        "filas": [
+            ("2023-2024", "6.650", "322", "$ 4.116.686,02"),
+            ("2024-2025", "8.172", "385", "$ 4.925.974,59"),
+            ("2025-2026", "7.812", "401", "$ 5.134.700,42"),
+            ("2026-2027", "8.232", "398", "$ 5.101.062,20"),
+        ],
+        "nota": "Fuente: Registros administrativos MINEDEC_DEIB.",
+    },
+}
+
+
+def _detalle_desplegable_programa(clave):
+    detalle = PROGRAMAS_CON_DETALLE[clave]
+    tabla = html.Table([
+        html.Thead(html.Tr([
+            html.Th("Año"), html.Th("Beneficiarios"),
+            html.Th("Docentes"), html.Th("Inversión"),
+        ])),
+        html.Tbody([
+            html.Tr([html.Td(anio), html.Td(beneficiarios),
+                     html.Td(docentes), html.Td(inversion)])
+            for anio, beneficiarios, docentes, inversion in detalle["filas"]
+        ]),
+    ], className="programa-tabla")
+    return [
+        html.Div(detalle["descripcion"], className="programa-info-tooltip", role="tooltip"),
+        html.Details([
+            html.Summary("Ver detalle histórico"),
+            html.Div([
+                tabla,
+                html.P(detalle["nota"], className="programa-tabla-nota"),
+            ], className="programa-tabla-wrap"),
+        ], className="programa-tabla-details"),
+    ]
+
+
 def _tarjetas_programas_eje2(datos):
     """Presenta cada programa con el mismo lenguaje visual de las cifras."""
     tarjetas = []
@@ -1988,35 +2125,35 @@ def _tarjetas_programas_eje2(datos):
         clave_programa = _sin_tildes(dato["programa"])
         es_dece = clave_programa.startswith("profesionales dece")
         es_comunidades = clave_programa.startswith("comunidades seguras")
+        clave_detalle = ("safpi" if "safpi" in clave_programa
+                         else "nap" if re.search(r"(^|\s)nap($|\s|\()", clave_programa)
+                         else None)
         titulo = ("Profesionales DECE (Apoyo Psicológico)"
                   if es_dece else dato["programa"])
-        if es_comunidades:
-            unidad = "Comunidad Educativa"
-        elif es_dece:
-            unidad = "DECEs contratados"
-        else:
-            unidad = str(dato["tipo"]).strip()
+        unidad = ("Comunidad Educativa"
+                  if es_comunidades else str(dato["tipo"]).strip())
         contenido = [
             html.Span(className="vision-card-icon-mark"),
             html.Span(titulo, className="vision-card-label"),
             html.Div([
                 html.Strong(formato_valor(dato["beneficiarios"])),
-                html.Span(unidad, className="unidad-sin-mayusculas" if es_dece else None),
-                ], className="vision-card-value-row programa-card-resultado"),
+                html.Span(unidad),
+            ], className="vision-card-value-row programa-card-resultado"),
         ]
         if es_dece:
-            contenido.append(html.P("La brecha nacional se ha reducido al 45%",
+            contenido.append(html.P("La brecha nacional se ha reducido en 45%",
                                     className="programa-card-destacado"))
+        if clave_detalle:
+            contenido.extend(_detalle_desplegable_programa(clave_detalle))
         tarjetas.append(html.Article(
             contenido,
-            className=f"vision-exec-card programa-resumen-card programa-{colores[i % len(colores)]}",
+            className=(f"vision-exec-card programa-resumen-card "
+                       f"programa-{colores[i % len(colores)]}"
+                       f"{' programa-con-ayuda' if clave_detalle else ''}"),
+            tabIndex=0 if clave_detalle else None,
         ))
-    clase_columnas = " programas-3-columnas" if len(tarjetas) == 3 else ""
-    return html.Div(
-        tarjetas,
-        className=("vision-exec-grid gestion-educativa-grid "
-                   f"programas-servicios-grid{clase_columnas}"),
-    )
+    return html.Div(tarjetas,
+                    className="vision-exec-grid gestion-educativa-grid programas-servicios-grid")
 
 
 def _cartera_futura_eje2(proyectos):
@@ -2087,20 +2224,6 @@ def _cartera_futura_eje2(proyectos):
 
 def pagina_educacion_superior():
     programas, aviso = cargar_programas_educacion_superior()
-    # Orden solicitado para la presentación ejecutiva: la tarjeta de becas
-    # técnicas se muestra antes de ValidaTec, sin alterar los datos del Excel.
-    prioridad_programas = {
-        "cupos aceptados en educacion superior": 1,
-        "because he is nice": 2,
-        "becas tecnicas y tecnologicas financiadas por aliados": 3,
-        "validatec (validacion de trayectoria para obtener tercer nivel)": 4,
-    }
-    programas = sorted(
-        programas,
-        key=lambda p: prioridad_programas.get(
-            _sin_tildes(p.get("programa", "")), 99
-        ),
-    )
     return html.Section(className="vision-exec-page educacion-superior-page", children=[
         html.Div(className="vision-exec-header vision-exec-header-compacta", children=[
             html.Div(className="vision-title-mark"),
@@ -2125,7 +2248,9 @@ def pagina_educacion_superior():
         html.H2("Programas y servicios de Educación Superior", className="vision-eje-banner"),
         _tarjetas_programas_eje2(programas),
         html.P(aviso, className="eje2-source-note") if aviso else None,
-    ])
+        html.H2("Proyectos a futuro", className="vision-eje-banner"),
+        html.P("Agenda de acciones estratégicas prevista para octubre y noviembre.", className="eje1-subtitulo"),
+        _cartera_futura_eje2(EJE2_PROYECTOS_FUTUROS)])
 
 
 EJES_VICEMINISTERIALES = {
@@ -2260,6 +2385,15 @@ def pagina_eje_viceministerial(codigo):
             className="eje-programas-fila-unica",
         ) if programas else None,
         html.P(aviso, className="eje2-source-note") if aviso else None,
+        html.H2("Acciones estratégicas", className="vision-eje-banner"),
+        html.P("Resumen ejecutivo de actividades y acciones previstas para octubre y noviembre.",
+               className="eje1-subtitulo"),
+        html.Div([html.Div([html.Strong(v), html.Span(e)], className="eje1-stat")
+                  for v, e in eje["resumen"] if "agenda" not in e.lower()],
+                 className="eje1-stats-grid eje-summary-grid"),
+        _tarjetas_acciones_eje(eje["acciones"]),
+        html.P("Las cifras de esta sección corresponden a las diapositivas institucionales entregadas.",
+               className="eje2-source-note"),
     ])
 
 
@@ -2869,9 +3003,7 @@ def pagina_gestion_educativa():
     epja = next((p for p in programas_gestion
                  if "epja" in _sin_tildes(p.get("programa", ""))), None)
     programas_gestion = [p for p in programas_gestion
-                         if "epja" not in _sin_tildes(p.get("programa", ""))
-                         and "alimentacion escolar y bienestar" not in
-                         _sin_tildes(p.get("programa", ""))]
+                         if "epja" not in _sin_tildes(p.get("programa", ""))]
 
     def dato(nombre_legible, clave):
         return resumen.get(nombre_legible, {}).get(clave)
@@ -2937,6 +3069,11 @@ def pagina_gestion_educativa():
                 className="vision-eje-banner"),
         html.Div(className="vision-exec-grid gestion-educativa-grid", children=tarjetas),
         pie,
+
+        html.H2("Proyectos que transforman la educación",
+                className="vision-eje-banner"),
+        seccion_eje1_infraestructura(),
+        seccion_pma(),
     ])
 
 
@@ -3581,17 +3718,12 @@ def contenido_documentacion():
             "Archivo único con las fichas metodológicas de todos los indicadores publicados en el portal.",
             "DOCX", "E-05_Fichas_metodologicas.docx",
         ),
-        tarjeta_entregable(
-            "E-06", "Ficha de formalización",
-            "Anexo 4 con la ficha institucional para la formalización de la solución de información.",
-            "DOCX", "E-06_Anexo4_Ficha_formalizacion.docx",
-        ),
     ]
     return html.Div([
         html.Section([
             html.Div([
                 html.H1("Documentación"),
-                html.P("Manual de usuario, diccionario de datos e indicadores, fichas metodológicas y ficha de formalización de la solución de información."),
+                html.P("Manual de usuario, diccionario de datos e indicadores y fichas metodológicas de la solución de información."),
             ]),
         ], className="documentation-hero"),
         html.Section([
@@ -3859,26 +3991,29 @@ def actualizar_excel(_intervalo, version_actual):
     version_actual = dict(version_actual or {})
     cambio = False
 
-    nueva_version_pnd = version_pnd()
-    if nueva_version_pnd and nueva_version_pnd != version_actual.get("pnd"):
+    # Descarga nuevamente las tres matrices cada cinco minutos y compara sus
+    # hashes. Si cambia alguna, el Store provoca la reconstrucción del gráfico.
+    if _intervalo % 20 == 0:
         nueva_data, nuevo_error = cargar_base_pnd()
-        if not nuevo_error and not nueva_data.empty:
+        nueva_version_pnd = version_pnd()
+        if (not nuevo_error and not nueva_data.empty
+                and nueva_version_pnd != version_actual.get("pnd")):
             DATA_PND, ERROR_PND, VERSION_PND = nueva_data, None, nueva_version_pnd
             version_actual["pnd"] = nueva_version_pnd
             cambio = True
 
-    nueva_version_kpi = version_kpi()
-    if nueva_version_kpi and nueva_version_kpi != version_actual.get("kpi-estrategicos"):
         nueva_data, nuevo_error = cargar_base_kpi()
-        if not nuevo_error and not nueva_data.empty:
+        nueva_version_kpi = version_kpi()
+        if (not nuevo_error and not nueva_data.empty
+                and nueva_version_kpi != version_actual.get("kpi-estrategicos")):
             DATA_KPI, ERROR_KPI, VERSION_KPI = nueva_data, None, nueva_version_kpi
             version_actual["kpi-estrategicos"] = nueva_version_kpi
             cambio = True
 
-    nueva_version_kpi_inst = version_kpi_inst()
-    if nueva_version_kpi_inst and nueva_version_kpi_inst != version_actual.get("kpi-institucionales"):
         nueva_data, nuevo_error = cargar_base_kpi_inst()
-        if not nuevo_error and not nueva_data.empty:
+        nueva_version_kpi_inst = version_kpi_inst()
+        if (not nuevo_error and not nueva_data.empty
+                and nueva_version_kpi_inst != version_actual.get("kpi-institucionales")):
             DATA_KPI_INST, ERROR_KPI_INST, VERSION_KPI_INST = nueva_data, None, nueva_version_kpi_inst
             version_actual["kpi-institucionales"] = nueva_version_kpi_inst
             cambio = True
@@ -3886,7 +4021,7 @@ def actualizar_excel(_intervalo, version_actual):
     # Las bases de Gestión Educativa (algunas en OneDrive) se vuelven a leer
     # cada 15 minutos, igual que el presupuesto: no hay forma barata de saber
     # si cambiaron sin descargarlas, así que se relee y se compara después.
-    if _intervalo % 60 == 0:
+    if _intervalo % 20 == 0:
         nuevo_resumen, nuevos_pendientes = cargar_resumen_gestion_educativa()
         nueva_version_gestion_educ = version_gestion_educativa(nuevo_resumen, nuevos_pendientes)
         if nueva_version_gestion_educ != version_actual.get("gestion-educativa"):
@@ -3896,7 +4031,7 @@ def actualizar_excel(_intervalo, version_actual):
             cambio = True
 
     # SharePoint se consulta cada 15 minutos para evitar solicitudes innecesarias.
-    if _intervalo % 60 == 0:
+    if _intervalo % 20 == 0:
         nueva_data, nuevo_error = cargar_base_presupuesto()
         nueva_version = version_presupuesto()
         if (not nuevo_error and not nueva_data.empty
