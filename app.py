@@ -23,6 +23,7 @@ NOMBRES_ENTREGABLES = {
     "E-03_Manual_de_usuario.docx",
     "E-04_Diccionario_de_datos_e_indicadores_Anexo5.xlsx",
     "E-05_Fichas_metodologicas.docx",
+    "E-06_Anexo4_Ficha_formalizacion.docx",
 }
 
 # Fuentes individuales de OneDrive. Se leen por HTTPS tanto localmente como
@@ -328,6 +329,23 @@ def cargar_base_pnd():
         df["_orden_periodo"] = df["Año"].map(orden_periodo)
         for col in ["Línea base", "Meta", "Estimador", "Numerador", "Denominador"]:
             df[col] = pd.to_numeric(df[col], errors="coerce")
+
+        # En los indicadores cuya unidad es "Número", el Excel puede guardar
+        # conteos abreviados con decimales (107,56 representa 107.560). Se
+        # recupera aquí el conteo entero para que tarjetas, barras y ejes usen
+        # el punto como separador de miles: 107.560, 116.600, 357.730, etc.
+        unidad_normalizada = df["Unidad de medida"].astype(str).map(
+            lambda x: "".join(
+                c for c in unicodedata.normalize("NFKD", x.strip().lower())
+                if not unicodedata.combining(c)
+            )
+        )
+        es_conteo = unidad_normalizada.eq("numero")
+        for col in ["Línea base", "Meta", "Estimador"]:
+            es_abreviado = (es_conteo & df[col].notna()
+                            & (df[col].abs() < 1000)
+                            & (df[col] % 1 != 0))
+            df.loc[es_abreviado, col] = (df.loc[es_abreviado, col] * 1000).round()
         for col in ["NOMBRE DEL INDICADOR", "VICEMINISTERIO"]:
             df[col] = df[col].astype("string").str.strip()
         # "Fórmula de Cálculo" es opcional: los Excel del PND anteriores no la traían.
@@ -1002,25 +1020,68 @@ app.index_string = """<!DOCTYPE html>
         .programa-con-ayuda:focus-within .programa-info-tooltip {
           opacity: 1; visibility: visible; transform: translateY(0);
         }
-        .programa-tabla-details { margin-top: 12px; border-top: 1px solid #e4e7f0; }
-        .programa-tabla-details summary {
-          display: flex; align-items: center; justify-content: space-between;
-          padding: 9px 0 2px; color: #4f3c98; font-size: 11px;
-          font-weight: 800; cursor: pointer; list-style: none;
+        .programa-anio-control {
+          display: flex; align-items: center; gap: 7px;
+          width: fit-content; margin: 0 0 10px;
         }
-        .programa-tabla-details summary::-webkit-details-marker { display: none; }
-        .programa-tabla-details summary::after { content: '⌄'; font-size: 16px; }
-        .programa-tabla-details[open] summary::after { content: '⌃'; }
-        .programa-tabla-wrap { margin-top: 8px; overflow-x: auto; }
-        .programa-tabla { width: 100%; border-collapse: collapse; font-size: 10px; color: #202a59; }
-        .programa-tabla th, .programa-tabla td {
-          padding: 5px 6px; border: 1px solid #d7dbe8; text-align: right;
+        .programa-anio-control > span {
+          display: block; margin: 0; color: #4f3c98;
+          font-size: 10px; font-weight: 900; text-transform: uppercase;
+        }
+        .programa-anio-dropdown { width: 145px; min-width: 145px; }
+        .programa-anio-dropdown .Select-control {
+          min-height: 27px; height: 27px; border-color: #d8dced;
+          border-radius: 7px; font-family: Arial, sans-serif;
+        }
+        .programa-anio-dropdown .Select-value,
+        .programa-anio-dropdown .Select-placeholder { line-height: 25px !important; }
+        .programa-anio-dropdown .Select-input { height: 25px !important; }
+        .programa-anio-dropdown .Select-arrow-zone { padding-right: 7px; }
+        .programa-anio-dropdown .Select-value-label {
+          color: #202a59 !important; font-size: 11px; font-weight: 800;
+        }
+        .programa-periodo-fijo {
+          display: inline-flex; align-items: center; gap: 7px;
+          width: fit-content; margin: 0 0 10px; padding: 6px 9px;
+          border: 1px solid #d8dced; border-radius: 7px; background: #fff;
+          color: #202a59; font-size: 11px; font-weight: 800;
+        }
+        .programa-periodo-fijo > span {
+          color: #4f3c98; font-size: 9px; font-weight: 900;
+          letter-spacing: .04em; text-transform: uppercase;
+        }
+        .programa-metricas-horizontales {
+          display: grid;
+          grid-template-columns: minmax(0, 1fr) minmax(0, .78fr) minmax(0, 1.5fr);
+          gap: 10px; margin-top: 14px;
+        }
+        .programa-metrica-periodo {
+          min-width: 0; padding: 12px 8px; border-radius: 9px;
+          background: #f3f4fa; text-align: center;
+        }
+        .programa-metrica-periodo span {
+          display: block; color: #626a83; font-size: 9px; font-weight: 800;
+          text-transform: uppercase;
+        }
+        .programa-metrica-periodo strong {
+          display: block; margin-top: 3px; color: #17245b;
+          font-size: clamp(18px, 1.5vw, 25px); font-weight: 900;
           white-space: nowrap;
         }
-        .programa-tabla th { background: #f1eff9; color: #3f3188; font-weight: 800; }
-        .programa-tabla th:first-child, .programa-tabla td:first-child { text-align: left; }
-        .programa-tabla-nota { margin: 7px 0 0 !important; color: #59627d !important;
-          font-size: 9px !important; line-height: 1.35 !important; text-align: justify; }
+        .programa-metrica-periodo.inversion strong {
+          font-size: clamp(15px, 1vw, 19px); letter-spacing: -.025em;
+        }
+        .programa-metricas-dos {
+          grid-template-columns: repeat(2, minmax(0, 1fr));
+        }
+        .programa-metricas-dos .programa-metrica-periodo strong {
+          font-size: clamp(20px, 1.7vw, 28px);
+        }
+        .programa-periodo-nota {
+          margin: 7px 0 0 !important; color: #59627d !important;
+          font-size: 9px !important; line-height: 1.35 !important;
+          text-align: justify;
+        }
         </style>
         <script>
         window.MathJax = {
@@ -1213,6 +1274,25 @@ def menu_lateral(seccion_activa=None, vice_activo=None, indicador_activo=None):
                                      .sort_values("Orden sección")[cfg["vice_col"]].tolist())
                 else:
                     opciones_vice = sorted(df[cfg["vice_col"]].dropna().unique())
+                    if codigo == "pnd":
+                        # Orden institucional de los cinco ejes estratégicos.
+                        # Las dependencias que no pertenecen a esos cinco ejes
+                        # se conservan después, sin eliminarlas.
+                        orden_ejes = {
+                            "viceministerio de gestion educativa": 1,
+                            "viceministerio de educacion superior": 2,
+                            "viceministerio de educacion": 3,
+                            "viceministerio del deporte": 4,
+                            "viceministerio de deporte": 4,
+                            "viceministerio de cultura": 5,
+                        }
+
+                        def clave_orden_eje(nombre):
+                            texto = unicodedata.normalize("NFKD", str(nombre).strip().lower())
+                            texto = "".join(c for c in texto if not unicodedata.combining(c))
+                            return (orden_ejes.get(texto, 99), texto)
+
+                        opciones_vice = sorted(opciones_vice, key=clave_orden_eje)
                     if codigo == "presupuesto":
                         opciones_vice = [
                             x for x in opciones_vice
@@ -2058,8 +2138,8 @@ def _stats_eje2(datos):
 
 PROGRAMAS_CON_DETALLE = {
     "safpi": {
+        "nombre_descripcion": "Servicio de Atención Familiar para la Primera Infancia (SAFPI).",
         "descripcion": (
-            "Servicio de Atención Familiar para la Primera Infancia (SAFPI). "
             "Promueve el desarrollo integral de niñas y niños de 3 y 4 años que no asisten "
             "a una institución educativa, mediante el fortalecimiento del acompañamiento de "
             "sus familias y la participación de la comunidad. Esta iniciativa forma parte de "
@@ -2075,8 +2155,9 @@ PROGRAMAS_CON_DETALLE = {
         "nota": "*Nota: En el régimen Sierra-Amazonía se sigue levantando información de niños y niñas.",
     },
     "nap": {
+        "nombre_descripcion": "Nivelación y Aceleración Pedagógica (NAP).",
         "descripcion": (
-            "Nivelación y Aceleración Pedagógica (NAP). Es un servicio de educación formal "
+            "Es un servicio de educación formal "
             "que permite nivelar los conocimientos y habilidades de niñas, niños y adolescentes "
             "con escolaridad inconclusa y rezago escolar, mediante un proceso acelerado que "
             "facilita su reincorporación al grado o curso correspondiente a su edad."
@@ -2092,34 +2173,78 @@ PROGRAMAS_CON_DETALLE = {
 }
 
 
-def _detalle_desplegable_programa(clave):
+PROGRAMAS_GESTION_COMPLEMENTARIOS = [
+    {
+        "titulo": "Reforma Integral al Bachillerato (Equipamiento Tecnológico)",
+        "periodo": "2025",
+        "metricas": [("Instituciones", "79"), ("Inversión", "$3,1 millones")],
+        "descripcion": (
+            "Es un proyecto de inversión, su objetivo es dotar de infraestructura, mobiliario "
+            "y laboratorios tecnológicos a las instituciones educativas fiscales que imparten "
+            "Bachillerato General y Técnico."
+        ),
+    },
+    {
+        "titulo": "Aulas Hospitalarias",
+        "periodo": "2025",
+        "metricas": [("Aulas Hospitalarias", "98"), ("Estudiantes", "42.965")],
+        "descripcion": (
+            "Son espacios educativos y pedagógicos ubicados dentro de recintos de salud que "
+            "brindan atención escolar a niños, niñas y jóvenes en situación de enfermedad "
+            "física o mental que no pueden asistir de forma regular a las instituciones educativas."
+        ),
+    },
+]
+
+
+def _ayuda_programa(nombre, descripcion):
+    """Tooltip justificado con el nombre institucional destacado al inicio."""
+    return html.Div([
+        html.Strong(nombre),
+        html.Span(" " + descripcion),
+    ], className="programa-info-tooltip", role="tooltip")
+
+
+def _metricas_programa_por_anio(clave, anio):
     detalle = PROGRAMAS_CON_DETALLE[clave]
-    tabla = html.Table([
-        html.Thead(html.Tr([
-            html.Th("Año"), html.Th("Beneficiarios"),
-            html.Th("Docentes"), html.Th("Inversión"),
-        ])),
-        html.Tbody([
-            html.Tr([html.Td(anio), html.Td(beneficiarios),
-                     html.Td(docentes), html.Td(inversion)])
-            for anio, beneficiarios, docentes, inversion in detalle["filas"]
-        ]),
-    ], className="programa-tabla")
+    fila = next((f for f in detalle["filas"] if f[0] == anio), detalle["filas"][-1])
+    _, estudiantes, docentes, inversion = fila
+    inversion = inversion.replace("$ ", "$")
     return [
-        html.Div(detalle["descripcion"], className="programa-info-tooltip", role="tooltip"),
-        html.Details([
-            html.Summary("Ver detalle histórico"),
-            html.Div([
-                tabla,
-                html.P(detalle["nota"], className="programa-tabla-nota"),
-            ], className="programa-tabla-wrap"),
-        ], className="programa-tabla-details"),
+        html.Div([
+            html.Div([html.Span("Estudiantes"), html.Strong(estudiantes)],
+                     className="programa-metrica-periodo"),
+            html.Div([html.Span("Docentes"), html.Strong(docentes)],
+                     className="programa-metrica-periodo"),
+            html.Div([html.Span("Inversión"), html.Strong(inversion)],
+                     className="programa-metrica-periodo inversion"),
+        ], className="programa-metricas-horizontales"),
+        html.P(detalle["nota"], className="programa-periodo-nota"),
+    ]
+
+
+def _control_anio_programa(clave):
+    detalle = PROGRAMAS_CON_DETALLE[clave]
+    periodos = [fila[0] for fila in detalle["filas"]]
+    return [
+        _ayuda_programa(detalle["nombre_descripcion"], detalle["descripcion"]),
+        html.Div([
+            html.Span("Año"),
+            dcc.Dropdown(
+                id={"type": "programa-anio", "index": clave},
+                options=[{"label": periodo, "value": periodo} for periodo in periodos],
+                value=periodos[-1], clearable=False, searchable=False,
+                className="programa-anio-dropdown",
+            ),
+        ], className="programa-anio-control"),
     ]
 
 
 def _tarjetas_programas_eje2(datos):
     """Presenta cada programa con el mismo lenguaje visual de las cifras."""
     tarjetas = []
+    tarjetas_complementarias = []
+    incluye_reinsercion = False
     colores = ["azul", "verde", "amarillo", "morado"]
     for i, dato in enumerate(datos):
         clave_programa = _sin_tildes(dato["programa"])
@@ -2128,32 +2253,99 @@ def _tarjetas_programas_eje2(datos):
         clave_detalle = ("safpi" if "safpi" in clave_programa
                          else "nap" if re.search(r"(^|\s)nap($|\s|\()", clave_programa)
                          else None)
+        es_reinsercion = "reinsercion" in clave_programa or "todos al aula" in clave_programa
+        incluye_reinsercion = incluye_reinsercion or es_reinsercion
         titulo = ("Profesionales DECE (Apoyo Psicológico)"
                   if es_dece else dato["programa"])
         unidad = ("Comunidad Educativa"
                   if es_comunidades else str(dato["tipo"]).strip())
-        contenido = [
-            html.Span(className="vision-card-icon-mark"),
-            html.Span(titulo, className="vision-card-label"),
-            html.Div([
+        contenido = [html.Span(className="vision-card-icon-mark")]
+        if clave_detalle:
+            contenido.extend(_control_anio_programa(clave_detalle))
+        elif es_reinsercion:
+            contenido.extend([
+                _ayuda_programa(
+                    "Todos al Aula por el Nuevo Ecuador.",
+                    "Promueve el acceso y/o reinserción escolar de niños, niñas, adolescentes, "
+                    "jóvenes y adultos que se encuentran fuera del Sistema Nacional de Educación, "
+                    "a través de acciones focalizadas en territorio y coordinación interinstitucional.",
+                ),
+                html.Div([html.Span("Período"), html.Strong("2022 a septiembre 2026")],
+                         className="programa-periodo-fijo"),
+            ])
+        contenido.append(html.Span(titulo, className="vision-card-label"))
+        if clave_detalle:
+            periodo_inicial = PROGRAMAS_CON_DETALLE[clave_detalle]["filas"][-1][0]
+            contenido.append(html.Div(
+                _metricas_programa_por_anio(clave_detalle, periodo_inicial),
+                id={"type": "programa-metricas", "index": clave_detalle},
+            ))
+        elif es_reinsercion:
+            contenido.append(html.Div([
+                html.Strong("179.235"),
+                html.Span("Estudiantes"),
+            ], className="vision-card-value-row programa-card-resultado"))
+        else:
+            contenido.append(html.Div([
                 html.Strong(formato_valor(dato["beneficiarios"])),
                 html.Span(unidad),
-            ], className="vision-card-value-row programa-card-resultado"),
-        ]
+            ], className="vision-card-value-row programa-card-resultado"))
         if es_dece:
             contenido.append(html.P("La brecha nacional se ha reducido en 45%",
                                     className="programa-card-destacado"))
-        if clave_detalle:
-            contenido.extend(_detalle_desplegable_programa(clave_detalle))
         tarjetas.append(html.Article(
             contenido,
             className=(f"vision-exec-card programa-resumen-card "
                        f"programa-{colores[i % len(colores)]}"
-                       f"{' programa-con-ayuda' if clave_detalle else ''}"),
-            tabIndex=0 if clave_detalle else None,
+                       f"{' programa-con-ayuda' if clave_detalle or es_reinsercion else ''}"),
+            tabIndex=0 if clave_detalle or es_reinsercion else None,
         ))
-    return html.Div(tarjetas,
-                    className="vision-exec-grid gestion-educativa-grid programas-servicios-grid")
+
+    if incluye_reinsercion:
+        for j, programa in enumerate(PROGRAMAS_GESTION_COMPLEMENTARIOS):
+            tarjetas_complementarias.append(html.Article([
+                html.Span(className="vision-card-icon-mark"),
+                _ayuda_programa(programa["titulo"] + ".", programa["descripcion"]),
+                html.Div([html.Span("Año"), html.Strong(programa["periodo"])],
+                         className="programa-periodo-fijo"),
+                html.Span(programa["titulo"], className="vision-card-label"),
+                html.Div([
+                    html.Div([html.Span(etiqueta), html.Strong(valor)],
+                             className="programa-metrica-periodo")
+                    for etiqueta, valor in programa["metricas"]
+                ], className="programa-metricas-horizontales programa-metricas-dos"),
+            ], className=("vision-exec-card programa-resumen-card programa-con-ayuda "
+                          f"programa-{colores[(len(tarjetas) + j) % len(colores)]}"),
+               tabIndex=0))
+
+    estilo_grid = ({"gridTemplateColumns": "repeat(3, minmax(0, 1fr))"}
+                   if len(tarjetas) == 3 else None)
+    fila_principal = html.Div(
+        tarjetas,
+        className="vision-exec-grid gestion-educativa-grid programas-servicios-grid",
+        style=estilo_grid,
+    )
+    if not tarjetas_complementarias:
+        return fila_principal
+    return html.Div([
+        fila_principal,
+        html.Div(
+            tarjetas_complementarias,
+            className="vision-exec-grid gestion-educativa-grid programas-servicios-grid",
+            style={"gridTemplateColumns": "repeat(2, minmax(0, 1fr))", "marginTop": "12px"},
+        ),
+    ], className="programas-gestion-consolidados")
+
+
+@app.callback(
+    Output({"type": "programa-metricas", "index": MATCH}, "children"),
+    Input({"type": "programa-anio", "index": MATCH}, "value"),
+    State({"type": "programa-anio", "index": MATCH}, "id"),
+)
+def actualizar_metricas_programa(anio, identificador):
+    """Actualiza SAFPI o NAP sin reconstruir el resto de la página."""
+    clave = identificador["index"]
+    return _metricas_programa_por_anio(clave, anio)
 
 
 def _cartera_futura_eje2(proyectos):
@@ -2248,9 +2440,7 @@ def pagina_educacion_superior():
         html.H2("Programas y servicios de Educación Superior", className="vision-eje-banner"),
         _tarjetas_programas_eje2(programas),
         html.P(aviso, className="eje2-source-note") if aviso else None,
-        html.H2("Proyectos a futuro", className="vision-eje-banner"),
-        html.P("Agenda de acciones estratégicas prevista para octubre y noviembre.", className="eje1-subtitulo"),
-        _cartera_futura_eje2(EJE2_PROYECTOS_FUTUROS)])
+    ])
 
 
 EJES_VICEMINISTERIALES = {
@@ -2385,15 +2575,6 @@ def pagina_eje_viceministerial(codigo):
             className="eje-programas-fila-unica",
         ) if programas else None,
         html.P(aviso, className="eje2-source-note") if aviso else None,
-        html.H2("Acciones estratégicas", className="vision-eje-banner"),
-        html.P("Resumen ejecutivo de actividades y acciones previstas para octubre y noviembre.",
-               className="eje1-subtitulo"),
-        html.Div([html.Div([html.Strong(v), html.Span(e)], className="eje1-stat")
-                  for v, e in eje["resumen"] if "agenda" not in e.lower()],
-                 className="eje1-stats-grid eje-summary-grid"),
-        _tarjetas_acciones_eje(eje["acciones"]),
-        html.P("Las cifras de esta sección corresponden a las diapositivas institucionales entregadas.",
-               className="eje2-source-note"),
     ])
 
 
@@ -2409,6 +2590,8 @@ DATOS_GENERALES_GESTION_EDUCATIVA = {
     "docentes_total": 217693,
     "docentes_mujeres": 157629,
     "docentes_hombres": 60064,
+    "nee_educacion_especial": 9762,
+    "nee_educacion_ordinaria": 25602,
 }
 
 DATOS_ABIERTOS_MINEDEC_URL = "https://educacion.gob.ec/datos-abiertos-minedec/"
@@ -2452,6 +2635,29 @@ def tarjetas_datos_generales(epja=None):
             unidad=str(epja["tipo"]).strip(),
         ))
     return tarjetas
+
+
+def tarjeta_necesidades_educativas_especiales():
+    """Cuadro complementario de estudiantes con discapacidad por modalidad."""
+    d = DATOS_GENERALES_GESTION_EDUCATIVA
+    especial = d["nee_educacion_especial"]
+    ordinaria = d["nee_educacion_ordinaria"]
+    return tarjeta_gestion_educativa(
+        "generales", "Estudiantes con necesidades educativas especiales",
+        f"Año lectivo {d['anio_lectivo']}",
+        formato_valor(especial + ordinaria),
+        unidad="Estudiantes con discapacidad",
+        detalles=[
+            html.Div([
+                html.Span("Educación Especial"),
+                html.Strong(formato_valor(especial)),
+            ], className="vision-mini-stat"),
+            html.Div([
+                html.Span("Educación Ordinaria"),
+                html.Strong(formato_valor(ordinaria)),
+            ], className="vision-mini-stat secondary"),
+        ],
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -3002,8 +3208,14 @@ def pagina_gestion_educativa():
     programas_gestion, aviso_programas = cargar_programas_viceministerio("Gestión Educativa")
     epja = next((p for p in programas_gestion
                  if "epja" in _sin_tildes(p.get("programa", ""))), None)
-    programas_gestion = [p for p in programas_gestion
-                         if "epja" not in _sin_tildes(p.get("programa", ""))]
+    programas_gestion = [
+        p for p in programas_gestion
+        if "epja" not in _sin_tildes(p.get("programa", ""))
+        and not (
+            "alimentacion escolar" in _sin_tildes(p.get("programa", ""))
+            and "bienestar" in _sin_tildes(p.get("programa", ""))
+        )
+    ]
 
     def dato(nombre_legible, clave):
         return resumen.get(nombre_legible, {}).get(clave)
@@ -3017,10 +3229,15 @@ def pagina_gestion_educativa():
         valor_principal = fuente.get(clave_principal)
         if valor_principal is None and clave_principal == "estudiantes":
             valor_principal = fuente.get("beneficiarios")
+        # Una tarjeta sin dato real no debe mostrarse como cero ni como
+        # "Sin fuente". Volverá a aparecer automáticamente cuando la base
+        # de OneDrive incluya un valor interpretable para ese recurso.
+        if valor_principal is None:
+            continue
         detalles = _detalles_tarjeta_gestion(fuente)
         tarjetas.append(tarjeta_gestion_educativa(
             codigo, titulo, subtitulo,
-            formato_valor(valor_principal) if valor_principal is not None else "Sin fuente",
+            formato_valor(valor_principal),
             detalles=detalles, unidad=etiqueta_principal,
         ))
 
@@ -3058,6 +3275,11 @@ def pagina_gestion_educativa():
                  className="vision-exec-grid gestion-educativa-grid datos-generales-grid "
                            "educacion-media-cifras-grid",
                  children=tarjetas_datos_generales(epja)),
+        html.Div(
+            className="vision-exec-grid gestion-educativa-grid datos-generales-grid",
+            children=[tarjeta_necesidades_educativas_especiales()],
+            style={"gridTemplateColumns": "minmax(0, 1fr)", "marginTop": "12px"},
+        ),
 
         html.H2("Programas y servicios de Gestión Educativa", className="vision-eje-banner"),
         html.P("Cifras consolidadas de los programas y servicios institucionales.",
@@ -3067,13 +3289,12 @@ def pagina_gestion_educativa():
 
         html.H2("Recursos educativos y complementarios",
                 className="vision-eje-banner"),
-        html.Div(className="vision-exec-grid gestion-educativa-grid", children=tarjetas),
+        html.Div(
+            className="vision-exec-grid gestion-educativa-grid",
+            children=tarjetas,
+            style={"gridTemplateColumns": f"repeat({max(len(tarjetas), 1)}, minmax(0, 1fr))"},
+        ),
         pie,
-
-        html.H2("Proyectos que transforman la educación",
-                className="vision-eje-banner"),
-        seccion_eje1_infraestructura(),
-        seccion_pma(),
     ])
 
 
@@ -3718,12 +3939,17 @@ def contenido_documentacion():
             "Archivo único con las fichas metodológicas de todos los indicadores publicados en el portal.",
             "DOCX", "E-05_Fichas_metodologicas.docx",
         ),
+        tarjeta_entregable(
+            "E-06", "Ficha de formalización",
+            "Anexo 4 con la ficha institucional para la formalización de la solución de información.",
+            "DOCX", "E-06_Anexo4_Ficha_formalizacion.docx",
+        ),
     ]
     return html.Div([
         html.Section([
             html.Div([
                 html.H1("Documentación"),
-                html.P("Manual de usuario, diccionario de datos e indicadores y fichas metodológicas de la solución de información."),
+                html.P("Manual de usuario, diccionario de datos e indicadores, fichas metodológicas y ficha de formalización de la solución de información."),
             ]),
         ], className="documentation-hero"),
         html.Section([
