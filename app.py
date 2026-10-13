@@ -1163,6 +1163,37 @@ app.index_string = """<!DOCTYPE html>
         .programa-metricas-dos .programa-metrica-periodo strong {
           font-size: clamp(20px, 1.7vw, 28px);
         }
+        .programa-metricas-dos .programa-metrica-periodo.inversion strong {
+          font-size: clamp(16px, 1.15vw, 21px);
+        }
+        .programa-metricas-priorizadas {
+          margin-top: 8px;
+        }
+        .programa-estudiantes-principal {
+          display: flex; align-items: baseline; gap: 6px;
+          margin: 0 0 8px;
+        }
+        .programa-estudiantes-principal strong {
+          color: #17245b; font-size: clamp(25px, 2vw, 34px);
+          font-weight: 900; line-height: 1;
+        }
+        .programa-estudiantes-principal span {
+          color: #515b7a; font-size: 10px; font-weight: 900;
+          text-transform: uppercase;
+        }
+        .programa-desglose-inferior {
+          display: grid; grid-template-columns: minmax(95px, .72fr) minmax(0, 1.45fr);
+          gap: 10px;
+        }
+        .programa-desglose-inferior .programa-metrica-periodo {
+          padding: 9px 8px;
+        }
+        .programa-desglose-inferior .programa-metrica-periodo strong {
+          font-size: clamp(19px, 1.45vw, 25px);
+        }
+        .programa-desglose-inferior .programa-metrica-periodo.inversion strong {
+          font-size: clamp(17px, 1.2vw, 22px);
+        }
         .programa-periodo-nota {
           margin: 7px 0 0 !important; color: #59627d !important;
           font-size: 9px !important; line-height: 1.35 !important;
@@ -1173,17 +1204,58 @@ app.index_string = """<!DOCTYPE html>
         .datos-generales-grid.educacion-media-cifras-grid,
         .datos-generales-grid.educacion-media-segunda-fila {
           width: 100% !important; max-width: none !important;
+        }
+        .datos-generales-grid.educacion-media-cifras-grid {
           grid-template-columns: repeat(3, minmax(0, 1fr)) !important;
         }
-        .educacion-media-cifras-grid > .vision-exec-card,
-        .educacion-media-segunda-fila > .vision-exec-card {
+        .datos-generales-grid.educacion-media-segunda-fila {
+          grid-template-columns: repeat(6, minmax(0, 1fr)) !important;
+        }
+        .educacion-media-cifras-grid > .vision-exec-card {
           width: auto !important; min-width: 0 !important;
           max-width: none !important; align-self: stretch !important;
+        }
+        .educacion-media-segunda-fila > .vision-exec-card {
+          grid-column: span 2; width: auto !important; min-width: 0 !important;
+          max-width: none !important; align-self: stretch !important;
+        }
+        .educacion-media-segunda-fila > .vision-exec-card:first-child {
+          grid-column: 2 / span 2;
+        }
+        .educacion-media-segunda-fila > .vision-exec-card:nth-child(2) {
+          grid-column: 4 / span 2;
         }
         .recursos-gestion-grid,
         .recursos-gestion-grid.vision-exec-grid {
           width: 100% !important; max-width: none !important;
-          grid-template-columns: repeat(3, minmax(0, 1fr)) !important;
+          grid-template-columns: repeat(6, minmax(0, 1fr)) !important;
+        }
+        .recursos-gestion-grid > .vision-exec-card {
+          grid-column: span 2; width: auto !important; min-width: 0 !important;
+          max-width: none !important; align-self: stretch !important;
+        }
+        .recursos-gestion-grid > .vision-exec-card:nth-child(4) {
+          grid-column: 2 / span 2;
+        }
+        .recursos-gestion-grid > .vision-exec-card:nth-child(5) {
+          grid-column: 4 / span 2;
+        }
+        .vision-card-periodo {
+          display: block; margin-top: 5px; color: #65708c;
+          font-size: 10px; font-weight: 800;
+        }
+        .programas-complementarios-grid {
+          grid-template-columns: repeat(6, minmax(0, 1fr)) !important;
+        }
+        .programas-complementarios-grid > .vision-exec-card {
+          grid-column: span 2; width: auto !important; min-width: 0 !important;
+          max-width: none !important; align-self: stretch !important;
+        }
+        .programas-complementarios-grid > .vision-exec-card:first-child {
+          grid-column: 2 / span 2;
+        }
+        .programas-complementarios-grid > .vision-exec-card:nth-child(2) {
+          grid-column: 4 / span 2;
         }
         @media (max-width: 900px) {
           .educacion-media-cifras-grid,
@@ -1191,9 +1263,26 @@ app.index_string = """<!DOCTYPE html>
           .programas-gestion-consolidados .programas-servicios-grid {
             grid-template-columns: minmax(0, 1fr) !important;
           }
+          .educacion-media-segunda-fila > .vision-exec-card,
+          .educacion-media-segunda-fila > .vision-exec-card:first-child,
+          .educacion-media-segunda-fila > .vision-exec-card:nth-child(2) {
+            grid-column: 1 !important;
+          }
           .recursos-gestion-grid,
           .recursos-gestion-grid.vision-exec-grid {
             grid-template-columns: minmax(0, 1fr) !important;
+          }
+          .recursos-gestion-grid > .vision-exec-card,
+          .recursos-gestion-grid > .vision-exec-card:nth-child(4),
+          .recursos-gestion-grid > .vision-exec-card:nth-child(5) {
+            grid-column: 1 !important;
+          }
+          .programas-complementarios-grid,
+          .programas-complementarios-grid > .vision-exec-card,
+          .programas-complementarios-grid > .vision-exec-card:first-child,
+          .programas-complementarios-grid > .vision-exec-card:nth-child(2) {
+            grid-template-columns: minmax(0, 1fr) !important;
+            grid-column: 1 !important;
           }
         }
         </style>
@@ -2271,7 +2360,7 @@ def _ayuda_tarjeta(nombre, descripcion):
 
 def tarjeta_gestion_educativa(codigo, titulo, subtitulo, valor, detalles=None,
                               unidad=None, filtros=None, contenido_id=None, valor_id=None,
-                              ayuda_nombre=None, ayuda_descripcion=None):
+                              ayuda_nombre=None, ayuda_descripcion=None, periodo=None):
     tiene_ayuda = bool(ayuda_nombre and ayuda_descripcion)
     contenido = [
         _ayuda_tarjeta(ayuda_nombre, ayuda_descripcion) if tiene_ayuda else None,
@@ -2290,6 +2379,7 @@ def tarjeta_gestion_educativa(codigo, titulo, subtitulo, valor, detalles=None,
             **({"id": contenido_id} if contenido_id is not None else {}),
         ) if detalles else None,
         html.P(subtitulo) if subtitulo else None,
+        html.Small(periodo, className="vision-card-periodo") if periodo else None,
         html.Div(filtros, className="vision-card-filters") if filtros else None,
     ]
     return html.Article(
@@ -2523,16 +2613,18 @@ def _metricas_programa_por_anio(clave, anio):
     fila = next((f for f in detalle["filas"] if f[0] == anio), detalle["filas"][-1])
     _, estudiantes, docentes, inversion = fila
     inversion = inversion.replace("$ ", "$")
-    contenido = [
+    contenido = [html.Div([
         html.Div([
-            html.Div([html.Span("Estudiantes"), html.Strong(estudiantes)],
-                     className="programa-metrica-periodo"),
+            html.Strong(estudiantes),
+            html.Span("Estudiantes"),
+        ], className="programa-estudiantes-principal"),
+        html.Div([
             html.Div([html.Span("Docentes"), html.Strong(docentes)],
                      className="programa-metrica-periodo"),
             html.Div([html.Span("Inversión"), html.Strong(inversion)],
                      className="programa-metrica-periodo inversion"),
-        ], className="programa-metricas-horizontales"),
-    ]
+        ], className="programa-desglose-inferior"),
+    ], className="programa-metricas-priorizadas")]
     nota = detalle.get("nota", "")
     # La advertencia de levantamiento corresponde exclusivamente al último
     # período de SAFPI (2026-2027). Las notas de fuente de otros programas
@@ -2635,7 +2727,9 @@ def _tarjetas_programas_eje2(datos):
                 cabecera_tarjeta("programa", programa["titulo"]),
                 html.Div([
                     html.Div([html.Span(etiqueta), html.Strong(valor)],
-                             className="programa-metrica-periodo")
+                             className=("programa-metrica-periodo inversion"
+                                        if etiqueta == "Inversión"
+                                        else "programa-metrica-periodo"))
                     for etiqueta, valor in programa["metricas"]
                 ], className="programa-metricas-horizontales programa-metricas-dos"),
             ], className=("vision-exec-card programa-resumen-card programa-con-ayuda "
@@ -2655,8 +2749,9 @@ def _tarjetas_programas_eje2(datos):
         fila_principal,
         html.Div(
             tarjetas_complementarias,
-            className="vision-exec-grid gestion-educativa-grid programas-servicios-grid",
-            style={"gridTemplateColumns": "repeat(3, minmax(0, 1fr))", "marginTop": "12px"},
+            className=("vision-exec-grid gestion-educativa-grid programas-servicios-grid "
+                       "programas-complementarios-grid"),
+            style={"marginTop": "12px"},
         ),
     ], className="programas-gestion-consolidados")
 
@@ -2753,7 +2848,7 @@ def pagina_educacion_superior():
                               "maxWidth": "1240px",
                           },
                       ),
-                      html.P("Programas vigentes y agenda priorizada para ampliar el acceso, reconocer trayectorias "
+                      html.P("Programas vigentes para ampliar el acceso, reconocer trayectorias "
                              "académicas y fortalecer la formación técnica, tecnológica y universitaria.")])]),
         html.H2("Educación Superior en cifras", className="vision-eje-banner"),
         html.Div(
@@ -2764,10 +2859,6 @@ def pagina_educacion_superior():
         html.H2("Programas y servicios de Educación Superior", className="vision-eje-banner"),
         _tarjetas_programas_eje2(programas),
         html.P(aviso, className="eje2-source-note") if aviso else None,
-        html.H2("Proyectos a futuro", className="vision-eje-banner"),
-        html.P("Agenda de acciones estratégicas prevista para octubre y noviembre.",
-               className="eje1-subtitulo"),
-        _cartera_futura_eje2(EJE2_PROYECTOS_FUTUROS),
     ])
 
 
@@ -2903,19 +2994,6 @@ def pagina_eje_viceministerial(codigo):
             className="eje-programas-fila-unica",
         ) if programas else None,
         html.P(aviso, className="eje2-source-note") if aviso else None,
-        html.H2("Acciones estratégicas", className="vision-eje-banner"),
-        html.P("Resumen ejecutivo de actividades y acciones previstas para octubre y noviembre.",
-               className="eje1-subtitulo"),
-        html.Div([
-            html.Div([html.Strong(valor), html.Span(etiqueta)], className="eje1-stat")
-            for valor, etiqueta in eje["resumen"]
-            if "agenda" not in etiqueta.lower()
-        ], className="eje1-stats-grid eje-summary-grid"),
-        _tarjetas_acciones_eje(eje["acciones"]),
-        html.P(
-            "Las cifras de esta sección corresponden a las diapositivas institucionales entregadas.",
-            className="eje2-source-note",
-        ),
     ])
 
 
@@ -3595,7 +3673,10 @@ def pagina_gestion_educativa():
         if valor_principal is None and clave_principal == "estudiantes":
             valor_principal = fuente.get("beneficiarios")
         dato_disponible = valor_principal is not None
-        detalles = _detalles_tarjeta_gestion(fuente) if dato_disponible else None
+        # En Mobiliario el total principal ya está expresado en instituciones;
+        # repetir el mismo dato en el recuadro inferior no agrega información.
+        detalles = (_detalles_tarjeta_gestion(fuente)
+                    if dato_disponible and codigo != "mobiliario" else None)
         ayuda = DEFINICIONES_RECURSOS_GESTION.get(codigo, (None, None))
         tarjetas.append(tarjeta_gestion_educativa(
             codigo, titulo, subtitulo,
@@ -3603,6 +3684,7 @@ def pagina_gestion_educativa():
             detalles=detalles,
             unidad=etiqueta_principal if dato_disponible else None,
             ayuda_nombre=ayuda[0], ayuda_descripcion=ayuda[1],
+            periodo="Año lectivo 2025-2026",
         ))
 
     pie = None
