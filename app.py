@@ -1104,18 +1104,28 @@ app.index_string = """<!DOCTYPE html>
           display: block; margin: 0; color: #4f3c98;
           font-size: 10px; font-weight: 900; text-transform: uppercase;
         }
+        /* Dash 3.x usa el selector propio (.dash-dropdown); se cubren también
+           las clases antiguas de react-select por compatibilidad. */
         .programa-anio-dropdown { width: 150px; min-width: 150px; }
+        .programa-anio-dropdown,
+        .programa-anio-dropdown.dash-dropdown,
+        .programa-anio-dropdown .dash-dropdown,
         .programa-anio-dropdown .Select-control {
-          min-height: 22px; height: 22px; border-color: #d8dced;
-          border-radius: 6px; font-family: Arial, sans-serif;
+          height: 24px !important; min-height: 24px !important; max-height: 24px !important;
+          padding-top: 0 !important; padding-bottom: 0 !important;
+          border-color: #d8dced; border-radius: 6px;
+          font-family: Arial, sans-serif; box-sizing: border-box;
+        }
+        .programa-anio-dropdown *,
+        .programa-anio-dropdown .Select-value-label {
+          font-size: 11px !important; font-weight: 800 !important;
+          line-height: 22px !important; color: #202a59;
         }
         .programa-anio-dropdown .Select-value,
-        .programa-anio-dropdown .Select-placeholder { line-height: 20px !important; }
-        .programa-anio-dropdown .Select-input { height: 20px !important; }
+        .programa-anio-dropdown .Select-placeholder { line-height: 22px !important; }
+        .programa-anio-dropdown .Select-input { height: 22px !important; }
         .programa-anio-dropdown .Select-arrow-zone { padding-right: 5px; }
-        .programa-anio-dropdown .Select-value-label {
-          color: #202a59 !important; font-size: 10px; font-weight: 800;
-        }
+        .programa-anio-dropdown svg { width: 12px !important; height: 12px !important; }
         .programa-periodo-fijo {
           display: inline-flex; align-items: center; gap: 7px;
           width: fit-content; margin: 0 0 10px; padding: 6px 9px;
