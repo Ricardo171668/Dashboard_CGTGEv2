@@ -581,12 +581,40 @@ def _columna_por_claves(mapa, claves):
     return None
 
 
+def _columna_por_fragmentos(mapa, fragmentos, excluir=()):
+    """Reconoce encabezados con prefijos o sufijos añadidos en la matriz."""
+    for clave, original in mapa.items():
+        if (any(fragmento in clave for fragmento in fragmentos)
+                and not any(fragmento in clave for fragmento in excluir)):
+            return original
+    return None
+
+
 def _metricas_gestion(df, mapa):
     dato = {}
-    col_benef = mapa.get("BENEFICIARIOS")
-    col_ie = _columna_por_claves(mapa, ("NRO_IE", "NO_IE", "NO_I_E"))
-    col_amie = mapa.get("AMIE")
-    col_est = mapa.get("TOTAL_ESTUDIANTES")
+    col_benef = (_columna_por_claves(
+        mapa, ("BENEFICIARIOS", "TOTAL_BENEFICIARIOS", "NRO_BENEFICIARIOS")
+    ) or _columna_por_fragmentos(mapa, ("BENEFICIAR",)))
+    col_ie = (_columna_por_claves(
+        mapa, ("NRO_IE", "NO_IE", "NO_I_E", "NUMERO_IE", "TOTAL_IE")
+    ) or _columna_por_fragmentos(
+        mapa, ("INSTITUCIONES_EDUCATIVAS", "INSTITUCION_EDUCATIVA"),
+        excluir=("NOMBRE", "CODIGO"),
+    ))
+    col_amie = (_columna_por_claves(
+        mapa, ("AMIE", "CODIGO_AMIE", "COD_AMIE", "CODIGO_INSTITUCION")
+    ) or _columna_por_fragmentos(mapa, ("AMIE",)))
+    col_nombre_ie = _columna_por_claves(
+        mapa,
+        ("NOMBRE_IE", "NOMBRE_INSTITUCION", "NOMBRE_INSTITUCION_EDUCATIVA"),
+    )
+    col_est = (_columna_por_claves(
+        mapa,
+        ("TOTAL_ESTUDIANTES", "ESTUDIANTES", "NRO_ESTUDIANTES",
+         "NO_ESTUDIANTES", "NUMERO_ESTUDIANTES", "ESTUDIANTES_BENEFICIADOS"),
+    ) or _columna_por_fragmentos(
+        mapa, ("ESTUDIANT",), excluir=("NOMBRE", "CEDULA", "CODIGO"),
+    ))
     col_prov = mapa.get("PROVINCIA")
     col_sost = _columna_por_claves(mapa, ("SOSTENIMIENTO", "TIPO_SOSTENIMIENTO"))
     col_area = _columna_por_claves(mapa, ("AREA", "AREA_GEOGRAFICA", "URBANO_RURAL"))
@@ -597,6 +625,10 @@ def _metricas_gestion(df, mapa):
         dato["instituciones"] = float(pd.to_numeric(df[col_ie], errors="coerce").sum())
     elif col_amie:
         dato["instituciones"] = float(df[col_amie].dropna().astype(str).str.strip().nunique())
+    elif col_nombre_ie:
+        dato["instituciones"] = float(
+            df[col_nombre_ie].dropna().astype(str).str.strip().replace("", pd.NA).nunique()
+        )
     if col_est:
         dato["estudiantes"] = float(pd.to_numeric(df[col_est], errors="coerce").sum())
     if col_prov:
@@ -611,9 +643,20 @@ def _metricas_gestion(df, mapa):
 
 def _resumen_base_gestion_educativa(archivo, nombre_legible):
     """Lee una base, homologa provincias y precalcula sus filtros reales."""
-    df = _localizar_hoja_con_columna(archivo, "BENEFICIARIOS")
+    df = None
+    if nombre_legible == "Mobiliario y Transporte Escolar":
+        # El libro trae más de una hoja; la que sirve es la que tiene la
+        # columna Clasificación (Equipamiento y mobiliario / Transporte
+        # escolar). Sin esto se leía otra hoja y las tarjetas quedaban vacías.
+        df = _localizar_hoja_con_columna(archivo, "CLASIFICACION")
+    if df is None:
+        df = _localizar_hoja_con_columna(archivo, "BENEFICIARIOS")
     if df is None:
         df = _localizar_hoja_con_columna(archivo, "TOTAL_ESTUDIANTES")
+    if df is None:
+        df = _localizar_hoja_con_columna(archivo, "ESTUDIANTES")
+    if df is None:
+        df = _localizar_hoja_con_columna(archivo, "NRO_IE")
     if df is None:
         raise ValueError(
             f"'{nombre_legible}' no tiene una columna de Beneficiarios ni "
@@ -623,7 +666,15 @@ def _resumen_base_gestion_educativa(archivo, nombre_legible):
     mapa = {_normalizar_encabezado_presupuesto(c): c for c in df.columns}
     dato = _metricas_gestion(df, mapa)
     col_regimen = next((c for k, c in mapa.items() if "REGIMEN" in k), None)
-    col_clasificacion = next((c for k, c in mapa.items() if "CLASIFICACION" in k), None)
+    col_clasificacion = _columna_por_claves(
+        mapa,
+        ("CLASIFICACION", "TIPO_RECURSO", "RECURSO", "COMPONENTE",
+         "TIPO_INTERVENCION"),
+    )
+    if col_clasificacion is None:
+        col_clasificacion = next(
+            (c for k, c in mapa.items() if "CLASIFICACION" in k), None
+        )
     regimenes = sorted(df[col_regimen].dropna().astype(str).str.strip().replace("", pd.NA).dropna().unique()) \
         if col_regimen else []
     clasificaciones = sorted(df[col_clasificacion].dropna().astype(str).str.strip().replace("", pd.NA).dropna().unique()) \
@@ -646,12 +697,20 @@ def _resumen_base_gestion_educativa(archivo, nombre_legible):
         clasificacion_normalizada = df[col_clasificacion].map(
             _normalizar_encabezado_presupuesto
         )
+        es_mobiliario = (
+            clasificacion_normalizada.eq("EQUIPAMIENTO_Y_MOBILIARIO")
+            | clasificacion_normalizada.str.contains("MOBILIARIO", na=False)
+        )
+        es_transporte = (
+            clasificacion_normalizada.eq("TRANSPORTE_ESCOLAR")
+            | clasificacion_normalizada.str.contains("TRANSPORTE", na=False)
+        )
         dato["por_recurso"] = {
             "mobiliario": _metricas_gestion(
-                df.loc[clasificacion_normalizada.str.contains("MOBILIARIO", na=False)], mapa
+                df.loc[es_mobiliario], mapa
             ),
             "transporte": _metricas_gestion(
-                df.loc[clasificacion_normalizada.str.contains("TRANSPORTE", na=False)], mapa
+                df.loc[es_transporte], mapa
             ),
         }
     return dato
@@ -1038,24 +1097,24 @@ app.index_string = """<!DOCTYPE html>
           opacity: 1; visibility: visible; transform: translateY(0);
         }
         .programa-anio-control {
-          display: flex; align-items: center; gap: 7px;
-          width: fit-content; margin: 0 0 10px;
+          display: flex; align-items: center; gap: 5px;
+          width: fit-content; margin: 0 0 5px;
         }
         .programa-anio-control > span {
           display: block; margin: 0; color: #4f3c98;
           font-size: 10px; font-weight: 900; text-transform: uppercase;
         }
-        .programa-anio-dropdown { width: 145px; min-width: 145px; }
+        .programa-anio-dropdown { width: 150px; min-width: 150px; }
         .programa-anio-dropdown .Select-control {
-          min-height: 27px; height: 27px; border-color: #d8dced;
-          border-radius: 7px; font-family: Arial, sans-serif;
+          min-height: 22px; height: 22px; border-color: #d8dced;
+          border-radius: 6px; font-family: Arial, sans-serif;
         }
         .programa-anio-dropdown .Select-value,
-        .programa-anio-dropdown .Select-placeholder { line-height: 25px !important; }
-        .programa-anio-dropdown .Select-input { height: 25px !important; }
-        .programa-anio-dropdown .Select-arrow-zone { padding-right: 7px; }
+        .programa-anio-dropdown .Select-placeholder { line-height: 20px !important; }
+        .programa-anio-dropdown .Select-input { height: 20px !important; }
+        .programa-anio-dropdown .Select-arrow-zone { padding-right: 5px; }
         .programa-anio-dropdown .Select-value-label {
-          color: #202a59 !important; font-size: 11px; font-weight: 800;
+          color: #202a59 !important; font-size: 10px; font-weight: 800;
         }
         .programa-periodo-fijo {
           display: inline-flex; align-items: center; gap: 7px;
@@ -1098,6 +1157,34 @@ app.index_string = """<!DOCTYPE html>
           margin: 7px 0 0 !important; color: #59627d !important;
           font-size: 9px !important; line-height: 1.35 !important;
           text-align: justify;
+        }
+        /* Ajustes incluidos en app.py para que funcionen aunque el navegador
+           conserve una versión anterior de assets/portada.css. */
+        .datos-generales-grid.educacion-media-cifras-grid,
+        .datos-generales-grid.educacion-media-segunda-fila {
+          width: 100% !important; max-width: none !important;
+          grid-template-columns: repeat(3, minmax(0, 1fr)) !important;
+        }
+        .educacion-media-cifras-grid > .vision-exec-card,
+        .educacion-media-segunda-fila > .vision-exec-card {
+          width: auto !important; min-width: 0 !important;
+          max-width: none !important; align-self: stretch !important;
+        }
+        .recursos-gestion-grid,
+        .recursos-gestion-grid.vision-exec-grid {
+          width: 100% !important; max-width: none !important;
+          grid-template-columns: repeat(3, minmax(0, 1fr)) !important;
+        }
+        @media (max-width: 900px) {
+          .educacion-media-cifras-grid,
+          .educacion-media-segunda-fila,
+          .programas-gestion-consolidados .programas-servicios-grid {
+            grid-template-columns: minmax(0, 1fr) !important;
+          }
+          .recursos-gestion-grid,
+          .recursos-gestion-grid.vision-exec-grid {
+            grid-template-columns: minmax(0, 1fr) !important;
+          }
         }
         </style>
         <script>
@@ -2164,9 +2251,20 @@ def cabecera_tarjeta(codigo, titulo):
     })
 
 
+def _ayuda_tarjeta(nombre, descripcion):
+    """Tooltip institucional: nombre en negrita y explicación justificada."""
+    return html.Div([
+        html.Strong(nombre),
+        html.Span(" " + descripcion),
+    ], className="programa-info-tooltip", role="tooltip")
+
+
 def tarjeta_gestion_educativa(codigo, titulo, subtitulo, valor, detalles=None,
-                              unidad=None, filtros=None, contenido_id=None, valor_id=None):
-    return html.Article([
+                              unidad=None, filtros=None, contenido_id=None, valor_id=None,
+                              ayuda_nombre=None, ayuda_descripcion=None):
+    tiene_ayuda = bool(ayuda_nombre and ayuda_descripcion)
+    contenido = [
+        _ayuda_tarjeta(ayuda_nombre, ayuda_descripcion) if tiene_ayuda else None,
         cabecera_tarjeta(codigo, titulo),
         html.Div([
             html.Strong(
@@ -2183,7 +2281,13 @@ def tarjeta_gestion_educativa(codigo, titulo, subtitulo, valor, detalles=None,
         ) if detalles else None,
         html.P(subtitulo) if subtitulo else None,
         html.Div(filtros, className="vision-card-filters") if filtros else None,
-    ], className=f"vision-exec-card {codigo}")
+    ]
+    return html.Article(
+        contenido,
+        className=(f"vision-exec-card {codigo}"
+                   f"{' programa-con-ayuda' if tiene_ayuda else ''}"),
+        tabIndex=0 if tiene_ayuda else None,
+    )
 
 
 # Eje 2 · Educación Superior. La primera sección se alimenta de la matriz
@@ -2401,10 +2505,7 @@ PROGRAMAS_GESTION_COMPLEMENTARIOS = [
 
 def _ayuda_programa(nombre, descripcion):
     """Tooltip justificado con el nombre institucional destacado al inicio."""
-    return html.Div([
-        html.Strong(nombre),
-        html.Span(" " + descripcion),
-    ], className="programa-info-tooltip", role="tooltip")
+    return _ayuda_tarjeta(nombre, descripcion)
 
 
 def _metricas_programa_por_anio(clave, anio):
@@ -2412,7 +2513,7 @@ def _metricas_programa_por_anio(clave, anio):
     fila = next((f for f in detalle["filas"] if f[0] == anio), detalle["filas"][-1])
     _, estudiantes, docentes, inversion = fila
     inversion = inversion.replace("$ ", "$")
-    return [
+    contenido = [
         html.Div([
             html.Div([html.Span("Estudiantes"), html.Strong(estudiantes)],
                      className="programa-metrica-periodo"),
@@ -2421,8 +2522,16 @@ def _metricas_programa_por_anio(clave, anio):
             html.Div([html.Span("Inversión"), html.Strong(inversion)],
                      className="programa-metrica-periodo inversion"),
         ], className="programa-metricas-horizontales"),
-        html.P(detalle["nota"], className="programa-periodo-nota"),
     ]
+    nota = detalle.get("nota", "")
+    # La advertencia de levantamiento corresponde exclusivamente al último
+    # período de SAFPI (2026-2027). Las notas de fuente de otros programas
+    # continúan visibles en todos sus períodos.
+    es_nota_condicional = clave == "safpi" and nota.startswith("*Nota:")
+    ultimo_periodo = detalle["filas"][-1][0]
+    if nota and (not es_nota_condicional or anio == ultimo_periodo):
+        contenido.append(html.P(nota, className="programa-periodo-nota"))
+    return contenido
 
 
 def _control_anio_programa(clave):
@@ -2459,8 +2568,12 @@ def _tarjetas_programas_eje2(datos):
         incluye_reinsercion = incluye_reinsercion or es_reinsercion
         titulo = ("Profesionales DECE (Apoyo Psicológico)"
                   if es_dece else dato["programa"])
-        unidad = ("Comunidad Educativa"
-                  if es_comunidades else str(dato["tipo"]).strip())
+        # Se conserva la corrección de la versión consolidada anterior: DECE
+        # representa profesionales contratados, no el tipo genérico de
+        # beneficiario registrado en la matriz.
+        unidad = ("Comunidad Educativa" if es_comunidades
+                  else "DECEs contratados" if es_dece
+                  else str(dato["tipo"]).strip())
         contenido = []
         if clave_detalle:
             contenido.extend(_control_anio_programa(clave_detalle))
@@ -2490,7 +2603,7 @@ def _tarjetas_programas_eje2(datos):
         else:
             contenido.append(html.Div([
                 html.Strong(formato_valor(dato["beneficiarios"])),
-                html.Span(unidad),
+                html.Span(unidad, className="unidad-sin-mayusculas" if es_dece else None),
             ], className="vision-card-value-row programa-card-resultado"))
         if es_dece:
             contenido.append(html.P("La brecha nacional se ha reducido en 45%",
@@ -2533,7 +2646,7 @@ def _tarjetas_programas_eje2(datos):
         html.Div(
             tarjetas_complementarias,
             className="vision-exec-grid gestion-educativa-grid programas-servicios-grid",
-            style={"gridTemplateColumns": "repeat(2, minmax(0, 1fr))", "marginTop": "12px"},
+            style={"gridTemplateColumns": "repeat(3, minmax(0, 1fr))", "marginTop": "12px"},
         ),
     ], className="programas-gestion-consolidados")
 
@@ -2641,6 +2754,10 @@ def pagina_educacion_superior():
         html.H2("Programas y servicios de Educación Superior", className="vision-eje-banner"),
         _tarjetas_programas_eje2(programas),
         html.P(aviso, className="eje2-source-note") if aviso else None,
+        html.H2("Proyectos a futuro", className="vision-eje-banner"),
+        html.P("Agenda de acciones estratégicas prevista para octubre y noviembre.",
+               className="eje1-subtitulo"),
+        _cartera_futura_eje2(EJE2_PROYECTOS_FUTUROS),
     ])
 
 
@@ -2776,6 +2893,19 @@ def pagina_eje_viceministerial(codigo):
             className="eje-programas-fila-unica",
         ) if programas else None,
         html.P(aviso, className="eje2-source-note") if aviso else None,
+        html.H2("Acciones estratégicas", className="vision-eje-banner"),
+        html.P("Resumen ejecutivo de actividades y acciones previstas para octubre y noviembre.",
+               className="eje1-subtitulo"),
+        html.Div([
+            html.Div([html.Strong(valor), html.Span(etiqueta)], className="eje1-stat")
+            for valor, etiqueta in eje["resumen"]
+            if "agenda" not in etiqueta.lower()
+        ], className="eje1-stats-grid eje-summary-grid"),
+        _tarjetas_acciones_eje(eje["acciones"]),
+        html.P(
+            "Las cifras de esta sección corresponden a las diapositivas institucionales entregadas.",
+            className="eje2-source-note",
+        ),
     ])
 
 
@@ -2847,7 +2977,7 @@ def tarjeta_necesidades_educativas_especiales():
         "generales", "Estudiantes con necesidades educativas especiales",
         f"Año lectivo {d['anio_lectivo']}",
         formato_valor(especial + ordinaria),
-        unidad="Estudiantes con discapacidad",
+        unidad="Estudiantes",
         detalles=[
             html.Div([
                 html.Span("Educación Especial"),
@@ -3384,10 +3514,29 @@ TARJETAS_GESTION_EDUCATIVA = [
     ("textos", "Textos Escolares", "Textos Escolares",
      "Entrega de textos por cantón", "beneficiarios", "Estudiantes", None),
     ("mobiliario", "Mobiliario y Transporte Escolar", "Mobiliario Escolar",
-     "Instituciones atendidas con mobiliario", "estudiantes", "Estudiantes", "mobiliario"),
+     "Instituciones atendidas con mobiliario", "instituciones", "Instituciones", "mobiliario"),
     ("transporte", "Mobiliario y Transporte Escolar", "Transporte Escolar",
      "Estudiantes atendidos con transporte", "estudiantes", "Estudiantes", "transporte"),
 ]
+
+DEFINICIONES_RECURSOS_GESTION = {
+    "alimentacion": (
+        "Alimentación General.",
+        "Se entrega a los estudiantes una ración alimenticia diaria, compuesta "
+        "por una galleta y leche, durante 200 días.",
+    ),
+    "uniformes": (
+        "Uniformes.",
+        "Entrega gratuita de kits de uniformes escolares a estudiantes de "
+        "instituciones educativas fiscales de zonas rurales y vulnerables, "
+        "para facilitar su acceso a la educación.",
+    ),
+    "textos": (
+        "Textos.",
+        "Se entregan libros de Lenguaje, Matemáticas y Ciencias a estudiantes "
+        "de instituciones educativas fiscales.",
+    ),
+}
 
 
 def _detalles_tarjeta_gestion(dato):
@@ -3417,6 +3566,11 @@ def pagina_gestion_educativa():
             and "bienestar" in _sin_tildes(p.get("programa", ""))
         )
     ]
+    tarjetas_media = tarjetas_datos_generales(epja)
+    tarjetas_media_principales = tarjetas_media[:3]
+    tarjetas_media_segunda_fila = tarjetas_media[3:] + [
+        tarjeta_necesidades_educativas_especiales()
+    ]
 
     def dato(nombre_legible, clave):
         return resumen.get(nombre_legible, {}).get(clave)
@@ -3430,19 +3584,25 @@ def pagina_gestion_educativa():
         valor_principal = fuente.get(clave_principal)
         if valor_principal is None and clave_principal == "estudiantes":
             valor_principal = fuente.get("beneficiarios")
-        # Una tarjeta sin dato real no debe mostrarse como cero ni como
-        # "Sin fuente". Volverá a aparecer automáticamente cuando la base
-        # de OneDrive incluya un valor interpretable para ese recurso.
-        if valor_principal is None:
-            continue
-        detalles = _detalles_tarjeta_gestion(fuente)
+        dato_disponible = valor_principal is not None
+        detalles = _detalles_tarjeta_gestion(fuente) if dato_disponible else None
+        ayuda = DEFINICIONES_RECURSOS_GESTION.get(codigo, (None, None))
         tarjetas.append(tarjeta_gestion_educativa(
             codigo, titulo, subtitulo,
-            formato_valor(valor_principal),
-            detalles=detalles, unidad=etiqueta_principal,
+            formato_valor(valor_principal) if dato_disponible else "En actualización",
+            detalles=detalles,
+            unidad=etiqueta_principal if dato_disponible else None,
+            ayuda_nombre=ayuda[0], ayuda_descripcion=ayuda[1],
         ))
 
     pie = None
+    base_mt = resumen.get("Mobiliario y Transporte Escolar")
+    if base_mt is not None and not base_mt.get("por_recurso"):
+        pendientes = list(pendientes) + [
+            "Mobiliario y Transporte Escolar (la hoja leída no tiene la columna "
+            "'Clasificación' con los valores 'Equipamiento y mobiliario' y "
+            "'Transporte escolar')"
+        ]
     if pendientes:
         pie = html.Div([
             html.Strong("Fuentes por complementar: "),
@@ -3475,11 +3635,13 @@ def pagina_gestion_educativa():
         html.Div(
                  className="vision-exec-grid gestion-educativa-grid datos-generales-grid "
                            "educacion-media-cifras-grid",
-                 children=tarjetas_datos_generales(epja)),
+                 children=tarjetas_media_principales,
+                 style={"gridTemplateColumns": "repeat(3, minmax(0, 1fr))"}),
         html.Div(
-            className="vision-exec-grid gestion-educativa-grid datos-generales-grid",
-            children=[tarjeta_necesidades_educativas_especiales()],
-            style={"gridTemplateColumns": "minmax(0, 1fr)", "marginTop": "12px"},
+            className="vision-exec-grid gestion-educativa-grid datos-generales-grid "
+                      "educacion-media-segunda-fila",
+            children=tarjetas_media_segunda_fila,
+            style={"gridTemplateColumns": "repeat(3, minmax(0, 1fr))", "marginTop": "12px"},
         ),
 
         html.H2("Programas y servicios de Gestión Educativa", className="vision-eje-banner"),
@@ -3491,9 +3653,9 @@ def pagina_gestion_educativa():
         html.H2("Recursos educativos y complementarios",
                 className="vision-eje-banner"),
         html.Div(
-            className="vision-exec-grid gestion-educativa-grid",
+            className="vision-exec-grid gestion-educativa-grid recursos-gestion-grid",
             children=tarjetas,
-            style={"gridTemplateColumns": f"repeat({max(len(tarjetas), 1)}, minmax(0, 1fr))"},
+            style={"gridTemplateColumns": "repeat(3, minmax(0, 1fr))"},
         ),
         pie,
     ])
