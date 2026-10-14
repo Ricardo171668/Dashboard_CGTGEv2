@@ -1466,6 +1466,7 @@ app.index_string = """<!DOCTYPE html>
           }
           .module-main {
             padding: 12px 8px 28px !important;
+            overflow-x: hidden !important;
           }
           .content-heading,
           .indicator-detail-card,
@@ -1483,6 +1484,78 @@ app.index_string = """<!DOCTYPE html>
           }
           .status-year-item {
             flex: 0 0 92px;
+          }
+
+          /* En teléfonos, las reglas de escritorio de estas cuadrículas
+             tienen mayor especificidad. Se las sobrescribe de forma
+             explícita para que ninguna tarjeta conserve columnas estrechas. */
+          .module-main .vision-exec-page .datos-generales-grid.educacion-media-cifras-grid,
+          .module-main .vision-exec-page .datos-generales-grid.educacion-media-segunda-fila,
+          .module-main .vision-exec-page .recursos-gestion-grid.vision-exec-grid,
+          .module-main .vision-exec-page .programas-complementarios-grid,
+          .module-main .vision-exec-page .deporte-informacion-grid.vision-exec-grid,
+          .module-main .vision-exec-page .deporte-programas-generales-grid.vision-exec-grid,
+          .module-main .vision-exec-page .cultura-artistas-grid.vision-exec-grid,
+          .module-main .vision-exec-page .cultura-organizaciones-grid.vision-exec-grid,
+          .module-main .vision-exec-page .programas-servicios-grid.vision-exec-grid {
+            display: grid !important;
+            width: 100% !important;
+            max-width: 100% !important;
+            grid-template-columns: minmax(0, 1fr) !important;
+            gap: 12px !important;
+            margin-left: 0 !important;
+            margin-right: 0 !important;
+          }
+          .module-main .vision-exec-page .vision-exec-grid > .vision-exec-card,
+          .module-main .vision-exec-page .educacion-media-segunda-fila > .vision-exec-card,
+          .module-main .vision-exec-page .recursos-gestion-grid > .vision-exec-card,
+          .module-main .vision-exec-page .programas-complementarios-grid > .vision-exec-card,
+          .module-main .vision-exec-page .deporte-programas-generales-grid > .vision-exec-card {
+            grid-column: 1 / -1 !important;
+            width: 100% !important;
+            min-width: 0 !important;
+            max-width: 100% !important;
+            min-height: 0 !important;
+            box-sizing: border-box !important;
+          }
+          .module-main .vision-exec-page .vision-exec-card {
+            padding: 16px !important;
+            overflow: hidden !important;
+          }
+          .module-main .vision-exec-page .vision-card-label,
+          .module-main .vision-exec-page .vision-card-total,
+          .module-main .vision-exec-page .vision-card-unit,
+          .module-main .vision-exec-page .vision-exec-card > p {
+            max-width: 100% !important;
+            overflow-wrap: anywhere !important;
+            word-break: normal !important;
+            white-space: normal !important;
+          }
+          .module-main .vision-exec-page .vision-card-label {
+            font-size: 14px !important;
+            line-height: 1.25 !important;
+          }
+          .module-main .vision-exec-page .vision-card-total {
+            font-size: clamp(28px, 9vw, 38px) !important;
+            line-height: 1.08 !important;
+          }
+          .module-main .vision-exec-page .vision-card-details {
+            width: 100% !important;
+            grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+            gap: 8px !important;
+          }
+          .module-main .vision-exec-page .vision-mini-stat {
+            min-width: 0 !important;
+            padding: 10px 8px !important;
+          }
+          .module-main .vision-exec-page .vision-mini-stat span,
+          .module-main .vision-exec-page .vision-mini-stat strong {
+            max-width: 100% !important;
+            overflow-wrap: anywhere !important;
+            white-space: normal !important;
+          }
+          .module-main .vision-exec-page .vision-mini-stat strong {
+            font-size: clamp(20px, 7vw, 29px) !important;
           }
         }
         @media (max-width: 1300px) {
@@ -1543,6 +1616,30 @@ app.index_string = """<!DOCTYPE html>
           .cultura-organizaciones-grid,
           .cultura-organizaciones-grid.vision-exec-grid {
             grid-template-columns: minmax(0, 1fr) !important;
+          }
+        }
+        @media (min-width: 601px) and (max-width: 1024px) {
+          /* En tablet se aprovecha el espacio con dos tarjetas por fila, sin
+             conservar las seis columnas auxiliares usadas en escritorio. */
+          .module-main .vision-exec-page .datos-generales-grid.educacion-media-cifras-grid,
+          .module-main .vision-exec-page .datos-generales-grid.educacion-media-segunda-fila,
+          .module-main .vision-exec-page .recursos-gestion-grid.vision-exec-grid,
+          .module-main .vision-exec-page .programas-complementarios-grid,
+          .module-main .vision-exec-page .deporte-informacion-grid.vision-exec-grid,
+          .module-main .vision-exec-page .deporte-programas-generales-grid.vision-exec-grid,
+          .module-main .vision-exec-page .cultura-artistas-grid.vision-exec-grid,
+          .module-main .vision-exec-page .cultura-organizaciones-grid.vision-exec-grid {
+            width: 100% !important;
+            max-width: 100% !important;
+            grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+            gap: 12px !important;
+          }
+          .module-main .vision-exec-page .vision-exec-grid > .vision-exec-card {
+            grid-column: auto !important;
+            width: 100% !important;
+            min-width: 0 !important;
+            max-width: 100% !important;
+            box-sizing: border-box !important;
           }
         }
         </style>
