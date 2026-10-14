@@ -1257,6 +1257,248 @@ app.index_string = """<!DOCTYPE html>
         .programas-complementarios-grid > .vision-exec-card:nth-child(2) {
           grid-column: 4 / span 2;
         }
+        .deporte-informacion-grid,
+        .deporte-informacion-grid.vision-exec-grid {
+          width: 100% !important; max-width: none !important;
+          grid-template-columns: repeat(5, minmax(0, 1fr)) !important;
+          gap: 12px !important;
+        }
+        .deporte-informacion-grid > .vision-exec-card {
+          width: auto !important; min-width: 0 !important;
+          max-width: none !important; min-height: 142px;
+          align-self: stretch !important;
+        }
+        .deporte-informacion-grid .vision-card-label {
+          font-size: 12px; line-height: 1.18;
+        }
+        .deporte-informacion-grid .vision-card-total {
+          font-size: clamp(25px, 2vw, 34px);
+        }
+        .deporte-subseccion-titulo {
+          margin: 18px 0 10px; color: #232d5a;
+          font-size: 15px; font-weight: 900;
+        }
+        .deporte-programas-generales-grid,
+        .deporte-programas-generales-grid.vision-exec-grid {
+          width: 100% !important; max-width: none !important;
+          grid-template-columns: repeat(6, minmax(0, 1fr)) !important;
+          gap: 12px !important;
+        }
+        .deporte-programas-generales-grid > .vision-exec-card {
+          grid-column: span 2; width: auto !important; min-width: 0 !important;
+          max-width: none !important; align-self: stretch !important;
+        }
+        .deporte-programas-generales-grid > .vision-exec-card:first-child {
+          grid-column: 2 / span 2;
+        }
+        .deporte-programas-generales-grid > .vision-exec-card:nth-child(2) {
+          grid-column: 4 / span 2;
+        }
+        .deporte-programa-metricas {
+          display: grid; grid-template-columns: repeat(2, minmax(0, 1fr));
+          gap: 8px; margin-top: 10px;
+        }
+        .deporte-programa-metrica {
+          min-width: 0; padding: 10px 8px; border-radius: 9px;
+          background: #f3f4fa; text-align: center;
+        }
+        .deporte-programa-metrica span {
+          display: block; min-height: 22px; color: #626a83;
+          font-size: 9px; font-weight: 800; line-height: 1.18;
+          text-transform: uppercase;
+        }
+        .deporte-programa-metrica strong {
+          display: block; margin-top: 4px; color: #17245b;
+          font-size: clamp(20px, 1.6vw, 28px); font-weight: 900;
+        }
+        .deporte-informacion-fuente {
+          margin: 10px 0 0 !important;
+        }
+        .deporte-informacion-nota {
+          margin: 4px 0 16px !important;
+        }
+        .cultura-subseccion-titulo {
+          margin: 18px 0 10px; color: #232d5a;
+          font-size: 15px; font-weight: 900;
+        }
+        .cultura-artistas-grid,
+        .cultura-artistas-grid.vision-exec-grid {
+          width: 100% !important; max-width: none !important;
+          grid-template-columns: repeat(6, minmax(0, 1fr)) !important;
+          gap: 10px !important;
+        }
+        .cultura-organizaciones-grid,
+        .cultura-organizaciones-grid.vision-exec-grid {
+          width: 100% !important; max-width: none !important;
+          grid-template-columns: repeat(4, minmax(0, 1fr)) !important;
+          gap: 12px !important;
+        }
+        .cultura-artistas-grid > .vision-exec-card,
+        .cultura-organizaciones-grid > .vision-exec-card {
+          width: auto !important; min-width: 0 !important;
+          max-width: none !important; min-height: 142px;
+          align-self: stretch !important;
+        }
+        .cultura-artistas-grid .vision-card-label,
+        .cultura-organizaciones-grid .vision-card-label {
+          font-size: 11.5px; line-height: 1.18;
+        }
+        .cultura-artistas-grid .vision-card-total,
+        .cultura-organizaciones-grid .vision-card-total {
+          font-size: clamp(24px, 1.8vw, 32px);
+        }
+        .cultura-artistas-grid > .vision-exec-card:last-child,
+        .cultura-organizaciones-grid > .vision-exec-card:last-child {
+          background: #f7f5fd;
+          border-top-color: #503a98;
+        }
+        .cultura-informacion-fuente {
+          margin: 10px 0 0 !important;
+        }
+        .cultura-informacion-nota {
+          margin: 4px 0 16px !important;
+        }
+        /* Navegación adaptable: en escritorio el menú conserva su posición;
+           en tablet y celular funciona como un panel lateral desplegable. */
+        .mobile-menu-button,
+        .mobile-menu-overlay {
+          display: none;
+        }
+        @media (max-width: 1024px) {
+          body.mobile-menu-open {
+            overflow: hidden;
+          }
+          .header-bar {
+            position: sticky; top: 0; z-index: 1000;
+            min-height: 60px; flex-wrap: nowrap !important;
+          }
+          .module-layout {
+            display: block !important;
+            grid-template-columns: minmax(0, 1fr) !important;
+            min-height: calc(100dvh - 60px);
+          }
+          .mobile-menu-button {
+            position: fixed; z-index: 1040; top: 8px; left: 10px;
+            height: 44px; padding: 0 13px;
+            display: inline-flex; align-items: center; justify-content: center;
+            gap: 7px; border: 1px solid rgba(255,255,255,.42);
+            border-radius: 10px; color: #fff; background: #3d2f86;
+            box-shadow: 0 5px 14px rgba(24,37,87,.22);
+            font-size: 13px; font-weight: 900; cursor: pointer;
+          }
+          .mobile-menu-icon {
+            font-size: 22px; line-height: 1;
+          }
+          .module-sidebar {
+            position: fixed !important; z-index: 1030;
+            top: 60px !important; bottom: 0; left: 0;
+            width: min(86vw, 330px) !important;
+            height: calc(100dvh - 60px) !important;
+            max-height: none !important; overflow-y: auto !important;
+            transform: translateX(-105%);
+            transition: transform .22s ease;
+            box-shadow: 8px 0 28px rgba(24,37,87,.28);
+          }
+          body.mobile-menu-open .module-sidebar {
+            transform: translateX(0);
+          }
+          .module-sidebar .sidebar-logo,
+          .module-sidebar .sidebar-kicker {
+            display: none;
+          }
+          .module-sidebar .side-back {
+            margin-top: 4px;
+          }
+          .mobile-menu-overlay {
+            position: fixed; z-index: 1020;
+            inset: 60px 0 0 0; width: 100%; height: auto;
+            display: block; padding: 0; border: 0;
+            background: rgba(20,27,72,.46);
+            opacity: 0; visibility: hidden; pointer-events: none;
+            transition: opacity .2s ease, visibility .2s ease;
+          }
+          body.mobile-menu-open .mobile-menu-overlay {
+            opacity: 1; visibility: visible; pointer-events: auto;
+          }
+          .module-main {
+            width: 100% !important; min-width: 0 !important;
+            min-height: calc(100dvh - 60px) !important;
+            padding: 18px 14px 34px !important;
+          }
+          .vision-vice-menu-compacta {
+            max-width: 100%; overflow-x: auto;
+            overscroll-behavior-inline: contain;
+          }
+          .budget-general-chart-grid,
+          .budget-kpi-grid {
+            grid-template-columns: minmax(0, 1fr) !important;
+          }
+        }
+        @media (max-width: 600px) {
+          .mobile-menu-button {
+            width: 44px; padding: 0;
+          }
+          .mobile-menu-label {
+            display: none;
+          }
+          .header-bar {
+            min-height: 60px; padding: 6px 9px 6px 62px !important;
+          }
+          .header-title {
+            min-width: 0; margin-left: 0 !important;
+          }
+          .header-title strong {
+            overflow: hidden; font-size: 12px !important;
+            text-overflow: ellipsis; white-space: nowrap;
+          }
+          .header-title span {
+            font-size: 8px !important;
+          }
+          .cutoff-date {
+            display: none !important;
+          }
+          .header-actions {
+            gap: 5px; padding-left: 4px !important;
+          }
+          .home-button,
+          .print-button {
+            width: 40px !important; height: 40px !important;
+          }
+          .module-main {
+            padding: 12px 8px 28px !important;
+          }
+          .content-heading,
+          .indicator-detail-card,
+          .chart-card,
+          .budget-table-card {
+            padding: 12px !important;
+          }
+          .content-heading h1,
+          .vision-exec-header h1 {
+            overflow-wrap: anywhere;
+          }
+          .status-row {
+            display: flex !important; overflow-x: auto;
+            gap: 7px; padding-bottom: 5px;
+          }
+          .status-year-item {
+            flex: 0 0 92px;
+          }
+        }
+        @media (max-width: 1300px) {
+          .deporte-informacion-grid,
+          .deporte-informacion-grid.vision-exec-grid {
+            grid-template-columns: repeat(3, minmax(0, 1fr)) !important;
+          }
+          .cultura-artistas-grid,
+          .cultura-artistas-grid.vision-exec-grid {
+            grid-template-columns: repeat(3, minmax(0, 1fr)) !important;
+          }
+          .cultura-organizaciones-grid,
+          .cultura-organizaciones-grid.vision-exec-grid {
+            grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+          }
+        }
         @media (max-width: 900px) {
           .educacion-media-cifras-grid,
           .educacion-media-segunda-fila,
@@ -1283,6 +1525,24 @@ app.index_string = """<!DOCTYPE html>
           .programas-complementarios-grid > .vision-exec-card:nth-child(2) {
             grid-template-columns: minmax(0, 1fr) !important;
             grid-column: 1 !important;
+          }
+          .deporte-informacion-grid,
+          .deporte-informacion-grid.vision-exec-grid {
+            grid-template-columns: minmax(0, 1fr) !important;
+          }
+          .deporte-programas-generales-grid,
+          .deporte-programas-generales-grid.vision-exec-grid,
+          .deporte-programas-generales-grid > .vision-exec-card,
+          .deporte-programas-generales-grid > .vision-exec-card:first-child,
+          .deporte-programas-generales-grid > .vision-exec-card:nth-child(2) {
+            grid-template-columns: minmax(0, 1fr) !important;
+            grid-column: 1 !important;
+          }
+          .cultura-artistas-grid,
+          .cultura-artistas-grid.vision-exec-grid,
+          .cultura-organizaciones-grid,
+          .cultura-organizaciones-grid.vision-exec-grid {
+            grid-template-columns: minmax(0, 1fr) !important;
           }
         }
         </style>
@@ -1331,6 +1591,48 @@ app.index_string = """<!DOCTYPE html>
               childList: true,
               subtree: true
             });
+          });
+        })();
+        </script>
+        <script>
+        /* Menú móvil por delegación de eventos: funciona también cuando Dash
+           reconstruye por completo el módulo después de cada selección. */
+        (function () {
+          function botonMenu() {
+            return document.getElementById('mobile-menu-button');
+          }
+          function cerrarMenu() {
+            document.body.classList.remove('mobile-menu-open');
+            const boton = botonMenu();
+            if (boton) {
+              boton.setAttribute('aria-expanded', 'false');
+              boton.setAttribute('title', 'Abrir menú de navegación');
+            }
+          }
+          function alternarMenu() {
+            const abierto = document.body.classList.toggle('mobile-menu-open');
+            const boton = botonMenu();
+            if (boton) {
+              boton.setAttribute('aria-expanded', abierto ? 'true' : 'false');
+              boton.setAttribute('title', abierto ? 'Cerrar menú de navegación' : 'Abrir menú de navegación');
+            }
+          }
+          document.addEventListener('click', function (evento) {
+            if (evento.target.closest('#mobile-menu-button')) {
+              alternarMenu();
+              return;
+            }
+            if (evento.target.closest(
+              '#mobile-menu-overlay, .side-back, .side-section, .vice-button, .indicator-button'
+            )) {
+              cerrarMenu();
+            }
+          });
+          document.addEventListener('keydown', function (evento) {
+            if (evento.key === 'Escape') cerrarMenu();
+          });
+          window.addEventListener('resize', function () {
+            if (window.innerWidth > 1024) cerrarMenu();
           });
         })();
         </script>
@@ -2257,6 +2559,17 @@ ICONOS_TARJETAS = {
     "deporte": "<circle cx='24' cy='24' r='18'/><path d='m24 14 7 5-3 8h-8l-3-8zM24 6v8M7 19l10 1M12 37l8-10m16 10-8-10m13-8-10 1'/>",
     "digital": "<rect x='6' y='8' width='36' height='25' rx='3'/><path d='M16 41h16M24 33v8'/><path d='m17 22 5 5 10-11'/>",
     "programa": "<circle cx='24' cy='24' r='17'/><circle cx='24' cy='24' r='9'/><path d='m24 7 3 6-3 4-3-4zM41 24l-6 3-4-3 4-3zM24 41l-3-6 3-4 3 4zM7 24l6-3 4 3-4 3z'/>",
+    "vitalicios": "<circle cx='24' cy='17' r='10'/><path d='m18 26-3 15 9-5 9 5-3-15'/><path d='m24 11 2 4 5 .7-3.5 3.4.8 4.9-4.3-2.3-4.3 2.3.8-4.9-3.5-3.4 5-.7z'/>",
+    "alto-rendimiento": "<path d='M8 37h32M12 37V25h9v12m0 0V18h9v19m0 0V29h7v8'/><path d='m24 7 2.2 4.5 5 .7-3.6 3.5.9 5-4.5-2.4-4.5 2.4.9-5-3.6-3.5 5-.7z'/>",
+    "entrenadores": "<path d='M9 9h30v32H9zM17 9V6h14v3'/><path d='M16 19h16M16 26h10M16 33h7'/><circle cx='34' cy='31' r='5'/><path d='m31 31 2 2 4-5'/>",
+    "usuarios-deporte": "<circle cx='17' cy='15' r='6'/><circle cx='33' cy='17' r='5'/><path d='M6 39c1-10 5-16 11-16s10 6 11 16M27 27c2-3 4-5 7-5 5 0 8 5 9 13'/>",
+    "juegos-juveniles": "<path d='M17 8h14v8c0 7-3 12-7 12s-7-5-7-12z'/><path d='M17 12h-6v4c0 5 3 8 8 8m12-12h6v4c0 5-3 8-8 8M24 28v7m-8 6h16M19 35h10'/>",
+    "activate": "<circle cx='28' cy='8' r='4'/><path d='m25 14-7 8 6 5 5 12M20 21l-9 4m14-10 8 8 7 1M24 27l-8 12'/>",
+    "vamos-cancha": "<rect x='6' y='10' width='36' height='28' rx='3'/><path d='M6 18h9v12H6m36-12h-9v12h9M24 10v28'/><circle cx='24' cy='24' r='5'/>",
+    "patrimonio-cultural": "<path d='M6 18h36L24 7zM9 39h30M12 18v17m8-17v17m8-17v17m8-17v17M7 35h34'/>",
+    "memoria-social": "<path d='M9 8h25l5 5v27H9zM34 8v6h6'/><path d='M16 20h16M16 27h16M16 34h10'/><circle cx='13' cy='13' r='3'/>",
+    "organizaciones": "<circle cx='24' cy='11' r='5'/><circle cx='12' cy='25' r='5'/><circle cx='36' cy='25' r='5'/><path d='M19 14l-5 7m15-7 5 7M17 27h14M6 41c1-7 3-11 6-11s5 4 6 11m12 0c1-7 3-11 6-11s5 4 6 11M18 41c1-9 3-14 6-14s5 5 6 14'/>",
+    "empresa-cultural": "<path d='M8 41V14h20v27M28 22h12v19M13 20h4m5 0h2m-11 7h4m5 0h2m-11 7h4m5 0h2m10-6h3m-3 7h3M5 41h38'/>",
 }
 
 PALETA_ICONOS_TARJETAS = {
@@ -2273,6 +2586,17 @@ PALETA_ICONOS_TARJETAS = {
     "validatec": ("#5a55a7", "#efeffb"), "tecnica": ("#b06a13", "#fff2df"),
     "cultura": ("#a03f78", "#faedf5"), "deporte": ("#238071", "#e9f7f4"),
     "digital": ("#3d67ad", "#ebf2fd"), "programa": ("#503a98", "#f1eefb"),
+    "vitalicios": ("#a16f00", "#fff5d8"),
+    "alto-rendimiento": ("#503a98", "#f1eefb"),
+    "entrenadores": ("#287bb5", "#eaf6ff"),
+    "usuarios-deporte": ("#238071", "#e9f7f4"),
+    "juegos-juveniles": ("#a03f78", "#faedf5"),
+    "activate": ("#c18a00", "#fff6d9"),
+    "vamos-cancha": ("#27806e", "#e9f7f3"),
+    "patrimonio-cultural": ("#9a6b00", "#fff5d8"),
+    "memoria-social": ("#5c55a8", "#efeffb"),
+    "organizaciones": ("#287bb5", "#eaf6ff"),
+    "empresa-cultural": ("#a03f78", "#faedf5"),
 }
 
 
@@ -2280,6 +2604,21 @@ def _clave_icono_tarjeta(codigo="", titulo=""):
     """Selecciona un símbolo semántico sin depender de nombres exactos del Excel."""
     texto = _sin_tildes(f"{codigo} {titulo}")
     reglas = [
+        (("exdeportistas vitalicios", "ex deportistas vitalicios"), "vitalicios"),
+        (("alto rendimiento",), "alto-rendimiento"),
+        (("entrenadores", "entrenador"), "entrenadores"),
+        (("usuarios de deporte",), "usuarios-deporte"),
+        (("juegos deportivos nacionales", "ciclo juvenil"), "juegos-juveniles"),
+        (("activate",), "activate"),
+        (("vamos a la cancha",), "vamos-cancha"),
+        (("patrimonio cultural",), "patrimonio-cultural"),
+        (("memoria social",), "memoria-social"),
+        (("organizaciones sociales",), "organizaciones"),
+        (("empresa cultural",), "empresa-cultural"),
+        (("educacion cultural",), "estudiantes"),
+        (("instituciones educativas",), "institucion"),
+        (("total de artistas", "total artistas"), "usuarios-deporte"),
+        (("otras categorias culturales",), "programa"),
         (("safpi", "atencion familiar", "primera infancia"), "safpi"),
         (("nap", "nivelacion y aceleracion"), "nap"),
         (("cupos", "admision"), "cupos"),
@@ -2862,6 +3201,145 @@ def pagina_educacion_superior():
     ])
 
 
+# Información institucional del Viceministerio del Deporte. Corresponde al
+# corte de agosto de 2026 entregado para la Visión Ejecutiva.
+DATOS_GENERALES_DEPORTE = [
+    ("vitalicios", "Exdeportistas vitalicios", 334, "Exdeportistas"),
+    ("alto-rendimiento", "Deportistas de alto rendimiento", 401, "Deportistas"),
+    ("entrenadores", "Entrenadores", 324, "Entrenadores"),
+    ("usuarios-deporte", "Usuarios de deporte", 455632, "Usuarios"),
+    ("juegos-juveniles", "Juegos Deportivos Nacionales · Ciclo Juvenil", 2538,
+     "Deportistas"),
+]
+
+DATOS_PROGRAMAS_GENERALES_DEPORTE = [
+    {
+        "codigo": "activate", "titulo": "Actívate", "puntos_activos": 492,
+        "instructores": 12, "beneficiarios_permanentes": 22030,
+        "beneficiarios_eventos": 27370,
+    },
+    {
+        "codigo": "vamos-cancha", "titulo": "Vamos a la Cancha", "puntos_activos": 415,
+        "instructores": 9, "beneficiarios_permanentes": 13232,
+        "beneficiarios_eventos": 16683,
+    },
+]
+
+
+def _tarjeta_programa_general_deporte(dato):
+    metricas = [
+        ("Puntos activos", dato["puntos_activos"]),
+        ("Instructores", dato["instructores"]),
+        ("Beneficiarios permanentes", dato["beneficiarios_permanentes"]),
+        ("Beneficiarios de eventos masivos", dato["beneficiarios_eventos"]),
+    ]
+    return html.Article([
+        cabecera_tarjeta(dato["codigo"], dato["titulo"]),
+        html.Div([
+            html.Div([
+                html.Span(etiqueta),
+                html.Strong(formato_valor(valor)),
+            ], className="deporte-programa-metrica")
+            for etiqueta, valor in metricas
+        ], className="deporte-programa-metricas"),
+        html.Small("Corte: agosto de 2026", className="vision-card-periodo"),
+    ], className=(f"vision-exec-card deporte-programa-general "
+                  f"{dato['codigo']}"))
+
+
+def seccion_informacion_general_deporte():
+    """Cifras generales de Deporte, separadas de sus programas y servicios."""
+    tarjetas = [
+        tarjeta_gestion_educativa(
+            codigo, titulo, None, formato_valor(valor), unidad=unidad,
+            periodo="Corte: agosto de 2026",
+        )
+        for codigo, titulo, valor, unidad in DATOS_GENERALES_DEPORTE
+    ]
+    return html.Div([
+        html.H2("Información general", className="vision-eje-banner"),
+        html.Div(
+            tarjetas,
+            className=("vision-exec-grid gestion-educativa-grid "
+                       "datos-generales-grid deporte-informacion-grid"),
+        ),
+        html.H3("Actívate y Vamos a la Cancha", className="deporte-subseccion-titulo"),
+        html.Div(
+            [_tarjeta_programa_general_deporte(dato)
+             for dato in DATOS_PROGRAMAS_GENERALES_DEPORTE],
+            className=("vision-exec-grid gestion-educativa-grid "
+                       "deporte-programas-generales-grid"),
+        ),
+        html.P([
+            html.Strong("Fuente: "),
+            "Dirección de Alto Rendimiento, Subsecretaría de Servicios del "
+            "Sistema Deportivo y reportes de recaudación de usuarios de centros activos.",
+        ], className="eje2-source-note deporte-informacion-fuente"),
+        html.P([
+            html.Strong("Nota: "),
+            "Los registros del Viceministerio del Deporte no todos cuentan con "
+            "desagregación a nivel cantonal.",
+        ], className="eje2-source-note deporte-informacion-nota"),
+    ], className="deporte-informacion-general")
+
+
+# Información general de Cultura, corte julio de 2026.
+DATOS_ARTISTAS_GESTORES_CULTURA = [
+    ("artes-innovacion", "Artes e innovación", 23990, "Registros"),
+    ("patrimonio-cultural", "Patrimonio cultural", 916, "Registros"),
+    ("educacion-cultural", "Educación cultural formal", 1136, "Registros"),
+    ("memoria-social", "Memoria social", 479, "Registros"),
+    ("otras-categorias-culturales", "Otras categorías", 249, "Registros"),
+    ("total-artistas", "Total de artistas y gestores culturales", 26770,
+     "Artistas y gestores"),
+]
+
+DATOS_ORGANIZACIONES_CULTURA = [
+    ("organizaciones-sociales", "Organizaciones sociales", 227, "Organizaciones"),
+    ("empresa-cultural", "Empresa cultural", 482, "Empresas"),
+    ("instituciones-educativas", "Instituciones educativas", 2, "Instituciones"),
+    ("total-organizaciones", "Total", 711, "Registros"),
+]
+
+
+def _tarjetas_informacion_general_cultura(datos):
+    return [
+        tarjeta_gestion_educativa(
+            codigo, titulo, None, formato_valor(valor), unidad=unidad,
+            periodo="Corte: julio de 2026",
+        )
+        for codigo, titulo, valor, unidad in datos
+    ]
+
+
+def seccion_informacion_general_cultura():
+    """Las dos tablas generales de Cultura convertidas en tarjetas ejecutivas."""
+    return html.Div([
+        html.H2("Información general", className="vision-eje-banner"),
+        html.H3("Artistas y gestores culturales", className="cultura-subseccion-titulo"),
+        html.Div(
+            _tarjetas_informacion_general_cultura(DATOS_ARTISTAS_GESTORES_CULTURA),
+            className=("vision-exec-grid gestion-educativa-grid "
+                       "datos-generales-grid cultura-artistas-grid"),
+        ),
+        html.H3("Organizaciones sociales y empresas culturales",
+                className="cultura-subseccion-titulo"),
+        html.Div(
+            _tarjetas_informacion_general_cultura(DATOS_ORGANIZACIONES_CULTURA),
+            className=("vision-exec-grid gestion-educativa-grid "
+                       "datos-generales-grid cultura-organizaciones-grid"),
+        ),
+        html.P([
+            html.Strong("Fuente: "),
+            "Registro Único de Artistas y Gestores Culturales.",
+        ], className="eje2-source-note cultura-informacion-fuente"),
+        html.P([
+            html.Strong("Nota: "),
+            "El registro de artistas y gestores culturales incluye defunciones.",
+        ], className="eje2-source-note cultura-informacion-nota"),
+    ], className="cultura-informacion-general")
+
+
 EJES_VICEMINISTERIALES = {
     "educacion": {
         "numero": 3, "vice_excel": "Educación", "titulo": "Educación para el Nuevo Ecuador",
@@ -2974,6 +3452,11 @@ def _tarjetas_acciones_eje(acciones):
 def pagina_eje_viceministerial(codigo):
     eje = EJES_VICEMINISTERIALES[codigo]
     programas, aviso = cargar_programas_viceministerio(eje["vice_excel"])
+    informacion_general = (
+        seccion_informacion_general_deporte() if codigo == "deporte"
+        else seccion_informacion_general_cultura() if codigo == "cultura"
+        else None
+    )
     return html.Section(className="vision-exec-page eje-viceministerial-page", children=[
         html.Div(className="vision-exec-header vision-exec-header-compacta", children=[
             html.Div(className="vision-title-mark"),
@@ -2988,6 +3471,7 @@ def pagina_eje_viceministerial(codigo):
                           },
                       ),
                       html.P(eje["introduccion"])])]),
+        informacion_general,
         html.H2(f"Programas y servicios de {eje['vice_excel']}", className="vision-eje-banner"),
         html.Div(
             _tarjetas_programas_eje2(programas),
@@ -3656,9 +4140,11 @@ def pagina_gestion_educativa():
     ]
     tarjetas_media = tarjetas_datos_generales(epja)
     tarjetas_media_principales = tarjetas_media[:3]
-    tarjetas_media_segunda_fila = tarjetas_media[3:] + [
+    # Orden visual solicitado: primero Necesidades Educativas Especiales y,
+    # a continuación, Educación para Jóvenes y Adultos (EPJA).
+    tarjetas_media_segunda_fila = [
         tarjeta_necesidades_educativas_especiales()
-    ]
+    ] + tarjetas_media[3:]
 
     def dato(nombre_legible, clave):
         return resumen.get(nombre_legible, {}).get(clave)
@@ -4437,7 +4923,17 @@ def contenido_seccion(seccion, vice=None, indicador=None):
 
 
 def modulo_seccion(seccion, vice=None, indicador=None):
-    return html.Div([menu_lateral(seccion, vice, indicador),
+    return html.Div([
+                     html.Button([
+                         html.Span("☰", className="mobile-menu-icon", **{"aria-hidden": "true"}),
+                         html.Span("Menú", className="mobile-menu-label"),
+                     ], id="mobile-menu-button", className="mobile-menu-button",
+                        n_clicks=0, type="button", title="Abrir menú de navegación",
+                        **{"aria-label": "Abrir menú de navegación", "aria-expanded": "false"}),
+                     html.Button("", id="mobile-menu-overlay", className="mobile-menu-overlay",
+                                 n_clicks=0, type="button", title="Cerrar menú",
+                                 **{"aria-label": "Cerrar menú de navegación"}),
+                     menu_lateral(seccion, vice, indicador),
                      html.Main(contenido_seccion(seccion, vice, indicador), id="module-detail",
                                className="module-main")],
                     className="module-layout")
