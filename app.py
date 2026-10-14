@@ -1572,6 +1572,73 @@ app.index_string = """<!DOCTYPE html>
             grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
           }
         }
+        @media (min-width: 1025px) and (max-width: 1450px) {
+          /* Portátiles de 13 y 14 pulgadas: el menú lateral reduce el ancho
+             real del contenido. Las cuadrículas densas pasan a tres columnas
+             y se compacta únicamente la tipografía secundaria. */
+          .module-main .vision-exec-page .programas-servicios-grid.vision-exec-grid,
+          .module-main .vision-exec-page .deporte-informacion-grid.vision-exec-grid,
+          .module-main .vision-exec-page .cultura-artistas-grid.vision-exec-grid {
+            grid-template-columns: repeat(3, minmax(0, 1fr)) !important;
+            gap: 10px !important;
+          }
+          .module-main .vision-exec-page .cultura-organizaciones-grid.vision-exec-grid {
+            grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+          }
+          .module-main .vision-exec-page .datos-generales-grid.educacion-media-segunda-fila,
+          .module-main .vision-exec-page .programas-complementarios-grid {
+            grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+            gap: 12px !important;
+          }
+          .module-main .vision-exec-page .educacion-media-segunda-fila > .vision-exec-card,
+          .module-main .vision-exec-page .programas-complementarios-grid > .vision-exec-card {
+            grid-column: auto !important;
+            width: 100% !important;
+            min-width: 0 !important;
+            max-width: 100% !important;
+          }
+          .module-main .vision-exec-page .vision-exec-card {
+            padding-left: 11px !important;
+            padding-right: 11px !important;
+          }
+          .module-main .vision-exec-page .vision-card-label,
+          .module-main .vision-exec-page .programa-resumen-card .vision-card-label {
+            min-height: 0 !important;
+            font-size: 12px !important;
+            line-height: 1.22 !important;
+            overflow-wrap: anywhere !important;
+          }
+          .module-main .vision-exec-page .vision-card-total,
+          .module-main .vision-exec-page .programa-card-resultado strong {
+            font-size: clamp(23px, 2vw, 29px) !important;
+          }
+          .module-main .vision-exec-page .vision-mini-stat {
+            min-width: 0 !important;
+            padding: 7px 6px !important;
+          }
+          .module-main .vision-exec-page .vision-mini-stat span {
+            font-size: 10px !important;
+            overflow-wrap: anywhere !important;
+          }
+          .module-main .vision-exec-page .vision-mini-stat strong {
+            font-size: 15px !important;
+            overflow-wrap: anywhere !important;
+          }
+          .module-main .vision-exec-page .programa-metrica-periodo {
+            padding-left: 6px !important;
+            padding-right: 6px !important;
+          }
+          .module-main .vision-exec-page .programa-metrica-periodo strong {
+            font-size: clamp(17px, 1.45vw, 22px) !important;
+          }
+          .budget-kpi-grid {
+            grid-template-columns: repeat(3, minmax(0, 1fr)) !important;
+          }
+          .vision-vice-menu-compacta {
+            max-width: 100%; overflow-x: auto;
+            overscroll-behavior-inline: contain;
+          }
+        }
         @media (max-width: 900px) {
           .educacion-media-cifras-grid,
           .educacion-media-segunda-fila,
