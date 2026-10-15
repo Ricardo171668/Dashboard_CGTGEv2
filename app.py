@@ -1111,6 +1111,68 @@ app.index_string = """<!DOCTYPE html>
         }
         .programa-con-ayuda:hover,
         .programa-con-ayuda:focus-within { z-index: 1000 !important; }
+
+        /* Portada de Visión Ejecutiva sin infografía: los cinco accesos ocupan
+           el área central en dos filas equilibradas. */
+        .vision-landing {
+          justify-content: flex-start;
+        }
+        .vision-landing-intro {
+          width: min(100%, 1120px); margin: 44px auto 0;
+          text-align: center;
+        }
+        .vision-landing-subtitle {
+          max-width: 720px; margin: 12px auto 0; color: #66708d;
+          font-size: 15px; line-height: 1.5;
+        }
+        .vision-landing-menu {
+          width: 100%; margin-top: 54px !important;
+        }
+        .vision-landing-menu .vision-vice-menu {
+          display: grid !important;
+          grid-template-columns: repeat(6, minmax(0, 1fr)) !important;
+          gap: 18px !important; width: min(100%, 1120px) !important;
+          max-width: 1120px !important; margin: 0 auto !important;
+          padding: 0 0 24px !important; overflow: visible !important;
+        }
+        .vision-landing-menu .vision-vice-row {
+          grid-column: span 2; min-width: 0 !important; padding: 0 !important;
+          border: 0 !important; border-radius: 18px !important;
+          background: transparent !important; box-shadow: none !important;
+        }
+        .vision-landing-menu .vision-vice-row:nth-child(4) {
+          grid-column: 2 / span 2;
+        }
+        .vision-landing-menu .vision-vice-row:nth-child(5) {
+          grid-column: 4 / span 2;
+        }
+        .vision-landing-menu .vision-vice-pill {
+          display: grid !important;
+          grid-template-columns: minmax(0, 1fr) !important;
+          grid-template-rows: 1fr auto !important;
+          align-items: center !important;
+          width: 100% !important; min-height: 132px !important;
+          padding: 20px !important; border: 1px solid #dfe3ef !important;
+          border-top: 5px solid #4f3c98 !important;
+          border-radius: 18px !important; background: #ffffff !important;
+          color: #232d5a !important; text-align: center !important;
+          box-shadow: 0 10px 26px rgba(24,37,87,.09) !important;
+          cursor: pointer; transition: transform .16s ease, box-shadow .16s ease;
+        }
+        .vision-landing-menu .vision-vice-pill:hover,
+        .vision-landing-menu .vision-vice-pill:focus-visible {
+          transform: translateY(-4px);
+          box-shadow: 0 16px 32px rgba(24,37,87,.16) !important;
+          outline: 3px solid rgba(241,182,32,.35);
+        }
+        .vision-landing-vice-nombre {
+          align-self: end; color: #232d5a; font-size: 15px;
+          font-weight: 900; line-height: 1.25; text-align: center;
+        }
+        .vision-landing-vice-accion {
+          align-self: start; margin-top: 6px; color: #7a829b;
+          font-size: 11px; font-weight: 800; text-align: center;
+        }
         .programa-anio-control {
           display: flex; align-items: center; gap: 5px;
           width: fit-content; margin: 0 0 5px;
@@ -1448,6 +1510,19 @@ app.index_string = """<!DOCTYPE html>
           .budget-kpi-grid {
             grid-template-columns: minmax(0, 1fr) !important;
           }
+          .vision-landing-intro { margin-top: 30px; }
+          .vision-landing-menu { margin-top: 36px !important; }
+          .vision-landing-menu .vision-vice-menu {
+            grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+          }
+          .vision-landing-menu .vision-vice-row,
+          .vision-landing-menu .vision-vice-row:nth-child(4) {
+            grid-column: auto !important;
+          }
+          .vision-landing-menu .vision-vice-row:nth-child(5) {
+            grid-column: 1 / -1 !important; width: calc(50% - 9px);
+            justify-self: center;
+          }
         }
         @media (max-width: 600px) {
           .mobile-menu-button {
@@ -1482,6 +1557,22 @@ app.index_string = """<!DOCTYPE html>
           .module-main {
             padding: 12px 8px 28px !important;
             overflow-x: hidden !important;
+          }
+          .vision-landing-intro { margin-top: 18px; }
+          .vision-landing-title { font-size: 25px !important; }
+          .vision-landing-subtitle { font-size: 13px; }
+          .vision-landing-menu { margin-top: 26px !important; }
+          .vision-landing-menu .vision-vice-menu {
+            grid-template-columns: minmax(0, 1fr) !important;
+            gap: 12px !important;
+          }
+          .vision-landing-menu .vision-vice-row,
+          .vision-landing-menu .vision-vice-row:nth-child(4),
+          .vision-landing-menu .vision-vice-row:nth-child(5) {
+            grid-column: auto !important; width: 100% !important;
+          }
+          .vision-landing-menu .vision-vice-pill {
+            min-height: 104px !important; padding: 15px !important;
           }
           .content-heading,
           .indicator-detail-card,
@@ -2702,31 +2793,24 @@ def vision_tabs_nav(activo):
     viceministerio elegido) se ve como lista vertical de botones; una vez
     elegido uno, se compacta en una franja superior tipo pestañas."""
     compacto = activo is not None
-    estilo_nav = None if compacto else {
-        "display": "grid", "gridTemplateColumns": "repeat(5, minmax(170px, 1fr))",
-        "gap": "9px", "width": "100%", "maxWidth": "none", "overflowX": "auto",
-        "paddingBottom": "3px",
-    }
-    estilo_fila = None if compacto else {
-        "minWidth": "170px", "padding": "4px", "display": "flex",
-        "border": "1px solid #e1e4ed", "borderRadius": "12px", "background": "#fff",
-        "boxShadow": "0 6px 16px rgba(24,37,87,.05)",
-    }
-    estilo_boton = None if compacto else {
-        "width": "100%", "minHeight": "54px", "padding": "10px 12px",
-        "border": "none", "borderRadius": "999px", "background": "#e9ecfb",
-        "color": "#3b3f91", "fontSize": "14px", "fontWeight": "800",
-        "textAlign": "center", "cursor": "pointer",
-    }
+
+    def contenido_boton(nombre):
+        if compacto:
+            return nombre
+        return [
+            html.Span(nombre, className="vision-landing-vice-nombre"),
+            html.Span("Ingresar al módulo  →", className="vision-landing-vice-accion"),
+        ]
+
     return html.Nav(
         [html.Div(
-            html.Button(nombre, id={"type": "vision-tab", "index": codigo}, n_clicks=0,
+            html.Button(contenido_boton(nombre),
+                        id={"type": "vision-tab", "index": codigo}, n_clicks=0,
                         className="vision-vice-pill active" if codigo == activo else "vision-vice-pill",
-                        type="button", style=estilo_boton),
-            className="vision-vice-row", style=estilo_fila,
+                        type="button"),
+            className="vision-vice-row",
         ) for codigo, nombre in VISION_TABS],
         className="vision-vice-menu vision-vice-menu-compacta" if compacto else "vision-vice-menu",
-        style=estilo_nav,
         **{"aria-label": "Viceministerios de Visión Ejecutiva"},
     )
 
@@ -4664,38 +4748,25 @@ def contenido_vision(tab=None):
     menu = vision_tabs_nav(tab)
     if tab is None:
         return html.Div([
-            html.H1(
-                "MINISTERIO DE EDUCACIÓN, DEPORTE Y CULTURA",
-                className="vision-landing-title",
-                style={
-                    "margin": "0",
-                    "color": "#4e3cab",
-                    "fontSize": "clamp(25px, 2.35vw, 40px)",
-                    "fontWeight": "900",
-                    "lineHeight": "1.08",
-                    "letterSpacing": ".01em",
-                    "textAlign": "center",
-                },
-            ),
-            html.Div(menu, className="vision-landing-menu", style={"width": "100%", "marginTop": "0"}),
             html.Div([
-                html.Img(
-                    src=app.get_asset_url("vision-ejecutiva-portada.png"),
-                    className="vision-landing-image",
-                    alt="Resumen ejecutivo MINEDEC 2026",
-                    style={"display": "block", "width": "100%", "height": "auto",
-                           "objectFit": "contain",
-                           "borderRadius": "14px", "background": "#fff",
-                           "boxShadow": "0 12px 28px rgba(24,37,87,.10)"},
+                html.H1(
+                    "MINISTERIO DE EDUCACIÓN, DEPORTE Y CULTURA",
+                    className="vision-landing-title",
+                    style={
+                        "margin": "0", "color": "#4e3cab",
+                        "fontSize": "clamp(25px, 2.35vw, 40px)",
+                        "fontWeight": "900", "lineHeight": "1.08",
+                        "letterSpacing": ".01em", "textAlign": "center",
+                    },
                 ),
-            ], className="vision-landing-visual",
-               style={"width": "100%", "minWidth": "0", "display": "flex",
-                      "alignItems": "flex-start", "justifyContent": "center",
-                      "position": "relative", "aspectRatio": "1909 / 1079",
-                      "overflow": "hidden",
-                      "flex": "1 1 auto", "borderRadius": "14px"}),
+                html.P(
+                    "Seleccione un viceministerio para consultar sus cifras, programas y servicios.",
+                    className="vision-landing-subtitle",
+                ),
+            ], className="vision-landing-intro"),
+            html.Div(menu, className="vision-landing-menu"),
         ], className="vision-landing",
-           style={"minHeight": "calc(100vh - 92px)", "padding": "18px 28px 26px",
+           style={"minHeight": "calc(100vh - 92px)", "padding": "18px 28px 34px",
                   "display": "flex", "flexDirection": "column", "gap": "14px",
                   "alignItems": "stretch", "boxSizing": "border-box", "background": "#f5f6fa"})
     if tab == "gestion-educativa":
