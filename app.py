@@ -1083,8 +1083,9 @@ app.index_string = """<!DOCTYPE html>
            la tipografía de las tarjetas institucionales existentes. */
         .programa-con-ayuda { position: relative; overflow: visible !important; }
         .programa-info-tooltip {
-          position: absolute; left: 14px; right: 14px; bottom: calc(100% + 9px);
-          z-index: 40; padding: 12px 14px; border: 1px solid #dfe3ef;
+          position: absolute; left: 14px; right: 14px;
+          top: auto; bottom: calc(100% + 10px);
+          z-index: 1001; padding: 12px 14px; border: 1px solid #dfe3ef;
           border-radius: 10px; background: #ffffff; color: #4d536b;
           box-shadow: 0 10px 26px rgba(24,37,87,.18);
           font-family: Arial, sans-serif; font-size: 12px; line-height: 1.5;
@@ -1092,10 +1093,24 @@ app.index_string = """<!DOCTYPE html>
           transform: translateY(5px); transition: opacity .16s ease, transform .16s ease;
           pointer-events: none;
         }
+        .programa-info-tooltip::after {
+          content: ""; position: absolute; left: 28px; top: 100%;
+          border: 7px solid transparent; border-top-color: #ffffff;
+          filter: drop-shadow(0 2px 1px rgba(24,37,87,.10));
+        }
         .programa-con-ayuda:hover .programa-info-tooltip,
         .programa-con-ayuda:focus-within .programa-info-tooltip {
           opacity: 1; visibility: visible; transform: translateY(0);
         }
+        .programa-info-icon {
+          display: inline-flex; align-items: center; justify-content: center;
+          width: 21px; height: 21px; flex: 0 0 21px; margin-left: auto;
+          border: 0; border-radius: 50%; background: #4f3c98; color: #fff;
+          font: 800 12px/1 Arial, sans-serif; cursor: help;
+          box-shadow: 0 3px 8px rgba(79,60,152,.22);
+        }
+        .programa-con-ayuda:hover,
+        .programa-con-ayuda:focus-within { z-index: 1000 !important; }
         .programa-anio-control {
           display: flex; align-items: center; gap: 5px;
           width: fit-content; margin: 0 0 5px;
@@ -1708,6 +1723,26 @@ app.index_string = """<!DOCTYPE html>
             max-width: 100% !important;
             box-sizing: border-box !important;
           }
+        }
+
+        /* Esta regla debe ir después de todos los ajustes responsive. Algunas
+           reglas móviles establecen overflow:hidden con mayor especificidad y
+           recortaban la ayuda de las tarjetas de recursos educativos. */
+        .module-main .vision-exec-page .vision-exec-grid > .vision-exec-card.programa-con-ayuda {
+          position: relative !important;
+          overflow: visible !important;
+          cursor: help;
+        }
+        .module-main .vision-exec-page .vision-exec-grid > .vision-exec-card.programa-con-ayuda:hover,
+        .module-main .vision-exec-page .vision-exec-grid > .vision-exec-card.programa-con-ayuda:focus,
+        .module-main .vision-exec-page .vision-exec-grid > .vision-exec-card.programa-con-ayuda:focus-within {
+          z-index: 1000 !important;
+        }
+        .module-main .vision-exec-page .recursos-gestion-grid.vision-exec-grid {
+          overflow: visible !important;
+        }
+        .module-main .vision-exec-page .programa-info-tooltip {
+          z-index: 1001 !important;
         }
         </style>
         <script>
@@ -2839,7 +2874,7 @@ def icono_tarjeta(codigo="", titulo=""):
     )
 
 
-def cabecera_tarjeta(codigo, titulo):
+def cabecera_tarjeta(codigo, titulo, ayuda_texto=None):
     """Alinea símbolo y título en una misma fila, como una unidad visual."""
     return html.Div([
         icono_tarjeta(codigo, titulo),
@@ -2847,6 +2882,10 @@ def cabecera_tarjeta(codigo, titulo):
             titulo, className="vision-card-label",
             style={"minHeight": "0", "margin": "0", "flex": "1 1 auto"},
         ),
+        html.Button(
+            "i", className="programa-info-icon", type="button",
+            **{"aria-label": f"Información sobre {titulo}"},
+        ) if ayuda_texto else None,
     ], className="vision-card-title-row", style={
         "display": "flex", "alignItems": "center", "gap": "10px",
         "minWidth": "0", "marginBottom": "7px",
@@ -2865,9 +2904,10 @@ def tarjeta_gestion_educativa(codigo, titulo, subtitulo, valor, detalles=None,
                               unidad=None, filtros=None, contenido_id=None, valor_id=None,
                               ayuda_nombre=None, ayuda_descripcion=None, periodo=None):
     tiene_ayuda = bool(ayuda_nombre and ayuda_descripcion)
+    ayuda_texto = (f"{ayuda_nombre} {ayuda_descripcion}" if tiene_ayuda else None)
     contenido = [
         _ayuda_tarjeta(ayuda_nombre, ayuda_descripcion) if tiene_ayuda else None,
-        cabecera_tarjeta(codigo, titulo),
+        cabecera_tarjeta(codigo, titulo, ayuda_texto),
         html.Div([
             html.Strong(
                 valor,
@@ -3111,6 +3151,126 @@ def _ayuda_programa(nombre, descripcion):
     return _ayuda_tarjeta(nombre, descripcion)
 
 
+# Definiciones respaldadas por los portales oficiales de Educación Superior
+# del MINEDEC/SIAU. Los valores numéricos continúan procediendo de la matriz
+# institucional "Mapeo - Rendicion de cuentas.xlsx".
+DEFINICIONES_PROGRAMAS_EDUCACION_SUPERIOR = [
+    (("cupos aceptados",),
+     "Cupos aceptados en Educación Superior.",
+     "Resultado del proceso mediante el cual una persona acepta el cupo asignado "
+     "por una institución de educación superior y continúa el procedimiento de "
+     "matriculación."),
+    (("because he is nice",),
+     "Because He Is Nice.",
+     "Programa de becas de educación continua que cubre totalmente cursos "
+     "virtuales de inglés para fortalecer las competencias y oportunidades de "
+     "la ciudadanía."),
+    (("validatec",),
+     "ValidaTec.",
+     "Programa de validación del ejercicio profesional dirigido a docentes "
+     "bachilleres, mediante el cual se reconoce su experiencia, formación y "
+     "conocimientos para acceder a un título de tercer nivel técnico-tecnológico."),
+    (("becas tecnicas", "tecnologicas financiadas por aliados"),
+     "Becas técnicas y tecnológicas financiadas por aliados.",
+     "Becas gestionadas mediante cooperación con instituciones, gobiernos y "
+     "entidades aliadas para facilitar el acceso a estudios de tercer nivel "
+     "técnico y tecnológico."),
+]
+
+
+def _definicion_programa_educacion_superior(nombre_programa):
+    """Encuentra la definición aunque el Excel cambie mayúsculas o tildes."""
+    clave = _sin_tildes(nombre_programa)
+    for patrones, nombre, descripcion in DEFINICIONES_PROGRAMAS_EDUCACION_SUPERIOR:
+        if all(patron in clave for patron in patrones):
+            return nombre, descripcion
+    return None
+
+
+# Definiciones con respaldo en fuentes oficiales del Ministerio de Educación.
+# Las cifras de beneficiarios se mantienen vinculadas exclusivamente a la
+# matriz institucional "Mapeo - Rendicion de cuentas.xlsx".
+DEFINICIONES_PROGRAMAS_EDUCACION = [
+    (("mecapacito",),
+     "Mecapacito.",
+     "Plataforma de formación permanente del Ministerio que ofrece cursos e "
+     "itinerarios destinados a fortalecer las competencias profesionales, "
+     "pedagógicas y didácticas de los profesionales de la educación."),
+    (("profesionales dece",),
+     "Departamentos de Consejería Estudiantil (DECE).",
+     "Equipos de profesionales que brindan acompañamiento y atención "
+     "psicosocial, socioemocional, psicoeducativa y de orientación a "
+     "estudiantes, familias y comunidad educativa."),
+    (("comunidades seguras",),
+     "Comunidades educativas seguras.",
+     "Acciones orientadas a fortalecer entornos educativos protectores, "
+     "prevenir situaciones de riesgo y promover relaciones respetuosas, "
+     "saludables y seguras entre los integrantes de la comunidad educativa."),
+]
+
+
+def _definicion_programa_educacion(nombre_programa):
+    """Devuelve solo definiciones educativas que tienen respaldo oficial."""
+    clave = _sin_tildes(nombre_programa)
+    for patrones, nombre, descripcion in DEFINICIONES_PROGRAMAS_EDUCACION:
+        if all(patron in clave for patron in patrones):
+            return nombre, descripcion
+    return None
+
+
+# Definiciones de los programas del Viceministerio del Deporte con respaldo
+# en los portales oficiales del Ministerio del Deporte. Las cifras provienen
+# de la matriz "Mapeo - Rendicion de cuentas.xlsx".
+DEFINICIONES_PROGRAMAS_DEPORTE = [
+    (("vamos a la cancha",),
+     "Vamos a la Cancha.",
+     "Proyecto del Ministerio del Deporte que, mediante prácticas socio "
+     "deportivas, promueve la iniciación y práctica deportiva de niños, "
+     "jóvenes y sus familias, fomentando la cultura de paz, la cohesión "
+     "social, la inclusión y la convivencia."),
+    (("activate",),
+     "Actívate.",
+     "Estrategia del Ministerio del Deporte para incrementar la actividad "
+     "física de la población, mediante clases de actividad física y "
+     "recreativa que impulsan el buen uso del tiempo libre."),
+]
+
+
+def _definicion_programa_deporte(nombre_programa):
+    """Devuelve la definición oficial del programa de Deporte, si existe."""
+    clave = _sin_tildes(nombre_programa)
+    for patrones, nombre, descripcion in DEFINICIONES_PROGRAMAS_DEPORTE:
+        if all(patron in clave for patron in patrones):
+            return nombre, descripcion
+    return None
+
+
+# Definiciones incorporadas únicamente cuando existe respaldo institucional
+# del sector Cultura. Las cifras mostradas en las tarjetas continúan leyendo
+# la matriz institucional; estos textos solo explican el alcance del programa.
+DEFINICIONES_PROGRAMAS_CULTURA = [
+    (("visitas a espacios culturales",),
+     "Visitas a espacios culturales.",
+     "Indicador de asistencia de la ciudadanía a museos, archivos y "
+     "bibliotecas vinculados al sector cultural."),
+    (("festival internacional de artes vivas de loja",),
+     "Festival Internacional de Artes Vivas de Loja.",
+     "Encuentro cultural institucionalizado como espacio de encuentro y "
+     "fomento de las expresiones culturales y la identidad del Ecuador, con "
+     "participación de artistas y gestores locales, nacionales e "
+     "internacionales en teatros, calles y plazas de Loja."),
+]
+
+
+def _definicion_programa_cultura(nombre_programa):
+    """Devuelve solo definiciones culturales respaldadas por fuentes oficiales."""
+    clave = _sin_tildes(nombre_programa)
+    for patrones, nombre, descripcion in DEFINICIONES_PROGRAMAS_CULTURA:
+        if all(patron in clave for patron in patrones):
+            return nombre, descripcion
+    return None
+
+
 def _metricas_programa_por_anio(clave, anio):
     detalle = PROGRAMAS_CON_DETALLE[clave]
     fila = next((f for f in detalle["filas"] if f[0] == anio), detalle["filas"][-1])
@@ -3164,6 +3324,12 @@ def _tarjetas_programas_eje2(datos):
     colores = ["azul", "verde", "amarillo", "morado"]
     for i, dato in enumerate(datos):
         clave_programa = _sin_tildes(dato["programa"])
+        ayuda_superior = _definicion_programa_educacion_superior(dato["programa"])
+        ayuda_educacion = _definicion_programa_educacion(dato["programa"])
+        ayuda_deporte = _definicion_programa_deporte(dato["programa"])
+        ayuda_cultura = _definicion_programa_cultura(dato["programa"])
+        ayuda_oficial = (ayuda_superior or ayuda_educacion or
+                         ayuda_deporte or ayuda_cultura)
         es_dece = clave_programa.startswith("profesionales dece")
         es_comunidades = clave_programa.startswith("comunidades seguras")
         clave_detalle = ("safpi" if "safpi" in clave_programa
@@ -3193,7 +3359,11 @@ def _tarjetas_programas_eje2(datos):
                 html.Div([html.Span("Período"), html.Strong("2022 a septiembre 2026")],
                          className="programa-periodo-fijo"),
             ])
-        contenido.append(cabecera_tarjeta("programa", titulo))
+        elif ayuda_oficial:
+            contenido.append(_ayuda_programa(ayuda_oficial[0], ayuda_oficial[1]))
+        texto_ayuda = (f"{ayuda_oficial[0]} {ayuda_oficial[1]}"
+                       if ayuda_oficial else None)
+        contenido.append(cabecera_tarjeta("programa", titulo, texto_ayuda))
         if clave_detalle:
             periodo_inicial = PROGRAMAS_CON_DETALLE[clave_detalle]["filas"][-1][0]
             contenido.append(html.Div(
@@ -3213,12 +3383,13 @@ def _tarjetas_programas_eje2(datos):
         if es_dece:
             contenido.append(html.P("La brecha nacional se ha reducido en 45%",
                                     className="programa-card-destacado"))
+        tiene_ayuda = bool(clave_detalle or es_reinsercion or ayuda_oficial)
         tarjetas.append(html.Article(
             contenido,
             className=(f"vision-exec-card programa-resumen-card "
                        f"programa-{colores[i % len(colores)]}"
-                       f"{' programa-con-ayuda' if clave_detalle or es_reinsercion else ''}"),
-            tabIndex=0 if clave_detalle or es_reinsercion else None,
+                       f"{' programa-con-ayuda' if tiene_ayuda else ''}"),
+            tabIndex=0 if tiene_ayuda else None,
         ))
 
     if incluye_reinsercion:
@@ -4271,6 +4442,17 @@ DEFINICIONES_RECURSOS_GESTION = {
         "Textos.",
         "Se entregan libros de Lenguaje, Matemáticas y Ciencias a estudiantes "
         "de instituciones educativas fiscales.",
+    ),
+    "mobiliario": (
+        "Mobiliario Escolar.",
+        "Comprende la dotación de bienes destinados a equipar las instituciones "
+        "educativas, como mesas, sillas, armarios, pizarras y kits de mobiliario escolar.",
+    ),
+    "transporte": (
+        "Transporte Escolar.",
+        "Servicio personalizado que moviliza a estudiantes desde sus hogares o "
+        "paradas hasta las instituciones educativas y viceversa, de acuerdo con "
+        "sus necesidades.",
     ),
 }
 
