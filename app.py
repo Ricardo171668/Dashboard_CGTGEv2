@@ -2137,6 +2137,35 @@ app.index_string = """<!DOCTYPE html>
             min-width: 1080px !important;
           }
         }
+        /* En celular se muestra la serie completa, sin desplazamiento lateral.
+           Plotly compacta las categorías y el ajuste JavaScript gira solamente
+           las cifras superiores para que sigan siendo legibles. Esta regla va
+           después de la de tabletas para reemplazar sus anchos mínimos. */
+        @media (max-width: 600px) {
+          .chart-card {
+            overflow-x: hidden !important;
+          }
+          .indicator-chart,
+          .indicator-chart-short,
+          .indicator-chart-medium,
+          .indicator-chart-long {
+            width: 100% !important;
+            min-width: 0 !important;
+            max-width: 100% !important;
+            height: 410px !important;
+          }
+          .status-row {
+            display: grid !important;
+            grid-template-columns: repeat(3, minmax(0, 1fr)) !important;
+            overflow: visible !important;
+            gap: 10px 6px !important;
+          }
+          .status-year-item {
+            width: auto !important;
+            min-width: 0 !important;
+            flex: none !important;
+          }
+        }
         </style>
         <script>
         window.MathJax = {
@@ -2152,9 +2181,9 @@ app.index_string = """<!DOCTYPE html>
           src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-mml-chtml.js">
         </script>
         <script>
-        /* Las cifras se mantienen horizontales. En pantallas pequeñas el
-           gráfico dispone de desplazamiento horizontal, por lo que no hace
-           falta girarlas ni sacrificar su legibilidad. */
+        /* Las cifras permanecen horizontales en escritorio y tableta. Solo en
+           celular se colocan verticales para mostrar todos los períodos a la
+           vez, sin obligar al usuario a desplazar el gráfico. */
         (function () {
           let temporizador;
           function ajustarEtiquetas() {
@@ -2163,8 +2192,9 @@ app.index_string = """<!DOCTYPE html>
               const categorias = (grafico.data || []).reduce(function (maximo, serie) {
                 return Math.max(maximo, Array.isArray(serie.x) ? serie.x.length : 0);
               }, 0);
-              const angulo = 0;
-              const tamano = categorias >= 9 ? 9 : 10;
+              const vistaMovil = window.innerWidth <= 600;
+              const angulo = vistaMovil && categorias >= 5 ? -90 : 0;
+              const tamano = vistaMovil ? 8 : (categorias >= 9 ? 9 : 10);
               const estado = angulo + ':' + tamano + ':' + categorias;
               if (grafico.dataset.etiquetasResponsivas === estado) return;
               grafico.dataset.etiquetasResponsivas = estado;
@@ -2172,6 +2202,18 @@ app.index_string = """<!DOCTYPE html>
                 textangle: angulo,
                 'textfont.size': tamano
               });
+              if (vistaMovil) {
+                window.Plotly.relayout(grafico, {
+                  'margin.l': 44,
+                  'margin.r': 6,
+                  'margin.t': 72,
+                  'margin.b': 62,
+                  'xaxis.tickfont.size': 8,
+                  'xaxis.title.font.size': 11,
+                  'yaxis.title.font.size': 11,
+                  'legend.font.size': 9
+                });
+              }
             });
           }
           function programarAjuste() {
