@@ -1276,6 +1276,96 @@ app.index_string = """<!DOCTYPE html>
           font-size: 9px !important; line-height: 1.35 !important;
           text-align: justify;
         }
+        .instituciones-anio-control {
+          margin-bottom: 8px !important;
+        }
+        .instituciones-anio-control > span {
+          white-space: nowrap;
+        }
+        .instituciones-sostenimientos {
+          display: grid !important;
+          grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+          gap: 7px !important;
+          margin-top: 9px;
+        }
+        .instituciones-sostenimientos .vision-mini-stat {
+          min-width: 0;
+          padding: 7px 9px !important;
+        }
+        .instituciones-sostenimientos .vision-mini-stat span {
+          overflow-wrap: anywhere;
+          font-size: 9px !important;
+        }
+        .instituciones-sostenimientos .vision-mini-stat strong {
+          font-size: 15px !important;
+        }
+        .estudiantes-anio-control {
+          margin-bottom: 8px !important;
+        }
+        .estudiantes-anio-control > span {
+          white-space: nowrap;
+        }
+        .estudiantes-zonas {
+          display: grid;
+          grid-template-columns: repeat(2, minmax(0, 1fr));
+          gap: 7px;
+          margin-top: 9px;
+        }
+        .estudiantes-zona {
+          min-width: 0;
+          padding: 7px 9px;
+          border-radius: 10px;
+          background: #f3f4fa;
+        }
+        .estudiantes-zona:nth-child(2) {
+          background: #f7f5ea;
+        }
+        .estudiantes-zona-total {
+          display: flex;
+          align-items: baseline;
+          justify-content: space-between;
+          gap: 6px;
+          padding-bottom: 5px;
+          border-bottom: 1px solid rgba(35, 45, 90, .12);
+        }
+        .estudiantes-zona-total span {
+          color: #626a83;
+          font-size: 9px;
+          font-weight: 800;
+          text-transform: uppercase;
+        }
+        .estudiantes-zona-total strong {
+          color: #17245b;
+          font-size: 15px;
+          font-weight: 900;
+          white-space: nowrap;
+        }
+        .estudiantes-regiones {
+          display: grid;
+          grid-template-columns: repeat(2, minmax(0, 1fr));
+          gap: 5px;
+          padding-top: 5px;
+        }
+        .estudiantes-region {
+          min-width: 0;
+          text-align: center;
+        }
+        .estudiantes-region span,
+        .estudiantes-region strong {
+          display: block;
+        }
+        .estudiantes-region span {
+          color: #727991;
+          font-size: 8px;
+          font-weight: 700;
+        }
+        .estudiantes-region strong {
+          margin-top: 2px;
+          color: #17245b;
+          font-size: 11px;
+          font-weight: 900;
+          white-space: nowrap;
+        }
         /* Ajustes incluidos en app.py para que funcionen aunque el navegador
            conserve una versión anterior de assets/portada.css. */
         .datos-generales-grid.educacion-media-cifras-grid,
@@ -1459,7 +1549,7 @@ app.index_string = """<!DOCTYPE html>
             height: 44px; padding: 0 13px;
             display: inline-flex; align-items: center; justify-content: center;
             gap: 7px; border: 1px solid rgba(255,255,255,.42);
-            border-radius: 10px; color: #fff; background: #3d2f86;
+            border-radius: 10px; color: #fff; background: #4F449A;
             box-shadow: 0 5px 14px rgba(24,37,87,.22);
             font-size: 13px; font-weight: 900; cursor: pointer;
           }
@@ -1838,8 +1928,8 @@ app.index_string = """<!DOCTYPE html>
         </style>
         <style id="minedec-institutional-theme">
         /* Tema institucional unificado según el manual técnico de Presidencia.
-           El amarillo queda como acento; azul, blanco y turquesa estructuran
-           navegación, tarjetas y visualizaciones. */
+           La navegación usa el morado oficial #4F449A y el amarillo queda
+           reservado para selección y acentos. */
         :root {
           --minedec-navy: #232D5A;
           --minedec-blue: #446381;
@@ -1851,7 +1941,9 @@ app.index_string = """<!DOCTYPE html>
           --minedec-line: #D9E2E8;
         }
         .header-bar,
-        .module-sidebar,
+        .module-sidebar {
+          background: #4F449A !important;
+        }
         .indicadores-cabecera {
           background: #232D5A !important;
         }
@@ -1870,8 +1962,8 @@ app.index_string = """<!DOCTYPE html>
           outline-color: rgba(128, 187, 191, .58) !important;
         }
         .side-section.active {
-          color: #232D5A !important;
-          background: #FFFFFF !important;
+          color: #4F449A !important;
+          background: #F1B620 !important;
           border-left: 4px solid #F1B620 !important;
         }
         .vision-title-mark {
@@ -2832,7 +2924,7 @@ def crear_grafico_pnd(grupo):
                 customdata=datos_hover(años, grupo["Meta"], unidad),
                 hovertemplate="Período %{customdata[0]}<br>Meta: %{customdata[1]}<extra></extra>")
     fig.add_bar(x=x_barras["Estimador"], y=grupo["Estimador"], name="Estimador",
-                marker=dict(color="#232D5A", line=dict(color="#17213F", width=1.1)),
+                marker=dict(color="#ECED80", line=dict(color="#4F449A", width=1.3)),
                 text=[formato_texto_barra(v, unidad) for v in grupo["Estimador"]],
                 textposition="outside",
                 textfont=dict(size=9, color="#232D5A", family="Arial"), constraintext="none",
@@ -3022,7 +3114,7 @@ def crear_grafico_periodo(grupo):
                 customdata=datos_hover(periodos_completos, grupo["Meta"], unidad),
                 hovertemplate="%{customdata[0]}<br>Meta: %{customdata[1]}<extra></extra>")
     fig.add_bar(x=x_barras["Estimador"], y=grupo["Estimador"], name="Ejecutado",
-                marker=dict(color="#232D5A", line=dict(color="#17213F", width=1.1)),
+                marker=dict(color="#ECED80", line=dict(color="#4F449A", width=1.3)),
                 text=[formato_texto_barra(v, unidad) for v in grupo["Estimador"]],
                 textposition="outside", textfont=dict(size=etiqueta_size, color="#232D5A", family="Arial"),
                 constraintext="none", textangle=angulo_texto,
@@ -4303,7 +4395,164 @@ DATOS_GENERALES_GESTION_EDUCATIVA = {
     "nee_educacion_ordinaria": 25602,
 }
 
+
+# Serie histórica entregada para Instituciones Educativas. El selector abre
+# siempre en el último año lectivo y actualiza el total y sus sostenimientos.
+INSTITUCIONES_EDUCATIVAS_POR_ANIO = {
+    "2023-2024": {
+        "Fiscal": 12389, "Fiscomisional": 617,
+        "Municipal": 112, "Particular": 3022,
+    },
+    "2024-2025": {
+        "Fiscal": 12327, "Fiscomisional": 606,
+        "Municipal": 110, "Particular": 3109,
+    },
+    "2025-2026": {
+        "Fiscal": 12287, "Fiscomisional": 607,
+        "Municipal": 108, "Particular": 3213,
+    },
+}
+
+
+# Serie histórica de estudiantes tomada exclusivamente de la columna
+# "Suma de Total_Estudiantes" de la matriz entregada. Los subtotales Rural y
+# Urbana se desagregan por régimen Costa y Sierra; Galápagos está incluido en
+# Costa tal como consta en la fuente.
+ESTUDIANTES_POR_ANIO_LECTIVO = {
+    "2023-2024": {
+        "Rural": {"Total": 997456, "Costa": 464371, "Sierra": 533085},
+        "Urbana": {"Total": 3205342, "Costa": 1975137, "Sierra": 1230205},
+    },
+    "2024-2025": {
+        "Rural": {"Total": 941760, "Costa": 422676, "Sierra": 519084},
+        "Urbana": {"Total": 3165059, "Costa": 1956788, "Sierra": 1208271},
+    },
+    "2025-2026": {
+        "Rural": {"Total": 929157, "Costa": 417113, "Sierra": 512044},
+        "Urbana": {"Total": 3110493, "Costa": 1919170, "Sierra": 1191323},
+    },
+}
+
 DATOS_ABIERTOS_MINEDEC_URL = "https://educacion.gob.ec/datos-abiertos-minedec/"
+
+
+def _contenido_instituciones_educativas(anio_lectivo):
+    """Total y desglose por sostenimiento para el año lectivo seleccionado."""
+    if anio_lectivo not in INSTITUCIONES_EDUCATIVAS_POR_ANIO:
+        anio_lectivo = list(INSTITUCIONES_EDUCATIVAS_POR_ANIO)[-1]
+    sostenimientos = INSTITUCIONES_EDUCATIVAS_POR_ANIO[anio_lectivo]
+    total = sum(sostenimientos.values())
+    return [
+        html.Div([
+            html.Strong(formato_valor(total), className="vision-card-total"),
+        ], className="vision-card-value-row"),
+        html.Div([
+            html.Div([
+                html.Span(nombre),
+                html.Strong(formato_valor(valor)),
+            ], className=("vision-mini-stat secondary" if i % 2 else "vision-mini-stat"))
+            for i, (nombre, valor) in enumerate(sostenimientos.items())
+        ], className="vision-card-details instituciones-sostenimientos"),
+        html.Small(f"Año lectivo {anio_lectivo}", className="vision-card-periodo"),
+    ]
+
+
+def tarjeta_instituciones_educativas():
+    """Tarjeta histórica, con el mismo control compacto usado por SAFPI."""
+    periodos = list(INSTITUCIONES_EDUCATIVAS_POR_ANIO)
+    periodo_reciente = periodos[-1]
+    return html.Article([
+        html.Div([
+            html.Span("Año lectivo"),
+            dcc.Dropdown(
+                id="instituciones-anio-lectivo",
+                options=[{"label": periodo, "value": periodo} for periodo in periodos],
+                value=periodo_reciente,
+                clearable=False,
+                searchable=False,
+                className="programa-anio-dropdown",
+            ),
+        ], className="programa-anio-control instituciones-anio-control"),
+        cabecera_tarjeta("institucion", "Instituciones Educativas (IE)"),
+        html.Div(
+            _contenido_instituciones_educativas(periodo_reciente),
+            id="instituciones-contenido",
+        ),
+    ], className="vision-exec-card generales instituciones-historicas-card")
+
+
+@app.callback(
+    Output("instituciones-contenido", "children"),
+    Input("instituciones-anio-lectivo", "value"),
+)
+def actualizar_instituciones_educativas(anio_lectivo):
+    """Actualiza total y sostenimientos sin reconstruir Visión Ejecutiva."""
+    return _contenido_instituciones_educativas(anio_lectivo)
+
+
+def _contenido_estudiantes(anio_lectivo):
+    """Total de estudiantes y desglose territorial del período seleccionado."""
+    if anio_lectivo not in ESTUDIANTES_POR_ANIO_LECTIVO:
+        anio_lectivo = list(ESTUDIANTES_POR_ANIO_LECTIVO)[-1]
+    zonas = ESTUDIANTES_POR_ANIO_LECTIVO[anio_lectivo]
+    total = sum(datos["Total"] for datos in zonas.values())
+
+    bloques_zona = []
+    for zona, datos in zonas.items():
+        bloques_zona.append(html.Div([
+            html.Div([
+                html.Span(zona),
+                html.Strong(formato_valor(datos["Total"])),
+            ], className="estudiantes-zona-total"),
+            html.Div([
+                html.Div([
+                    html.Span(region),
+                    html.Strong(formato_valor(datos[region])),
+                ], className="estudiantes-region")
+                for region in ("Costa", "Sierra")
+            ], className="estudiantes-regiones"),
+        ], className="estudiantes-zona"))
+
+    return [
+        html.Div([
+            html.Strong(formato_valor(total), className="vision-card-total"),
+        ], className="vision-card-value-row"),
+        html.Div(bloques_zona, className="estudiantes-zonas"),
+        html.Small(f"Año lectivo {anio_lectivo}", className="vision-card-periodo"),
+    ]
+
+
+def tarjeta_estudiantes():
+    """Tarjeta histórica basada solo en Suma de Total_Estudiantes."""
+    periodos = list(ESTUDIANTES_POR_ANIO_LECTIVO)
+    periodo_reciente = periodos[-1]
+    return html.Article([
+        html.Div([
+            html.Span("Año lectivo"),
+            dcc.Dropdown(
+                id="estudiantes-anio-lectivo",
+                options=[{"label": periodo, "value": periodo} for periodo in periodos],
+                value=periodo_reciente,
+                clearable=False,
+                searchable=False,
+                className="programa-anio-dropdown",
+            ),
+        ], className="programa-anio-control estudiantes-anio-control"),
+        cabecera_tarjeta("estudiantes", "Estudiantes"),
+        html.Div(
+            _contenido_estudiantes(periodo_reciente),
+            id="estudiantes-contenido",
+        ),
+    ], className="vision-exec-card generales estudiantes-historicos-card")
+
+
+@app.callback(
+    Output("estudiantes-contenido", "children"),
+    Input("estudiantes-anio-lectivo", "value"),
+)
+def actualizar_estudiantes(anio_lectivo):
+    """Actualiza el total y el desglose Rural/Urbana, Costa/Sierra."""
+    return _contenido_estudiantes(anio_lectivo)
 
 
 def tarjetas_datos_generales(epja=None):
@@ -4311,20 +4560,8 @@ def tarjetas_datos_generales(epja=None):
     d = DATOS_GENERALES_GESTION_EDUCATIVA
     subtitulo = f"Año lectivo {d['anio_lectivo']}"
     tarjetas = [
-        tarjeta_gestion_educativa(
-            "generales", "Instituciones Educativas (IE)", subtitulo,
-            formato_valor(d["instituciones"]),
-        ),
-        tarjeta_gestion_educativa(
-            "generales", "Estudiantes", subtitulo,
-            formato_valor(d["estudiantes_mujeres"] + d["estudiantes_hombres"]),
-            detalles=[
-                html.Div([html.Span("Mujeres"), html.Strong(formato_valor(d["estudiantes_mujeres"]))],
-                         className="vision-mini-stat"),
-                html.Div([html.Span("Hombres"), html.Strong(formato_valor(d["estudiantes_hombres"]))],
-                         className="vision-mini-stat secondary"),
-            ],
-        ),
+        tarjeta_instituciones_educativas(),
+        tarjeta_estudiantes(),
         tarjeta_gestion_educativa(
             "generales", "Docentes", subtitulo,
             formato_valor(d["docentes_total"]),
