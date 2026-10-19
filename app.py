@@ -2085,6 +2085,18 @@ app.index_string = """<!DOCTYPE html>
             grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
           }
         }
+        /* En portátiles angostos, una serie mensual conserva el espacio que
+           necesita para mostrar cifras horizontales. Solo ese gráfico puede
+           desplazarse; las series cortas siguen ocupando exactamente el 100%. */
+        @media (min-width: 901px) and (max-width: 1400px) {
+          .chart-card {
+            overflow-x: auto !important;
+            overscroll-behavior-inline: contain;
+          }
+          .indicator-chart-long {
+            min-width: 1080px !important;
+          }
+        }
         @media (min-width: 1181px) and (max-width: 1480px) {
           .budget-general-chart-grid {
             grid-template-columns: minmax(0, 1fr) !important;
@@ -2112,8 +2124,17 @@ app.index_string = """<!DOCTYPE html>
           }
           .indicator-chart {
             width: 100% !important;
-            min-width: 860px !important;
+            min-width: 0 !important;
             height: 410px !important;
+          }
+          .indicator-chart-short {
+            min-width: 620px !important;
+          }
+          .indicator-chart-medium {
+            min-width: 760px !important;
+          }
+          .indicator-chart-long {
+            min-width: 1080px !important;
           }
         }
         </style>
@@ -2697,6 +2718,15 @@ def datos_hover(periodos, valores, unidad):
             for periodo, valor in zip(periodos, valores)]
 
 
+def clase_grafico_responsivo(cantidad_periodos):
+    """Clasifica el ancho útil del gráfico para portátil, tableta y celular."""
+    if cantidad_periodos >= 9:
+        return "indicator-chart indicator-chart-long"
+    if cantidad_periodos >= 5:
+        return "indicator-chart indicator-chart-medium"
+    return "indicator-chart indicator-chart-short"
+
+
 def geometria_barras_por_periodo(grupo, columnas):
     """Ubica solo las barras con datos y aprovecha el ancho de cada período.
 
@@ -2836,8 +2866,9 @@ def detalle_indicador_pnd(indicador):
                          className="indicator-detail-card", style={"marginTop": "18px"}),
             html.Section([
                 html.Div(metricas, className="metric-summary-row"),
-                dcc.Graph(figure=crear_grafico_pnd(grupo), config={"displayModeBar": False, "responsive": True},
-                          className="indicator-chart", style={"width": "100%", "height": "410px"}),
+              dcc.Graph(figure=crear_grafico_pnd(grupo), config={"displayModeBar": False, "responsive": True},
+                        className=clase_grafico_responsivo(len(grupo)),
+                        style={"width": "100%", "height": "410px"}),
                 html.P("Seleccione el botón de un período para consultar su cumplimiento y observación.",
                        className="status-help"),
                 html.Div(estados, className="status-row",
@@ -3045,8 +3076,9 @@ def detalle_indicador_periodo(df_fuente, indicador, kicker, obs_area_id, status_
                          className="indicator-detail-card", style={"marginTop": "18px"}),
             html.Section([
                 html.Div(metricas, className="metric-summary-row"),
-                dcc.Graph(figure=crear_grafico_periodo(grupo), config={"displayModeBar": False, "responsive": True},
-                          className="indicator-chart", style={"width": "100%", "height": "410px"}),
+              dcc.Graph(figure=crear_grafico_periodo(grupo), config={"displayModeBar": False, "responsive": True},
+                        className=clase_grafico_responsivo(len(grupo)),
+                        style={"width": "100%", "height": "410px"}),
                 html.P("Seleccione el botón de un período para consultar su cumplimiento y observación.",
                        className="status-help"),
                 html.Div(estados, className="status-row",
