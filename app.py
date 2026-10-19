@@ -2105,6 +2105,16 @@ app.index_string = """<!DOCTYPE html>
           .institutional-landing-header {
             padding: 21px 20px !important;
           }
+          .chart-card {
+            overflow-x: auto !important;
+            overscroll-behavior-inline: contain;
+            -webkit-overflow-scrolling: touch;
+          }
+          .indicator-chart {
+            width: 100% !important;
+            min-width: 860px !important;
+            height: 410px !important;
+          }
         }
         </style>
         <script>
@@ -2121,18 +2131,20 @@ app.index_string = """<!DOCTYPE html>
           src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-mml-chtml.js">
         </script>
         <script>
-        /* Las cifras permanecen horizontales en el ancho normal del panel y
-           se rotan solo cuando el propio gráfico queda estrecho. El observador
-           también cubre gráficos reconstruidos al cambiar de indicador. */
+        /* Las cifras se mantienen horizontales. En pantallas pequeñas el
+           gráfico dispone de desplazamiento horizontal, por lo que no hace
+           falta girarlas ni sacrificar su legibilidad. */
         (function () {
           let temporizador;
           function ajustarEtiquetas() {
             if (!window.Plotly) return;
             document.querySelectorAll('.indicator-chart .js-plotly-plot').forEach(function (grafico) {
-              const estrecho = grafico.clientWidth < 720;
-              const angulo = estrecho ? -90 : 0;
-              const tamano = estrecho ? 8 : 10;
-              const estado = angulo + ':' + tamano;
+              const categorias = (grafico.data || []).reduce(function (maximo, serie) {
+                return Math.max(maximo, Array.isArray(serie.x) ? serie.x.length : 0);
+              }, 0);
+              const angulo = 0;
+              const tamano = categorias >= 9 ? 9 : 10;
+              const estado = angulo + ':' + tamano + ':' + categorias;
               if (grafico.dataset.etiquetasResponsivas === estado) return;
               grafico.dataset.etiquetasResponsivas = estado;
               window.Plotly.restyle(grafico, {
@@ -2685,6 +2697,35 @@ def datos_hover(periodos, valores, unidad):
             for periodo, valor in zip(periodos, valores)]
 
 
+def geometria_barras_por_periodo(grupo, columnas):
+    """Ubica solo las barras con datos y aprovecha el ancho de cada período.
+
+    Plotly reserva normalmente un espacio para cada serie, incluso cuando su
+    valor es NaN. Eso estrechaba Meta y Ejecutado en las series mensuales. Esta
+    geometría centra una barra, separa dos y distribuye tres sin unirlas.
+    """
+    posiciones = list(range(len(grupo)))
+    x_por_columna = {columna: [] for columna in columnas}
+    ancho_por_columna = {columna: [] for columna in columnas}
+
+    configuraciones = {
+        1: ([0.0], .46),
+        2: ([-.22, .22], .36),
+        3: ([-.30, 0.0, .30], .25),
+    }
+    for posicion, (_, fila) in zip(posiciones, grupo.iterrows()):
+        disponibles = [columna for columna in columnas if pd.notna(fila[columna])]
+        desplazamientos, ancho = configuraciones.get(
+            len(disponibles), ([0.0] * len(disponibles), .25)
+        )
+        ubicaciones = dict(zip(disponibles, desplazamientos))
+        for columna in columnas:
+            x_por_columna[columna].append(posicion + ubicaciones.get(columna, 0.0))
+            ancho_por_columna[columna].append(ancho if columna in ubicaciones else .25)
+
+    return posiciones, x_por_columna, ancho_por_columna
+
+
 # ---------------------------------------------------------------------------
 # Plan Nacional de Desarrollo · gráfico y ficha
 # ---------------------------------------------------------------------------
@@ -2695,49 +2736,49 @@ def crear_grafico_pnd(grupo):
 
     # Posiciones reales dentro de cada año. Una barra sola queda centrada y
     # ancha; cuando coinciden varias, se separan sin amontonar sus etiquetas.
-    posiciones = [i * .86 for i in range(len(grupo))]
-    # Tres barras delgadas por período. Plotly las distribuye como grupo y
-    # evita las superposiciones que se producían con offsets manuales.
-    ancho_barra = .15
+    columnas_barras = ["Línea base", "Meta", "Estimador"]
+    posiciones, x_barras, anchos_barras = geometria_barras_por_periodo(
+        grupo, columnas_barras
+    )
     # Horizontal por defecto. Un ajuste JavaScript responsivo cambia a vertical
     # únicamente cuando el contenedor del gráfico queda estrecho.
     angulo_texto = 0
 
     fig = go.Figure()
-    fig.add_bar(x=posiciones, y=grupo["Línea base"], name="Línea base",
+    fig.add_bar(x=x_barras["Línea base"], y=grupo["Línea base"], name="Línea base",
                 marker=dict(color="#80BBBF", line=dict(color="#446381", width=1.4)),
                 text=[formato_texto_barra(v, unidad) for v in grupo["Línea base"]], textposition="outside",
                 textfont=dict(size=9, color="#232D5A", family="Arial"), constraintext="none",
-                textangle=angulo_texto, width=ancho_barra, cliponaxis=False,
+                textangle=angulo_texto, width=anchos_barras["Línea base"], cliponaxis=False,
                 customdata=datos_hover(años, grupo["Línea base"], unidad),
                 hovertemplate="Período %{customdata[0]}<br>Línea base: %{customdata[1]}<extra></extra>")
-    fig.add_bar(x=posiciones, y=grupo["Meta"], name="Meta",
+    fig.add_bar(x=x_barras["Meta"], y=grupo["Meta"], name="Meta",
                 marker=dict(color="#446381", line=dict(color="#232D5A", width=1.1)),
                 text=[formato_texto_barra(v, unidad) for v in grupo["Meta"]], textposition="outside",
                 textfont=dict(size=9, color="#232D5A", family="Arial"), constraintext="none",
-                textangle=angulo_texto, width=ancho_barra, cliponaxis=False,
+                textangle=angulo_texto, width=anchos_barras["Meta"], cliponaxis=False,
                 customdata=datos_hover(años, grupo["Meta"], unidad),
                 hovertemplate="Período %{customdata[0]}<br>Meta: %{customdata[1]}<extra></extra>")
-    fig.add_bar(x=posiciones, y=grupo["Estimador"], name="Estimador",
+    fig.add_bar(x=x_barras["Estimador"], y=grupo["Estimador"], name="Estimador",
                 marker=dict(color="#232D5A", line=dict(color="#17213F", width=1.1)),
                 text=[formato_texto_barra(v, unidad) for v in grupo["Estimador"]],
                 textposition="outside",
                 textfont=dict(size=9, color="#232D5A", family="Arial"), constraintext="none",
-                textangle=angulo_texto, width=ancho_barra, cliponaxis=False,
+                textangle=angulo_texto, width=anchos_barras["Estimador"], cliponaxis=False,
                 customdata=datos_hover(años, grupo["Estimador"], unidad),
                 hovertemplate="Período %{customdata[0]}<br>Estimador: %{customdata[1]}<extra></extra>")
     candidatos = pd.concat([grupo["Línea base"], grupo["Meta"], grupo["Estimador"]]).dropna()
     techo = candidatos.max() * 1.22 if not candidatos.empty else None
     fig.update_layout(
-        template="plotly_white", barmode="group", bargap=.30, bargroupgap=.14,
-        height=380,
-        margin=dict(l=55, r=25, t=60, b=45), paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="#fff",
+        template="plotly_white", barmode="overlay",
+        height=410,
+        margin=dict(l=55, r=25, t=82, b=52), paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="#fff",
         font=dict(family="Arial", color="#232D5A", size=13),
         title=dict(text="Evolución del indicador", x=.02, font=dict(size=20)),
         legend=dict(orientation="h", y=1.13, x=1, xanchor="right"),
         xaxis=dict(title="Año / período lectivo", showgrid=False, fixedrange=True,
                    tickmode="array", tickvals=posiciones, ticktext=años,
-                   range=[-.42, posiciones[-1] + .42] if posiciones else [-.42, .42]),
+                   range=[-.60, posiciones[-1] + .60] if posiciones else [-.60, .60]),
         yaxis=dict(title=unidad or "Valor", gridcolor="#E9EBF3",
                    zeroline=False, fixedrange=True, range=[0, techo] if techo else None),
     )
@@ -2796,7 +2837,7 @@ def detalle_indicador_pnd(indicador):
             html.Section([
                 html.Div(metricas, className="metric-summary-row"),
                 dcc.Graph(figure=crear_grafico_pnd(grupo), config={"displayModeBar": False, "responsive": True},
-                          className="indicator-chart", style={"width": "100%", "height": "380px"}),
+                          className="indicator-chart", style={"width": "100%", "height": "410px"}),
                 html.P("Seleccione el botón de un período para consultar su cumplimiento y observación.",
                        className="status-help"),
                 html.Div(estados, className="status-row",
@@ -2880,49 +2921,49 @@ def crear_grafico_periodo(grupo):
     # En series mensuales hay hasta 13 categorías. Una escala tipográfica
     # ligeramente menor evita cruces en portátiles sin sacrificar legibilidad.
     etiqueta_size = 9 if len(grupo) >= 10 else 10
-    # Horizontal por defecto; el navegador rota las cifras solo en pantallas
-    # estrechas para evitar superposiciones.
     angulo_texto = 0
     claves_periodo = list(grupo["Periodo_id"])
     periodos = list(grupo["Periodo_grafico"])
     periodos_completos = list(grupo["Periodo"])
-    # Coordenadas numéricas compactas: acercan los períodos entre sí y permiten
-    # separar de verdad Meta y Ejecutado dentro de cada mes/año.
-    posiciones = [i * .86 for i in range(len(grupo))]
-    ancho_barra = .13 if len(grupo) >= 10 else .15
+    # Un intervalo uniforme por período aprovecha todo el eje X. Las barras son
+    # más anchas en series cortas y mantienen aire suficiente en las mensuales.
+    columnas_barras = ["Línea base", "Meta", "Estimador"]
+    posiciones, x_barras, anchos_barras = geometria_barras_por_periodo(
+        grupo, columnas_barras
+    )
 
     fig = go.Figure()
-    fig.add_bar(x=posiciones, y=grupo["Línea base"], name="Línea base",
+    fig.add_bar(x=x_barras["Línea base"], y=grupo["Línea base"], name="Línea base",
                 marker=dict(color="#80BBBF", line=dict(color="#446381", width=1.4)),
                 text=[formato_texto_barra(v, unidad) for v in grupo["Línea base"]],
                 textposition="outside", textfont=dict(size=etiqueta_size, color="#232D5A", family="Arial"), constraintext="none",
-                textangle=angulo_texto, width=ancho_barra, cliponaxis=False,
+                textangle=angulo_texto, width=anchos_barras["Línea base"], cliponaxis=False,
                 customdata=datos_hover(periodos_completos, grupo["Línea base"], unidad),
                 hovertemplate="%{customdata[0]}<br>Línea base: %{customdata[1]}<extra></extra>")
-    fig.add_bar(x=posiciones, y=grupo["Meta"], name="Meta",
+    fig.add_bar(x=x_barras["Meta"], y=grupo["Meta"], name="Meta",
                 marker=dict(color="#446381", line=dict(color="#232D5A", width=1.1)),
                 text=[formato_texto_barra(v, unidad) for v in grupo["Meta"]],
                 textposition="outside", textfont=dict(size=etiqueta_size, color="#232D5A", family="Arial"),
                 constraintext="none", textangle=angulo_texto,
-                width=ancho_barra, cliponaxis=False,
+                width=anchos_barras["Meta"], cliponaxis=False,
                 customdata=datos_hover(periodos_completos, grupo["Meta"], unidad),
                 hovertemplate="%{customdata[0]}<br>Meta: %{customdata[1]}<extra></extra>")
-    fig.add_bar(x=posiciones, y=grupo["Estimador"], name="Ejecutado",
+    fig.add_bar(x=x_barras["Estimador"], y=grupo["Estimador"], name="Ejecutado",
                 marker=dict(color="#232D5A", line=dict(color="#17213F", width=1.1)),
                 text=[formato_texto_barra(v, unidad) for v in grupo["Estimador"]],
                 textposition="outside", textfont=dict(size=etiqueta_size, color="#232D5A", family="Arial"),
                 constraintext="none", textangle=angulo_texto,
-                width=ancho_barra, cliponaxis=False,
+                width=anchos_barras["Estimador"], cliponaxis=False,
                 customdata=datos_hover(periodos_completos, grupo["Estimador"], unidad),
                 hovertemplate="%{customdata[0]}<br>Ejecutado: %{customdata[1]}<extra></extra>")
 
     candidatos = pd.concat([grupo["Línea base"], grupo["Meta"], grupo["Estimador"]]).dropna()
-    techo = candidatos.max() * 1.24 if not candidatos.empty else None
+    techo = candidatos.max() * (1.30 if len(grupo) >= 9 else 1.24) if not candidatos.empty else None
 
     fig.update_layout(
-        template="plotly_white", barmode="group", bargap=.30, bargroupgap=.14,
-        height=380, autosize=True,
-        margin=dict(l=55, r=15, t=65, b=70), paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="#fff",
+        template="plotly_white", barmode="overlay",
+        height=410, autosize=True,
+        margin=dict(l=55, r=15, t=82, b=70), paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="#fff",
         font=dict(family="Arial", color="#232D5A", size=13),
         title=dict(text="Evolución del indicador", x=.02, font=dict(size=20)),
         legend=dict(orientation="h", y=1.13, x=1, xanchor="right"),
@@ -2932,7 +2973,7 @@ def crear_grafico_periodo(grupo):
         xaxis=dict(title="Período", showgrid=False, type="linear",
                    tickmode="array", tickvals=posiciones, ticktext=periodos,
                    fixedrange=True, tickangle=0,
-                   range=[-.42, posiciones[-1] + .42] if posiciones else [-.42, .42],
+                   range=[-.60, posiciones[-1] + .60] if posiciones else [-.60, .60],
                    automargin=True, tickfont=dict(size=etiqueta_size)),
         yaxis=dict(title=unidad or "Valor", gridcolor="#E9EBF3",
                    zeroline=False, fixedrange=True, range=[0, techo] if techo else None),
@@ -3005,7 +3046,7 @@ def detalle_indicador_periodo(df_fuente, indicador, kicker, obs_area_id, status_
             html.Section([
                 html.Div(metricas, className="metric-summary-row"),
                 dcc.Graph(figure=crear_grafico_periodo(grupo), config={"displayModeBar": False, "responsive": True},
-                          className="indicator-chart", style={"width": "100%", "height": "380px"}),
+                          className="indicator-chart", style={"width": "100%", "height": "410px"}),
                 html.P("Seleccione el botón de un período para consultar su cumplimiento y observación.",
                        className="status-help"),
                 html.Div(estados, className="status-row",
