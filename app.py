@@ -1441,7 +1441,7 @@ app.index_string = """<!DOCTYPE html>
         .mobile-menu-overlay {
           display: none;
         }
-        @media (max-width: 1024px) {
+        @media (max-width: 1180px) {
           body.mobile-menu-open {
             overflow: hidden;
           }
@@ -1791,7 +1791,7 @@ app.index_string = """<!DOCTYPE html>
             grid-template-columns: minmax(0, 1fr) !important;
           }
         }
-        @media (min-width: 601px) and (max-width: 1024px) {
+        @media (min-width: 601px) and (max-width: 1180px) {
           /* En tablet se aprovecha el espacio con dos tarjetas por fila, sin
              conservar las seis columnas auxiliares usadas en escritorio. */
           .module-main .vision-exec-page .datos-generales-grid.educacion-media-cifras-grid,
@@ -1834,6 +1834,277 @@ app.index_string = """<!DOCTYPE html>
         }
         .module-main .vision-exec-page .programa-info-tooltip {
           z-index: 1001 !important;
+        }
+        </style>
+        <style id="minedec-institutional-theme">
+        /* Tema institucional unificado según el manual técnico de Presidencia.
+           El amarillo queda como acento; azul, blanco y turquesa estructuran
+           navegación, tarjetas y visualizaciones. */
+        :root {
+          --minedec-navy: #232D5A;
+          --minedec-blue: #446381;
+          --minedec-teal: #80BBBF;
+          --minedec-purple: #4F449A;
+          --minedec-yellow: #F1B620;
+          --minedec-surface: #FFFFFF;
+          --minedec-canvas: #F4F7F9;
+          --minedec-line: #D9E2E8;
+        }
+        .header-bar,
+        .module-sidebar,
+        .indicadores-cabecera {
+          background: #232D5A !important;
+        }
+        .vision-exec-header h1,
+        .vision-landing-title {
+          color: #232D5A !important;
+        }
+        .portada-boton,
+        .indicadores-opciones .portada-boton {
+          background: linear-gradient(125deg, #232D5A 0%, #344A71 100%) !important;
+          box-shadow: 0 9px 0 rgba(79, 68, 154, .18),
+                      0 15px 26px rgba(35, 45, 90, .16) !important;
+        }
+        .portada-boton:hover,
+        .portada-boton:focus-visible {
+          outline-color: rgba(128, 187, 191, .58) !important;
+        }
+        .side-section.active {
+          color: #232D5A !important;
+          background: #FFFFFF !important;
+          border-left: 4px solid #F1B620 !important;
+        }
+        .vision-title-mark {
+          background: linear-gradient(#80BBBF, #446381) !important;
+        }
+        .vision-eje-banner {
+          color: #FFFFFF !important;
+          background: #232D5A !important;
+          border-color: #232D5A !important;
+          box-shadow: 0 7px 16px rgba(35, 45, 90, .13) !important;
+        }
+        .vision-eje-banner::before {
+          background: #F1B620 !important;
+        }
+        .vision-vice-pill.active {
+          color: #FFFFFF !important;
+          background: #232D5A !important;
+          border-color: #232D5A !important;
+        }
+        .vision-exec-card {
+          --card-accent: #446381 !important;
+          border-color: #D9E2E8 !important;
+          border-top-color: #446381 !important;
+          box-shadow: 0 8px 20px rgba(35, 45, 90, .08) !important;
+        }
+        .vision-exec-card:nth-child(3n + 2) {
+          border-top-color: #80BBBF !important;
+        }
+        .vision-exec-card:nth-child(3n) {
+          border-top-color: #232D5A !important;
+        }
+        .vision-card-symbol {
+          color: #232D5A !important;
+          background: #EDF4F6 !important;
+          border-color: #C9DDE1 !important;
+        }
+        .metric-summary-row .metric-card,
+        .metric-summary-row .detail-item.highlight {
+          color: #232D5A !important;
+          background: #FFFFFF !important;
+          border: 1px solid #D9E2E8 !important;
+          border-top: 4px solid #80BBBF !important;
+          box-shadow: 0 6px 16px rgba(35, 45, 90, .07) !important;
+        }
+        .metric-summary-row > :nth-child(2) {
+          border-top-color: #232D5A !important;
+        }
+        .metric-card .metric-year {
+          color: #526079 !important;
+          background: #EDF4F6 !important;
+        }
+        .budget-kpi-card {
+          background: #FFFFFF !important;
+          border: 1px solid #D9E2E8 !important;
+          border-top: 3px solid #446381 !important;
+          box-shadow: 0 5px 14px rgba(35, 45, 90, .07) !important;
+        }
+        .budget-kpi-card:nth-child(even) {
+          border-top-color: #80BBBF !important;
+        }
+        .budget-kpi-icon {
+          background: #EDF4F6 !important;
+          border-color: #C9DDE1 !important;
+        }
+        .budget-investment-badge,
+        .budget-updated-badge {
+          color: #232D5A !important;
+          background: #E8F1F3 !important;
+        }
+
+        /* Portadas internas: Inventario, Visión Ejecutiva y Documentación
+           comparten la misma jerarquía visual de la portada de Indicadores. */
+        .institutional-landing-header {
+          width: 100% !important;
+          max-width: none !important;
+          margin: 4px 0 0 !important;
+          padding: 26px 30px !important;
+          box-sizing: border-box;
+          border: 0 !important;
+          border-radius: 20px !important;
+          color: #FFFFFF !important;
+          background: #232D5A !important;
+          box-shadow: 0 12px 26px rgba(35, 45, 90, .14) !important;
+          text-align: left !important;
+        }
+        .institutional-landing-header .content-kicker,
+        .institutional-landing-header .documentation-kicker {
+          margin: 0 0 7px !important;
+          color: #F1B620 !important;
+          font-size: 12px !important;
+          font-weight: 900 !important;
+          letter-spacing: .13em !important;
+        }
+        .institutional-landing-header h1,
+        .institutional-landing-header .vision-landing-title {
+          margin: 0 0 7px !important;
+          color: #FFFFFF !important;
+          font-size: clamp(28px, 2.5vw, 42px) !important;
+          line-height: 1.1 !important;
+          text-align: left !important;
+        }
+        .institutional-landing-header > p:last-child,
+        .institutional-landing-header .vision-landing-subtitle {
+          max-width: 900px !important;
+          margin: 0 !important;
+          color: #EDF2F7 !important;
+          font-size: 14px !important;
+          line-height: 1.5 !important;
+          text-align: left !important;
+        }
+        .institutional-access-grid {
+          display: grid !important;
+          grid-template-columns: repeat(3, minmax(0, 1fr));
+          gap: 24px !important;
+          margin-top: 56px !important;
+        }
+        .institutional-access-card {
+          min-width: 0;
+          min-height: 150px;
+          padding: 22px 24px;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          box-sizing: border-box;
+          border: 1px solid #51678B;
+          border-radius: 20px;
+          color: #FFFFFF !important;
+          background: #344A71 !important;
+          box-shadow: 0 9px 0 rgba(79, 68, 154, .18),
+                      0 15px 26px rgba(35, 45, 90, .12);
+          font-size: 17px;
+          font-weight: 800;
+          line-height: 1.25;
+          text-align: center;
+          text-decoration: none !important;
+          transition: transform .18s ease, box-shadow .18s ease;
+        }
+        .institutional-access-card:hover,
+        .institutional-access-card:focus-visible {
+          transform: translateY(-4px);
+          outline: 3px solid rgba(128, 187, 191, .55);
+          outline-offset: 2px;
+        }
+        .vision-landing-menu {
+          margin-top: 42px !important;
+        }
+        .vision-landing-menu .vision-vice-pill {
+          grid-template-rows: 1fr !important;
+          min-height: 150px !important;
+          border: 1px solid #51678B !important;
+          border-top: 1px solid #51678B !important;
+          color: #FFFFFF !important;
+          background: #344A71 !important;
+          box-shadow: 0 9px 0 rgba(79, 68, 154, .18),
+                      0 15px 26px rgba(35, 45, 90, .12) !important;
+        }
+        .vision-landing-menu .vision-landing-vice-nombre {
+          align-self: center !important;
+          color: #FFFFFF !important;
+          font-size: 16px !important;
+        }
+        .documentation-page {
+          width: 100% !important;
+        }
+        .documentation-section {
+          border-color: #D9E2E8 !important;
+        }
+        .document-deliverable-card {
+          border-color: #D9E2E8 !important;
+          border-top-color: #446381 !important;
+          box-shadow: 0 7px 18px rgba(35, 45, 90, .07);
+        }
+        .document-deliverable-card h3 {
+          color: #232D5A !important;
+        }
+        .document-file-icon {
+          background: #EDF4F6 !important;
+        }
+        .document-action {
+          background: #344A71 !important;
+        }
+        .document-action:hover,
+        .document-action:focus-visible {
+          background: #232D5A !important;
+        }
+
+        /* Portátiles de 13–14 pulgadas: se prioriza ancho útil para que las
+           etiquetas no se monten. En pantallas grandes vuelve la composición
+           de dos columnas prevista por el manual (mesa óptima 1920 × 1080). */
+        @media (min-width: 1181px) and (max-width: 1650px) {
+          .indicator-workspace {
+            grid-template-columns: minmax(0, 1fr) !important;
+            gap: 14px !important;
+          }
+          .indicator-detail-card .details-grid {
+            grid-template-columns: repeat(auto-fit, minmax(190px, 1fr)) !important;
+          }
+          .indicator-detail-card .full,
+          .indicator-detail-card .source {
+            grid-column: auto !important;
+          }
+          .budget-kpi-grid {
+            grid-template-columns: repeat(3, minmax(0, 1fr)) !important;
+          }
+          .datos-generales-grid,
+          .recursos-gestion-grid,
+          .cultura-artistas-grid {
+            grid-template-columns: repeat(3, minmax(0, 1fr)) !important;
+          }
+          .cultura-organizaciones-grid {
+            grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+          }
+        }
+        @media (min-width: 1181px) and (max-width: 1480px) {
+          .budget-general-chart-grid {
+            grid-template-columns: minmax(0, 1fr) !important;
+          }
+          .budget-panel {
+            min-height: 300px;
+          }
+        }
+        @media (max-width: 900px) {
+          .institutional-access-grid {
+            grid-template-columns: minmax(0, 1fr) !important;
+            gap: 14px !important;
+            margin-top: 26px !important;
+          }
+          .institutional-access-card {
+            min-height: 96px;
+          }
+          .institutional-landing-header {
+            padding: 21px 20px !important;
+          }
         }
         </style>
         <script>
@@ -1922,7 +2193,7 @@ app.index_string = """<!DOCTYPE html>
             if (evento.key === 'Escape') cerrarMenu();
           });
           window.addEventListener('resize', function () {
-            if (window.innerWidth > 1024) cerrarMenu();
+            if (window.innerWidth > 1180) cerrarMenu();
           });
         })();
         </script>
@@ -2425,7 +2696,9 @@ def crear_grafico_pnd(grupo):
     # Posiciones reales dentro de cada año. Una barra sola queda centrada y
     # ancha; cuando coinciden varias, se separan sin amontonar sus etiquetas.
     posiciones = [i * .86 for i in range(len(grupo))]
-    ancho_barra = .20
+    # Tres barras delgadas por período. Plotly las distribuye como grupo y
+    # evita las superposiciones que se producían con offsets manuales.
+    ancho_barra = .15
     # Horizontal por defecto. Un ajuste JavaScript responsivo cambia a vertical
     # únicamente cuando el contenedor del gráfico queda estrecho.
     angulo_texto = 0
@@ -2435,28 +2708,29 @@ def crear_grafico_pnd(grupo):
                 marker=dict(color="#80BBBF", line=dict(color="#446381", width=1.4)),
                 text=[formato_texto_barra(v, unidad) for v in grupo["Línea base"]], textposition="outside",
                 textfont=dict(size=9, color="#232D5A", family="Arial"), constraintext="none",
-                textangle=angulo_texto, width=ancho_barra, offset=-.10, cliponaxis=False,
+                textangle=angulo_texto, width=ancho_barra, cliponaxis=False,
                 customdata=datos_hover(años, grupo["Línea base"], unidad),
                 hovertemplate="Período %{customdata[0]}<br>Línea base: %{customdata[1]}<extra></extra>")
     fig.add_bar(x=posiciones, y=grupo["Meta"], name="Meta",
-                marker=dict(color="#F1B620", line=dict(color="#C88F00", width=1.4)),
+                marker=dict(color="#446381", line=dict(color="#232D5A", width=1.1)),
                 text=[formato_texto_barra(v, unidad) for v in grupo["Meta"]], textposition="outside",
                 textfont=dict(size=9, color="#232D5A", family="Arial"), constraintext="none",
-                textangle=angulo_texto, width=ancho_barra, offset=-.27, cliponaxis=False,
+                textangle=angulo_texto, width=ancho_barra, cliponaxis=False,
                 customdata=datos_hover(años, grupo["Meta"], unidad),
                 hovertemplate="Período %{customdata[0]}<br>Meta: %{customdata[1]}<extra></extra>")
     fig.add_bar(x=posiciones, y=grupo["Estimador"], name="Estimador",
-                marker=dict(color="#4F449A", line=dict(color="#232D5A", width=1.4)),
+                marker=dict(color="#232D5A", line=dict(color="#17213F", width=1.1)),
                 text=[formato_texto_barra(v, unidad) for v in grupo["Estimador"]],
                 textposition="outside",
                 textfont=dict(size=9, color="#232D5A", family="Arial"), constraintext="none",
-                textangle=angulo_texto, width=ancho_barra, offset=.07, cliponaxis=False,
+                textangle=angulo_texto, width=ancho_barra, cliponaxis=False,
                 customdata=datos_hover(años, grupo["Estimador"], unidad),
                 hovertemplate="Período %{customdata[0]}<br>Estimador: %{customdata[1]}<extra></extra>")
     candidatos = pd.concat([grupo["Línea base"], grupo["Meta"], grupo["Estimador"]]).dropna()
     techo = candidatos.max() * 1.22 if not candidatos.empty else None
     fig.update_layout(
-        barmode="overlay", height=380,
+        template="plotly_white", barmode="group", bargap=.30, bargroupgap=.14,
+        height=380,
         margin=dict(l=55, r=25, t=60, b=45), paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="#fff",
         font=dict(family="Arial", color="#232D5A", size=13),
         title=dict(text="Evolución del indicador", x=.02, font=dict(size=20)),
@@ -2615,30 +2889,30 @@ def crear_grafico_periodo(grupo):
     # Coordenadas numéricas compactas: acercan los períodos entre sí y permiten
     # separar de verdad Meta y Ejecutado dentro de cada mes/año.
     posiciones = [i * .86 for i in range(len(grupo))]
-    ancho_barra = .20
+    ancho_barra = .13 if len(grupo) >= 10 else .15
 
     fig = go.Figure()
     fig.add_bar(x=posiciones, y=grupo["Línea base"], name="Línea base",
                 marker=dict(color="#80BBBF", line=dict(color="#446381", width=1.4)),
                 text=[formato_texto_barra(v, unidad) for v in grupo["Línea base"]],
                 textposition="outside", textfont=dict(size=etiqueta_size, color="#232D5A", family="Arial"), constraintext="none",
-                textangle=angulo_texto, width=ancho_barra, offset=-.10, cliponaxis=False,
+                textangle=angulo_texto, width=ancho_barra, cliponaxis=False,
                 customdata=datos_hover(periodos_completos, grupo["Línea base"], unidad),
                 hovertemplate="%{customdata[0]}<br>Línea base: %{customdata[1]}<extra></extra>")
     fig.add_bar(x=posiciones, y=grupo["Meta"], name="Meta",
-                marker=dict(color="#F1B620", line=dict(color="#C88F00", width=1.4)),
+                marker=dict(color="#446381", line=dict(color="#232D5A", width=1.1)),
                 text=[formato_texto_barra(v, unidad) for v in grupo["Meta"]],
                 textposition="outside", textfont=dict(size=etiqueta_size, color="#232D5A", family="Arial"),
                 constraintext="none", textangle=angulo_texto,
-                width=ancho_barra, offset=-.27, cliponaxis=False,
+                width=ancho_barra, cliponaxis=False,
                 customdata=datos_hover(periodos_completos, grupo["Meta"], unidad),
                 hovertemplate="%{customdata[0]}<br>Meta: %{customdata[1]}<extra></extra>")
     fig.add_bar(x=posiciones, y=grupo["Estimador"], name="Ejecutado",
-                marker=dict(color="#4F449A", line=dict(color="#232D5A", width=1.4)),
+                marker=dict(color="#232D5A", line=dict(color="#17213F", width=1.1)),
                 text=[formato_texto_barra(v, unidad) for v in grupo["Estimador"]],
                 textposition="outside", textfont=dict(size=etiqueta_size, color="#232D5A", family="Arial"),
                 constraintext="none", textangle=angulo_texto,
-                width=ancho_barra, offset=.07, cliponaxis=False,
+                width=ancho_barra, cliponaxis=False,
                 customdata=datos_hover(periodos_completos, grupo["Estimador"], unidad),
                 hovertemplate="%{customdata[0]}<br>Ejecutado: %{customdata[1]}<extra></extra>")
 
@@ -2646,7 +2920,8 @@ def crear_grafico_periodo(grupo):
     techo = candidatos.max() * 1.24 if not candidatos.empty else None
 
     fig.update_layout(
-        barmode="overlay", height=380, autosize=True,
+        template="plotly_white", barmode="group", bargap=.30, bargroupgap=.14,
+        height=380, autosize=True,
         margin=dict(l=55, r=15, t=65, b=70), paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="#fff",
         font=dict(family="Arial", color="#232D5A", size=13),
         title=dict(text="Evolución del indicador", x=.02, font=dict(size=20)),
@@ -2797,10 +3072,7 @@ def vision_tabs_nav(activo):
     def contenido_boton(nombre):
         if compacto:
             return nombre
-        return [
-            html.Span(nombre, className="vision-landing-vice-nombre"),
-            html.Span("Ingresar al módulo  →", className="vision-landing-vice-accion"),
-        ]
+        return html.Span(nombre, className="vision-landing-vice-nombre")
 
     return html.Nav(
         [html.Div(
@@ -4749,6 +5021,7 @@ def contenido_vision(tab=None):
     if tab is None:
         return html.Div([
             html.Div([
+                html.P("VISIÓN EJECUTIVA", className="content-kicker"),
                 html.H1(
                     "MINISTERIO DE EDUCACIÓN, DEPORTE Y CULTURA",
                     className="vision-landing-title",
@@ -4763,7 +5036,7 @@ def contenido_vision(tab=None):
                     "Seleccione un viceministerio para consultar sus cifras, programas y servicios.",
                     className="vision-landing-subtitle",
                 ),
-            ], className="vision-landing-intro"),
+            ], className="vision-landing-intro institutional-landing-header"),
             html.Div(menu, className="vision-landing-menu"),
         ], className="vision-landing",
            style={"minHeight": "calc(100vh - 92px)", "padding": "18px 28px 34px",
@@ -4930,7 +5203,7 @@ def _figura_ejecucion_general(df):
     figura = go.Figure(go.Pie(
         labels=["Ejecutado (devengado)", "Pendiente por ejecutar"],
         values=[porcentaje, max(100 - porcentaje, 0)], hole=.68,
-        marker={"colors": ["#5442a3", "#e8eaf2"]},
+        marker={"colors": ["#232D5A", "#E5EDF0"]},
         textinfo="none", hovertemplate="%{label}: %{value:.2f}%<extra></extra>",
     ))
     figura.add_annotation(
@@ -4955,15 +5228,14 @@ def _millones(valor):
 def _figura_montos_presupuesto(df):
     """Barra con los montos consolidados (en millones de USD): Codificado,
     Certificado (PRECOMPROMISO), Comprometido, Devengado y Saldo disponible."""
-    # Paleta validada (dataviz: banda de luminosidad, piso de croma, separación
-    # CVD y contraste vs. fondo) — reutiliza el morado del pastel de ejecución
-    # (#5442a3 = "Devengado") para mantener coherencia visual entre ambos gráficos.
+    # Una sola familia cromática institucional: azul principal, azul secundario
+    # y turquesa de apoyo. El color ya no compite con el significado del monto.
     metricas = [
-        ("Codificado", "CODIFICADO", "#2f6fed"),
-        ("Certificado", "PRECOMPROMISO", "#1f9e6f"),
-        ("Comprometido", "COMPROMISO", "#c9860a"),
-        ("Devengado", "DEVENGADO", "#5442a3"),
-        ("Saldo disponible", "SALDO_DISPONIBLE", "#de232d"),
+        ("Codificado", "CODIFICADO", "#232D5A"),
+        ("Certificado", "PRECOMPROMISO", "#80BBBF"),
+        ("Comprometido", "COMPROMISO", "#446381"),
+        ("Devengado", "DEVENGADO", "#232D5A"),
+        ("Saldo disponible", "SALDO_DISPONIBLE", "#80BBBF"),
     ]
     etiquetas = [nombre for nombre, _, _ in metricas]
     colores = [color for _, _, color in metricas]
@@ -4973,7 +5245,9 @@ def _figura_montos_presupuesto(df):
     ]
     montos = [v * 1_000_000 for v in valores]
     figura = go.Figure(go.Bar(
-        x=etiquetas, y=valores, marker={"color": colores},
+        x=etiquetas, y=valores,
+        marker={"color": colores, "line": {"color": "#232D5A", "width": .7}},
+        width=.46,
         text=[f"{_millones(v)} M" for v in valores], textposition="outside",
         customdata=[_moneda(m) for m in montos],
         hovertemplate="<b>%{x}</b><br>%{customdata}<extra></extra>",
@@ -4981,7 +5255,7 @@ def _figura_montos_presupuesto(df):
     figura.update_layout(
         title={"text": "Montos presupuestarios (millones de USD) · Inversión", "x": .5,
                "font": {"size": 16, "color": "#17245b"}},
-        height=300, margin=dict(l=55, r=25, t=55, b=45),
+        template="plotly_white", height=300, margin=dict(l=55, r=25, t=55, b=45),
         paper_bgcolor="white", plot_bgcolor="white", showlegend=False,
         font={"family": "Arial", "color": "#17245b"},
     )
@@ -5147,20 +5421,20 @@ def contenido_presupuesto(vice=None):
                 html.Span(icono_kpi(codigo), className="budget-kpi-icon", style={
                     "display": "flex", "alignItems": "center", "justifyContent": "center",
                     "width": "24px", "height": "24px", "flex": "0 0 24px",
-                    "borderRadius": "7px", "background": "rgba(241, 182, 32, .25)",
+                    "borderRadius": "7px", "background": "#EDF4F6",
                 }),
                 html.Div([
                     html.Span(titulo, style={
                         "display": "block", "fontSize": "8.5px", "fontWeight": "800",
                         "textTransform": "uppercase", "letterSpacing": ".02em",
-                        "color": "#7a6008", "whiteSpace": "normal",
+                        "color": "#446381", "whiteSpace": "normal",
                     }),
                     html.Strong(valor, style={
                         "display": "block", "fontSize": "clamp(11px, .95vw, 14px)",
                         "color": "#232d5a", "margin": "2px 0 1px", "overflowWrap": "anywhere",
                     }),
                     html.Small(nota, style={
-                        "display": "block", "fontSize": "8px", "color": "#806000",
+                        "display": "block", "fontSize": "8px", "color": "#667085",
                     }),
                 ], style={"minWidth": "0"})
             ], className="budget-kpi-card", style={
@@ -5229,18 +5503,12 @@ def contenido_inventario():
         html.Div([html.P("INVENTARIO Y RECURSO DE INFORMACIÓN", className="content-kicker"),
                   html.H1("Recursos de información abiertos"),
                   html.P("Seleccione un ámbito para abrir su portal de datos en una pestaña nueva.")],
-                 className="content-heading"),
+                 className="content-heading institutional-landing-header"),
         html.Div([
-            html.A(nombre, href=url, target="_blank", rel="noopener noreferrer", style={
-                "display": "flex", "alignItems": "center", "justifyContent": "center",
-                "flex": "1 1 220px", "minWidth": "220px", "minHeight": "90px",
-                "background": "#4f449a", "color": "#fff", "fontWeight": "800",
-                "fontSize": "15px", "borderRadius": "12px", "textDecoration": "none",
-                "boxShadow": "0 8px 20px rgba(35,45,90,.18)", "textAlign": "center",
-                "padding": "18px", "cursor": "pointer",
-            })
+            html.A(nombre, href=url, target="_blank", rel="noopener noreferrer",
+                   className="institutional-access-card")
             for nombre, url in enlaces
-        ], style={"display": "flex", "gap": "16px", "flexWrap": "wrap", "marginTop": "20px"}),
+        ], className="institutional-access-grid"),
     ], className="indicator-content")
 
 
@@ -5248,7 +5516,7 @@ def contenido_documentacion():
     """Repositorio documental exigido para el entregable E-02 (DP-SI-020)."""
     icono_documento = (
         "<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 48 48' "
-        "fill='none' stroke='#503a98' stroke-width='2.6' "
+        "fill='none' stroke='#446381' stroke-width='2.6' "
         "stroke-linecap='round' stroke-linejoin='round'>"
         "<path d='M13 6h15l8 8v28H13z'/><path d='M28 6v9h9'/>"
         "<path d='M19 23h11M19 29h11M19 35h8'/></svg>"
@@ -5306,10 +5574,11 @@ def contenido_documentacion():
     return html.Div([
         html.Section([
             html.Div([
+                html.P("DOCUMENTACIÓN", className="documentation-kicker"),
                 html.H1("Documentación"),
                 html.P("Manual de usuario, diccionario de datos e indicadores, fichas metodológicas y ficha de formalización de la solución de información."),
             ]),
-        ], className="documentation-hero"),
+        ], className="documentation-hero institutional-landing-header"),
         html.Section([
             html.Div([
                 html.H2("DOCUMENTOS DISPONIBLES"),
