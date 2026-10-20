@@ -2843,32 +2843,33 @@ def clase_grafico_responsivo(cantidad_periodos):
 
 
 def geometria_barras_por_periodo(grupo, columnas):
-    """Ubica solo las barras con datos y aprovecha el ancho de cada período.
+    """Ubica solo las barras con datos usando un ancho visual uniforme.
 
     Plotly reserva normalmente un espacio para cada serie, incluso cuando su
-    valor es NaN. Eso estrechaba Meta y Ejecutado en las series mensuales. Esta
-    geometría centra una barra, separa dos y distribuye tres sin unirlas.
+    valor es NaN. Esta geometría centra una barra y separa dos o tres, pero
+    mantiene exactamente el mismo ancho en Línea base, Meta y Estimador.
     """
     posiciones = list(range(len(grupo)))
     x_por_columna = {columna: [] for columna in columnas}
-    ancho_por_columna = {columna: [] for columna in columnas}
 
-    configuraciones = {
-        1: ([0.0], .46),
-        2: ([-.22, .22], .36),
-        3: ([-.30, 0.0, .30], .25),
+    ancho_uniforme = .34
+    desplazamientos_por_cantidad = {
+        1: [0.0],
+        2: [-.20, .20],
+        3: [-.36, 0.0, .36],
     }
     for posicion, (_, fila) in zip(posiciones, grupo.iterrows()):
         disponibles = [columna for columna in columnas if pd.notna(fila[columna])]
-        desplazamientos, ancho = configuraciones.get(
-            len(disponibles), ([0.0] * len(disponibles), .25)
+        desplazamientos = desplazamientos_por_cantidad.get(
+            len(disponibles), [0.0] * len(disponibles)
         )
         ubicaciones = dict(zip(disponibles, desplazamientos))
         for columna in columnas:
             x_por_columna[columna].append(posicion + ubicaciones.get(columna, 0.0))
-            ancho_por_columna[columna].append(ancho if columna in ubicaciones else .25)
 
-    return posiciones, x_por_columna, ancho_por_columna
+    # Se devuelve un único escalar. Plotly puede aplicar ajustes distintos si
+    # recibe listas de anchos, aunque todos sus elementos tengan el mismo valor.
+    return posiciones, x_por_columna, ancho_uniforme
 
 
 # ---------------------------------------------------------------------------
@@ -2882,7 +2883,7 @@ def crear_grafico_pnd(grupo):
     # Posiciones reales dentro de cada año. Una barra sola queda centrada y
     # ancha; cuando coinciden varias, se separan sin amontonar sus etiquetas.
     columnas_barras = ["Línea base", "Meta", "Estimador"]
-    posiciones, x_barras, anchos_barras = geometria_barras_por_periodo(
+    posiciones, x_barras, ancho_barra = geometria_barras_por_periodo(
         grupo, columnas_barras
     )
     # Horizontal por defecto. Un ajuste JavaScript responsivo cambia a vertical
@@ -2894,14 +2895,14 @@ def crear_grafico_pnd(grupo):
                 marker=dict(color="#80BBBF", line=dict(color="#446381", width=1.4)),
                 text=[formato_texto_barra(v, unidad) for v in grupo["Línea base"]], textposition="outside",
                 textfont=dict(size=9, color="#232D5A", family="Arial"), constraintext="none",
-                textangle=angulo_texto, width=anchos_barras["Línea base"], cliponaxis=False,
+                textangle=angulo_texto, width=ancho_barra, cliponaxis=False,
                 customdata=datos_hover(años, grupo["Línea base"], unidad),
                 hovertemplate="Período %{customdata[0]}<br>Línea base: %{customdata[1]}<extra></extra>")
     fig.add_bar(x=x_barras["Meta"], y=grupo["Meta"], name="Meta",
                 marker=dict(color="#446381", line=dict(color="#232D5A", width=1.1)),
                 text=[formato_texto_barra(v, unidad) for v in grupo["Meta"]], textposition="outside",
                 textfont=dict(size=9, color="#232D5A", family="Arial"), constraintext="none",
-                textangle=angulo_texto, width=anchos_barras["Meta"], cliponaxis=False,
+                textangle=angulo_texto, width=ancho_barra, cliponaxis=False,
                 customdata=datos_hover(años, grupo["Meta"], unidad),
                 hovertemplate="Período %{customdata[0]}<br>Meta: %{customdata[1]}<extra></extra>")
     fig.add_bar(x=x_barras["Estimador"], y=grupo["Estimador"], name="Estimador",
@@ -2909,7 +2910,7 @@ def crear_grafico_pnd(grupo):
                 text=[formato_texto_barra(v, unidad) for v in grupo["Estimador"]],
                 textposition="outside",
                 textfont=dict(size=9, color="#232D5A", family="Arial"), constraintext="none",
-                textangle=angulo_texto, width=anchos_barras["Estimador"], cliponaxis=False,
+                textangle=angulo_texto, width=ancho_barra, cliponaxis=False,
                 customdata=datos_hover(años, grupo["Estimador"], unidad),
                 hovertemplate="Período %{customdata[0]}<br>Estimador: %{customdata[1]}<extra></extra>")
     candidatos = pd.concat([grupo["Línea base"], grupo["Meta"], grupo["Estimador"]]).dropna()
@@ -3074,7 +3075,7 @@ def crear_grafico_periodo(grupo):
     # Un intervalo uniforme por período aprovecha todo el eje X. Las barras son
     # más anchas en series cortas y mantienen aire suficiente en las mensuales.
     columnas_barras = ["Línea base", "Meta", "Estimador"]
-    posiciones, x_barras, anchos_barras = geometria_barras_por_periodo(
+    posiciones, x_barras, ancho_barra = geometria_barras_por_periodo(
         grupo, columnas_barras
     )
 
@@ -3083,7 +3084,7 @@ def crear_grafico_periodo(grupo):
                 marker=dict(color="#80BBBF", line=dict(color="#446381", width=1.4)),
                 text=[formato_texto_barra(v, unidad) for v in grupo["Línea base"]],
                 textposition="outside", textfont=dict(size=etiqueta_size, color="#232D5A", family="Arial"), constraintext="none",
-                textangle=angulo_texto, width=anchos_barras["Línea base"], cliponaxis=False,
+                textangle=angulo_texto, width=ancho_barra, cliponaxis=False,
                 customdata=datos_hover(periodos_completos, grupo["Línea base"], unidad),
                 hovertemplate="%{customdata[0]}<br>Línea base: %{customdata[1]}<extra></extra>")
     fig.add_bar(x=x_barras["Meta"], y=grupo["Meta"], name="Meta",
@@ -3091,7 +3092,7 @@ def crear_grafico_periodo(grupo):
                 text=[formato_texto_barra(v, unidad) for v in grupo["Meta"]],
                 textposition="outside", textfont=dict(size=etiqueta_size, color="#232D5A", family="Arial"),
                 constraintext="none", textangle=angulo_texto,
-                width=anchos_barras["Meta"], cliponaxis=False,
+                width=ancho_barra, cliponaxis=False,
                 customdata=datos_hover(periodos_completos, grupo["Meta"], unidad),
                 hovertemplate="%{customdata[0]}<br>Meta: %{customdata[1]}<extra></extra>")
     fig.add_bar(x=x_barras["Estimador"], y=grupo["Estimador"], name="Ejecutado",
@@ -3099,7 +3100,7 @@ def crear_grafico_periodo(grupo):
                 text=[formato_texto_barra(v, unidad) for v in grupo["Estimador"]],
                 textposition="outside", textfont=dict(size=etiqueta_size, color="#232D5A", family="Arial"),
                 constraintext="none", textangle=angulo_texto,
-                width=anchos_barras["Estimador"], cliponaxis=False,
+                width=ancho_barra, cliponaxis=False,
                 customdata=datos_hover(periodos_completos, grupo["Estimador"], unidad),
                 hovertemplate="%{customdata[0]}<br>Ejecutado: %{customdata[1]}<extra></extra>")
 
@@ -5290,10 +5291,6 @@ def pagina_gestion_educativa():
                         "maxWidth": "1240px",
                     },
                 ),
-                #html.P("Totales nacionales del sistema educativo y, por separado, la cobertura de Alimentación, "
-                #       "Uniformes, Textos Escolares, Mobiliario y Transporte Escolar. No "
-                #       "incluye montos de inversión. Matrícula, permanencia y riesgos de continuidad requieren "
-                #       "la base de matrícula estudiantil, todavía no conectada a esta vista."),
                 html.P(""),
             ]),
         ]),
