@@ -1276,11 +1276,38 @@ app.index_string = """<!DOCTYPE html>
           font-size: 9px !important; line-height: 1.35 !important;
           text-align: justify;
         }
-        .instituciones-anio-control {
+        .instituciones-anio-control,
+        .estudiantes-anio-control,
+        .docentes-anio-control {
           margin-bottom: 8px !important;
+          display: grid !important;
+          grid-template-columns: 76px 150px;
+          align-items: center;
+          gap: 5px;
         }
-        .instituciones-anio-control > span {
+        .instituciones-anio-control > span,
+        .estudiantes-anio-control > span,
+        .docentes-anio-control > span {
           white-space: nowrap;
+        }
+        .instituciones-anio-control .programa-anio-dropdown,
+        .estudiantes-anio-control .programa-anio-dropdown,
+        .docentes-anio-control .programa-anio-dropdown {
+          width: 150px !important;
+          min-width: 150px !important;
+          border-color: #8f80ca !important;
+          box-shadow: none !important;
+          outline: none !important;
+        }
+        .instituciones-anio-control .programa-anio-dropdown:focus,
+        .instituciones-anio-control .programa-anio-dropdown:focus-within,
+        .estudiantes-anio-control .programa-anio-dropdown:focus,
+        .estudiantes-anio-control .programa-anio-dropdown:focus-within,
+        .docentes-anio-control .programa-anio-dropdown:focus,
+        .docentes-anio-control .programa-anio-dropdown:focus-within {
+          border-color: #8f80ca !important;
+          box-shadow: none !important;
+          outline: none !important;
         }
         .instituciones-sostenimientos {
           display: grid !important;
@@ -1290,80 +1317,41 @@ app.index_string = """<!DOCTYPE html>
         }
         .instituciones-sostenimientos .vision-mini-stat {
           min-width: 0;
-          padding: 7px 9px !important;
+          padding: 9px 11px !important;
         }
         .instituciones-sostenimientos .vision-mini-stat span {
           overflow-wrap: anywhere;
-          font-size: 9px !important;
+          /* Igual que las etiquetas "Educación Especial/Ordinaria". */
+          font-size: 12px !important;
+          line-height: 1.2 !important;
+          font-weight: 400 !important;
         }
         .instituciones-sostenimientos .vision-mini-stat strong {
-          font-size: 15px !important;
+          margin-top: 4px !important;
+          font-size: 18px !important;
+          line-height: 1.05 !important;
         }
-        .estudiantes-anio-control {
-          margin-bottom: 8px !important;
-        }
-        .estudiantes-anio-control > span {
-          white-space: nowrap;
-        }
-        .estudiantes-zonas {
-          display: grid;
-          grid-template-columns: repeat(2, minmax(0, 1fr));
-          gap: 7px;
+        .desglose-demografico {
+          display: grid !important;
+          grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+          gap: 7px !important;
           margin-top: 9px;
         }
-        .estudiantes-zona {
+        .desglose-demografico .vision-mini-stat {
           min-width: 0;
-          padding: 7px 9px;
-          border-radius: 10px;
-          background: #f3f4fa;
+          padding: 8px 10px !important;
         }
-        .estudiantes-zona:nth-child(2) {
-          background: #f7f5ea;
+        .desglose-demografico .vision-mini-stat span {
+          overflow-wrap: anywhere;
+          /* Misma jerarquía tipográfica en sexo, área y régimen. */
+          font-size: 12px !important;
+          line-height: 1.2 !important;
+          font-weight: 400 !important;
         }
-        .estudiantes-zona-total {
-          display: flex;
-          align-items: baseline;
-          justify-content: space-between;
-          gap: 6px;
-          padding-bottom: 5px;
-          border-bottom: 1px solid rgba(35, 45, 90, .12);
-        }
-        .estudiantes-zona-total span {
-          color: #626a83;
-          font-size: 9px;
-          font-weight: 800;
-          text-transform: uppercase;
-        }
-        .estudiantes-zona-total strong {
-          color: #17245b;
-          font-size: 15px;
-          font-weight: 900;
-          white-space: nowrap;
-        }
-        .estudiantes-regiones {
-          display: grid;
-          grid-template-columns: repeat(2, minmax(0, 1fr));
-          gap: 5px;
-          padding-top: 5px;
-        }
-        .estudiantes-region {
-          min-width: 0;
-          text-align: center;
-        }
-        .estudiantes-region span,
-        .estudiantes-region strong {
-          display: block;
-        }
-        .estudiantes-region span {
-          color: #727991;
-          font-size: 8px;
-          font-weight: 700;
-        }
-        .estudiantes-region strong {
-          margin-top: 2px;
-          color: #17245b;
-          font-size: 11px;
-          font-weight: 900;
+        .desglose-demografico .vision-mini-stat strong {
+          margin-top: 3px !important;
+          font-size: 17px !important;
+          line-height: 1.05 !important;
           white-space: nowrap;
         }
         /* Ajustes incluidos en app.py para que funcionen aunque el navegador
@@ -4414,22 +4402,42 @@ INSTITUCIONES_EDUCATIVAS_POR_ANIO = {
 }
 
 
-# Serie histórica de estudiantes tomada exclusivamente de la columna
-# "Suma de Total_Estudiantes" de la matriz entregada. Los subtotales Rural y
-# Urbana se desagregan por régimen Costa y Sierra; Galápagos está incluido en
-# Costa tal como consta en la fuente.
+# Series históricas tomadas de los totales de la matriz entregada. Las seis
+# categorías son independientes: sexo, área y régimen escolar. No se presenta
+# un cruce Rural/Urbana por Costa/Sierra.
 ESTUDIANTES_POR_ANIO_LECTIVO = {
     "2023-2024": {
-        "Rural": {"Total": 997456, "Costa": 464371, "Sierra": 533085},
-        "Urbana": {"Total": 3205342, "Costa": 1975137, "Sierra": 1230205},
+        "Total": 4202798, "Hombres": 2116518, "Mujeres": 2086280,
+        "Rural": 997456, "Urbana": 3205342,
+        "Sierra": 1763290, "Costa": 2439508,
     },
     "2024-2025": {
-        "Rural": {"Total": 941760, "Costa": 422676, "Sierra": 519084},
-        "Urbana": {"Total": 3165059, "Costa": 1956788, "Sierra": 1208271},
+        "Total": 4106819, "Hombres": 2067589, "Mujeres": 2039230,
+        "Rural": 941760, "Urbana": 3165059,
+        "Sierra": 1727355, "Costa": 2379464,
     },
     "2025-2026": {
-        "Rural": {"Total": 929157, "Costa": 417113, "Sierra": 512044},
-        "Urbana": {"Total": 3110493, "Costa": 1919170, "Sierra": 1191323},
+        "Total": 4039650, "Hombres": 2034159, "Mujeres": 2005491,
+        "Rural": 929157, "Urbana": 3110493,
+        "Sierra": 1703367, "Costa": 2336283,
+    },
+}
+
+DOCENTES_POR_ANIO_LECTIVO = {
+    "2023-2024": {
+        "Total": 213468, "Hombres": 59257, "Mujeres": 154211,
+        "Rural": 57356, "Urbana": 156112,
+        "Sierra": 99592, "Costa": 113876,
+    },
+    "2024-2025": {
+        "Total": 215030, "Hombres": 59439, "Mujeres": 155591,
+        "Rural": 55633, "Urbana": 159397,
+        "Sierra": 99979, "Costa": 115051,
+    },
+    "2025-2026": {
+        "Total": 217693, "Hombres": 60064, "Mujeres": 157629,
+        "Rural": 56516, "Urbana": 161177,
+        "Sierra": 101094, "Costa": 116599,
     },
 }
 
@@ -4453,7 +4461,6 @@ def _contenido_instituciones_educativas(anio_lectivo):
             ], className=("vision-mini-stat secondary" if i % 2 else "vision-mini-stat"))
             for i, (nombre, valor) in enumerate(sostenimientos.items())
         ], className="vision-card-details instituciones-sostenimientos"),
-        html.Small(f"Año lectivo {anio_lectivo}", className="vision-card-periodo"),
     ]
 
 
@@ -4466,7 +4473,8 @@ def tarjeta_instituciones_educativas():
             html.Span("Año lectivo"),
             dcc.Dropdown(
                 id="instituciones-anio-lectivo",
-                options=[{"label": periodo, "value": periodo} for periodo in periodos],
+                options=[{"label": periodo.replace("-", "–"), "value": periodo}
+                         for periodo in periodos],
                 value=periodo_reciente,
                 clearable=False,
                 searchable=False,
@@ -4491,34 +4499,23 @@ def actualizar_instituciones_educativas(anio_lectivo):
 
 
 def _contenido_estudiantes(anio_lectivo):
-    """Total de estudiantes y desglose territorial del período seleccionado."""
+    """Total y desgloses independientes por sexo, área y régimen escolar."""
     if anio_lectivo not in ESTUDIANTES_POR_ANIO_LECTIVO:
         anio_lectivo = list(ESTUDIANTES_POR_ANIO_LECTIVO)[-1]
-    zonas = ESTUDIANTES_POR_ANIO_LECTIVO[anio_lectivo]
-    total = sum(datos["Total"] for datos in zonas.values())
-
-    bloques_zona = []
-    for zona, datos in zonas.items():
-        bloques_zona.append(html.Div([
-            html.Div([
-                html.Span(zona),
-                html.Strong(formato_valor(datos["Total"])),
-            ], className="estudiantes-zona-total"),
-            html.Div([
-                html.Div([
-                    html.Span(region),
-                    html.Strong(formato_valor(datos[region])),
-                ], className="estudiantes-region")
-                for region in ("Costa", "Sierra")
-            ], className="estudiantes-regiones"),
-        ], className="estudiantes-zona"))
+    datos = ESTUDIANTES_POR_ANIO_LECTIVO[anio_lectivo]
+    categorias = ("Hombres", "Mujeres", "Rural", "Urbana", "Sierra", "Costa")
 
     return [
         html.Div([
-            html.Strong(formato_valor(total), className="vision-card-total"),
+            html.Strong(formato_valor(datos["Total"]), className="vision-card-total"),
         ], className="vision-card-value-row"),
-        html.Div(bloques_zona, className="estudiantes-zonas"),
-        html.Small(f"Año lectivo {anio_lectivo}", className="vision-card-periodo"),
+        html.Div([
+            html.Div([
+                html.Span(categoria),
+                html.Strong(formato_valor(datos[categoria])),
+            ], className=("vision-mini-stat secondary" if i % 2 else "vision-mini-stat"))
+            for i, categoria in enumerate(categorias)
+        ], className="vision-card-details desglose-demografico"),
     ]
 
 
@@ -4531,7 +4528,8 @@ def tarjeta_estudiantes():
             html.Span("Año lectivo"),
             dcc.Dropdown(
                 id="estudiantes-anio-lectivo",
-                options=[{"label": periodo, "value": periodo} for periodo in periodos],
+                options=[{"label": periodo.replace("-", "–"), "value": periodo}
+                         for periodo in periodos],
                 value=periodo_reciente,
                 clearable=False,
                 searchable=False,
@@ -4551,27 +4549,70 @@ def tarjeta_estudiantes():
     Input("estudiantes-anio-lectivo", "value"),
 )
 def actualizar_estudiantes(anio_lectivo):
-    """Actualiza el total y el desglose Rural/Urbana, Costa/Sierra."""
+    """Actualiza el total y los desgloses independientes de estudiantes."""
     return _contenido_estudiantes(anio_lectivo)
+
+
+def _contenido_docentes(anio_lectivo):
+    """Total y desgloses independientes de docentes para el período elegido."""
+    if anio_lectivo not in DOCENTES_POR_ANIO_LECTIVO:
+        anio_lectivo = list(DOCENTES_POR_ANIO_LECTIVO)[-1]
+    datos = DOCENTES_POR_ANIO_LECTIVO[anio_lectivo]
+    categorias = ("Hombres", "Mujeres", "Rural", "Urbana", "Sierra", "Costa")
+    return [
+        html.Div([
+            html.Strong(formato_valor(datos["Total"]), className="vision-card-total"),
+        ], className="vision-card-value-row"),
+        html.Div([
+            html.Div([
+                html.Span(categoria),
+                html.Strong(formato_valor(datos[categoria])),
+            ], className=("vision-mini-stat secondary" if i % 2 else "vision-mini-stat"))
+            for i, categoria in enumerate(categorias)
+        ], className="vision-card-details desglose-demografico"),
+    ]
+
+
+def tarjeta_docentes():
+    """Tarjeta histórica de docentes por sexo, área y régimen escolar."""
+    periodos = list(DOCENTES_POR_ANIO_LECTIVO)
+    periodo_reciente = periodos[-1]
+    return html.Article([
+        html.Div([
+            html.Span("Año lectivo"),
+            dcc.Dropdown(
+                id="docentes-anio-lectivo",
+                options=[{"label": periodo.replace("-", "–"), "value": periodo}
+                         for periodo in periodos],
+                value=periodo_reciente,
+                clearable=False,
+                searchable=False,
+                className="programa-anio-dropdown",
+            ),
+        ], className="programa-anio-control docentes-anio-control"),
+        cabecera_tarjeta("docentes", "Docentes"),
+        html.Div(
+            _contenido_docentes(periodo_reciente),
+            id="docentes-contenido",
+        ),
+    ], className="vision-exec-card generales docentes-historicos-card")
+
+
+@app.callback(
+    Output("docentes-contenido", "children"),
+    Input("docentes-anio-lectivo", "value"),
+)
+def actualizar_docentes(anio_lectivo):
+    """Actualiza el total y los desgloses independientes de docentes."""
+    return _contenido_docentes(anio_lectivo)
 
 
 def tarjetas_datos_generales(epja=None):
     """Cifras de Educación Media y, cuando existe, la fila EPJA del Excel."""
-    d = DATOS_GENERALES_GESTION_EDUCATIVA
-    subtitulo = f"Año lectivo {d['anio_lectivo']}"
     tarjetas = [
         tarjeta_instituciones_educativas(),
         tarjeta_estudiantes(),
-        tarjeta_gestion_educativa(
-            "generales", "Docentes", subtitulo,
-            formato_valor(d["docentes_total"]),
-            detalles=[
-                html.Div([html.Span("Mujeres"), html.Strong(formato_valor(d["docentes_mujeres"]))],
-                         className="vision-mini-stat"),
-                html.Div([html.Span("Hombres"), html.Strong(formato_valor(d["docentes_hombres"]))],
-                         className="vision-mini-stat secondary"),
-            ],
-        ),
+        tarjeta_docentes(),
     ]
     if epja is not None:
         tarjetas.append(tarjeta_gestion_educativa(
@@ -5256,10 +5297,11 @@ def pagina_gestion_educativa():
                         "maxWidth": "1240px",
                     },
                 ),
-                html.P("Totales nacionales del sistema educativo y, por separado, la cobertura de Alimentación, "
-                       "Uniformes, Textos Escolares, Mobiliario y Transporte Escolar. No "
-                       "incluye montos de inversión. Matrícula, permanencia y riesgos de continuidad requieren "
-                       "la base de matrícula estudiantil, todavía no conectada a esta vista."),
+                #html.P("Totales nacionales del sistema educativo y, por separado, la cobertura de Alimentación, "
+                #       "Uniformes, Textos Escolares, Mobiliario y Transporte Escolar. No "
+                #       "incluye montos de inversión. Matrícula, permanencia y riesgos de continuidad requieren "
+                #       "la base de matrícula estudiantil, todavía no conectada a esta vista."),
+                html.P(""),
             ]),
         ]),
 
