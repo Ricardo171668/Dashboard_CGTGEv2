@@ -2530,7 +2530,7 @@ def menu_lateral(seccion_activa=None, vice_activo=None, indicador_activo=None):
                                      .sort_values("Orden sección")[cfg["vice_col"]].tolist())
                 else:
                     opciones_vice = sorted(df[cfg["vice_col"]].dropna().unique())
-                    if codigo == "pnd":
+                    if codigo in {"pnd", "presupuesto"}:
                         # Orden institucional de los cinco ejes estratégicos.
                         # Las dependencias que no pertenecen a esos cinco ejes
                         # se conservan después, sin eliminarlas.
@@ -2555,13 +2555,6 @@ def menu_lateral(seccion_activa=None, vice_activo=None, indicador_activo=None):
                             if _normalizar_encabezado_presupuesto(x)
                             not in {"SIN_CLASIFICACION", "SIN_CLASIFICAR", "NO_APLICA"}
                         ]
-                        opciones_vice = sorted(
-                            opciones_vice,
-                            key=lambda x: (
-                                str(x).strip().lower() == "coordinaciones generales",
-                                str(x).lower(),
-                            ),
-                        )
                         opciones_vice = ["General"] + opciones_vice
                 for vice in opciones_vice:
                     abierto = vice == vice_activo
