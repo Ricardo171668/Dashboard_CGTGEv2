@@ -3991,8 +3991,8 @@ def _tarjeta_beca_educacion_superior(dato):
             html.Strong(dato["inversion"]),
         ], className="programa-metrica-periodo inversion"),
         html.Div([
-            html.Span("Actualización: conforme a planificación de cada programa"),
             html.Span("Corte: octubre 2026"),
+            html.Span("Actualización: conforme a planificación de cada programa"),
         ], className="educacion-media-periodo-pie"),
     ], className="vision-exec-card becas programa-con-ayuda", tabIndex=0)
 
@@ -4681,6 +4681,7 @@ def pagina_educacion_superior():
         html.Div(
             className="vision-exec-grid gestion-educativa-grid programas-servicios-grid",
             children=tarjetas_becas_educacion_superior(),
+            style={"gridTemplateColumns": "repeat(3, minmax(0, 1fr))"},
         ),
     ])
 
