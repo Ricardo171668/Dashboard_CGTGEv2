@@ -1259,18 +1259,18 @@ app.index_string = """<!DOCTYPE html>
           color: #515b7a; font-size: 10px; font-weight: 900;
           text-transform: uppercase;
         }
-        .safpi-estudiantes-fila {
+        .programa-estudiantes-regimen-fila {
           display: grid;
           grid-template-columns: minmax(0, 1fr) repeat(2, minmax(72px, .48fr));
           align-items: stretch;
           gap: 8px;
           margin: 0 0 8px;
         }
-        .safpi-estudiantes-fila .programa-estudiantes-principal {
+        .programa-estudiantes-regimen-fila .programa-estudiantes-principal {
           margin: 0;
           align-self: center;
         }
-        .safpi-regimen-mini {
+        .programa-regimen-mini {
           min-width: 0;
           padding: 7px 6px;
           border: 1px solid #f8f4e8;
@@ -1278,7 +1278,7 @@ app.index_string = """<!DOCTYPE html>
           background: #f8f4e8;
           text-align: center;
         }
-        .safpi-regimen-mini span {
+        .programa-regimen-mini span {
           display: block;
           color: #69738c;
           font-size: 8px;
@@ -1286,7 +1286,7 @@ app.index_string = """<!DOCTYPE html>
           line-height: 1.1;
           text-transform: uppercase;
         }
-        .safpi-regimen-mini strong {
+        .programa-regimen-mini strong {
           display: block;
           margin-top: 4px;
           color: #17245b;
@@ -1375,6 +1375,37 @@ app.index_string = """<!DOCTYPE html>
           margin-top: 3px !important;
           font-size: 17px !important;
           line-height: 1.05 !important;
+        }
+        /* Los recursos educativos (Alimentación, Uniformes, Textos, etc.)
+           manejan cifras de estudiantes mucho más grandes que SAFPI/NAP
+           (hasta 7 dígitos), así que reducimos un poco más estos tamaños
+           para que "Estudiantes" y los números de Costa/Sierra no se
+           corten dentro del cuadro. */
+        .recurso-educativo-actualizado .programa-estudiantes-principal {
+          flex-wrap: wrap;
+          row-gap: 0;
+        }
+        .recurso-educativo-actualizado .programa-estudiantes-principal strong,
+        .recurso-educativo-actualizado .programa-estudiantes-principal span {
+          min-width: 0;
+        }
+        .recurso-educativo-actualizado .programa-estudiantes-principal strong {
+          font-size: clamp(18px, 1.5vw, 26px);
+        }
+        .recurso-educativo-actualizado .programa-estudiantes-principal span {
+          font-size: 7px;
+          white-space: normal;
+          overflow-wrap: break-word;
+        }
+        .recurso-educativo-actualizado .programa-regimen-mini {
+          min-width: 0;
+          padding: 6px 4px;
+        }
+        .recurso-educativo-actualizado .programa-regimen-mini strong {
+          font-size: clamp(10px, .85vw, 13px);
+          white-space: normal;
+          overflow-wrap: break-word;
+          word-break: break-word;
         }
         .recurso-resumen-nacional {
           display: grid;
@@ -3828,11 +3859,18 @@ PROGRAMAS_CON_DETALLE = {
             "facilita su reincorporación al grado o curso correspondiente a su edad."
         ),
         "filas": [
-            ("2023-2024", "6.650", "322", "$ 4.116.686,02"),
+            ("2023-2024", "6.660", "322", "$ 4.116.686,02"),
             ("2024-2025", "8.172", "385", "$ 4.925.974,59"),
-            ("2025-2026", "7.812", "401", "$ 5.134.700,42"),
+            ("2025-2026", "7.810", "401", "$ 5.134.700,42"),
             ("2026-2027", "8.232", "398", "$ 5.101.062,20"),
         ],
+        "regimenes": {
+            "2023-2024": {"Costa": 2831, "Sierra": 3829},
+            "2024-2025": {"Costa": 3463, "Sierra": 4709},
+            "2025-2026": {"Costa": 3313, "Sierra": 4497},
+            "2026-2027": {"Costa": 3492, "Sierra": 4740},
+        },
+        "actualizacion": "julio y diciembre de cada año",
         "nota": "Fuente: Registros administrativos MINEDEC_DEIB.",
     },
 }
@@ -4001,7 +4039,7 @@ def _metricas_programa_por_anio(clave, anio):
         html.Strong(estudiantes),
         html.Span("Estudiantes"),
     ], className="programa-estudiantes-principal")
-    if clave == "safpi":
+    if clave in {"safpi", "nap"}:
         regimenes = detalle.get("regimenes", {}).get(anio, {})
         fila_estudiantes = html.Div([
             estudiantes_principal,
@@ -4009,10 +4047,10 @@ def _metricas_programa_por_anio(clave, anio):
                 html.Div([
                     html.Span(regimen),
                     html.Strong(formato_valor(valor)),
-                ], className="safpi-regimen-mini")
+                ], className="programa-regimen-mini")
                 for regimen, valor in regimenes.items()
             ],
-        ], className="safpi-estudiantes-fila")
+        ], className="programa-estudiantes-regimen-fila")
     else:
         fila_estudiantes = estudiantes_principal
 
@@ -4033,7 +4071,7 @@ def _metricas_programa_por_anio(clave, anio):
     ultimo_periodo = detalle["filas"][-1][0]
     if nota and (not es_nota_condicional or anio == ultimo_periodo):
         contenido.append(html.P(nota, className="programa-periodo-nota"))
-    if clave == "safpi":
+    if clave in {"safpi", "nap"}:
         contenido.append(html.Div([
             html.Span(f"Año lectivo {str(anio).replace('-', '–')}"),
             html.Span(
@@ -5590,28 +5628,30 @@ DEFINICIONES_RECURSOS_GESTION = {
 
 
 def tarjeta_recurso_educativo(dato):
-    """Resumen nacional y desglose Costa/Sierra de un recurso educativo."""
+    """Resumen nacional y desglose Costa/Sierra de un recurso educativo, en
+    el mismo formato compacto (cuadros Costa/Sierra) que usan SAFPI y NAP:
+    el número principal de Estudiantes con los dos cuadros de régimen al
+    lado, y Instituciones/Inversión nacional debajo."""
     codigo = dato["codigo"]
     nacional = dato["nacional"]
+    regimen = dato["regimen"]
     ayuda = DEFINICIONES_RECURSOS_GESTION.get(codigo, (None, None))
-    paneles_regimen = []
-    for i, (regimen, valores) in enumerate(dato["regimen"].items()):
-        paneles_regimen.append(html.Div([
-            html.H4(regimen),
+
+    estudiantes_principal = html.Div([
+        html.Strong(formato_valor(nacional["estudiantes"])),
+        html.Span("Estudiantes"),
+    ], className="programa-estudiantes-principal")
+
+    fila_estudiantes = html.Div([
+        estudiantes_principal,
+        *[
             html.Div([
-                html.Span("Instituciones"),
-                html.Strong(formato_valor(valores["instituciones"])),
-            ], className="recurso-regimen-fila"),
-            html.Div([
-                html.Span("Estudiantes"),
+                html.Span(nombre_regimen),
                 html.Strong(formato_valor(valores["estudiantes"])),
-            ], className="recurso-regimen-fila"),
-            html.Div([
-                html.Span("Inversión"),
-                html.Strong(valores["inversion"]),
-            ], className="recurso-regimen-fila inversion"),
-        ], className=("recurso-regimen-panel secondary" if i % 2
-                      else "recurso-regimen-panel")))
+            ], className="programa-regimen-mini")
+            for nombre_regimen, valores in regimen.items()
+        ],
+    ], className="programa-estudiantes-regimen-fila")
 
     return html.Article([
         _ayuda_tarjeta(ayuda[0], ayuda[1]) if all(ayuda) else None,
@@ -5620,20 +5660,18 @@ def tarjeta_recurso_educativo(dato):
             f"{ayuda[0]} {ayuda[1]}" if all(ayuda) else None,
         ),
         html.Div([
-            html.Strong(formato_valor(nacional["estudiantes"]), className="vision-card-total"),
-            html.Span("Estudiantes", className="vision-card-unit"),
-        ], className="vision-card-value-row"),
-        html.Div([
+            fila_estudiantes,
             html.Div([
-                html.Span("Instituciones"),
-                html.Strong(formato_valor(nacional["instituciones"])),
-            ], className="programa-metrica-periodo"),
-            html.Div([
-                html.Span("Inversión nacional"),
-                html.Strong(nacional["inversion"]),
-            ], className="programa-metrica-periodo inversion"),
-        ], className="recurso-resumen-nacional"),
-        html.Div(paneles_regimen, className="recurso-regimenes"),
+                html.Div([
+                    html.Span("Instituciones"),
+                    html.Strong(formato_valor(nacional["instituciones"])),
+                ], className="programa-metrica-periodo"),
+                html.Div([
+                    html.Span("Inversión"),
+                    html.Strong(nacional["inversion"]),
+                ], className="programa-metrica-periodo inversion"),
+            ], className="programa-desglose-inferior"),
+        ], className="programa-metricas-priorizadas"),
         html.Div([
             html.Span("Año lectivo 2025–2026"),
             html.Span("Actualización: diciembre de cada año"),
