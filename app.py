@@ -2589,6 +2589,9 @@ app.index_string = """<!DOCTYPE html>
         .cultura-programa-desglose {
           grid-template-columns: repeat(3, minmax(0, 1fr));
         }
+        .cultura-programa-desglose.items-4 {
+          grid-template-columns: repeat(2, minmax(0, 1fr));
+        }
         .cultura-resumen-item,
         .cultura-programa-metrica {
           display: flex;
@@ -4974,8 +4977,25 @@ def seccion_informacion_general_deporte():
     ], className="deporte-informacion-general")
 
 
-# Información general de Cultura. Cada encabezado de la matriz corresponde a
-# una tarjeta y sus filas se presentan como desagregaciones internas.
+# Información general y programas de Cultura, actualizados con el corte
+# institucional entregado el 21-10-2026. Las fuentes y explicaciones se
+# presentan al pasar el cursor por cada tarjeta, no como notas sueltas.
+DESCRIPCION_RUAC = (
+    "El Registro Único de Artistas y Gestores Culturales (RUAC) es una "
+    "herramienta que consolida información de profesionales, trabajadores, "
+    "colectivos, empresas y organizaciones del sector cultural y artístico, "
+    "tanto a nivel nacional como en el exterior o en situación de movilidad "
+    "humana. La incorporación es voluntaria y la actualización es permanente."
+)
+
+DESCRIPCION_REPOSITORIOS = (
+    "La información corresponde a los repositorios y visitas de usuarios de "
+    "los servicios que ofrecen los museos, archivos y bibliotecas de las "
+    "Entidades Operativas Desconcentradas adscritas al ente rector de la "
+    "Cultura y el Patrimonio. La actualización es permanente y la información "
+    "se consolida trimestralmente."
+)
+
 DATOS_INFORMACION_GENERAL_CULTURA = [
     {
         "codigo": "cultura",
@@ -4985,139 +5005,217 @@ DATOS_INFORMACION_GENERAL_CULTURA = [
             ("Patrimonio cultural", 916),
             ("Memoria social", 479),
         ],
-        "periodo": "Corte: julio de 2026",
+        "pie": ["Año 2026", "Fecha de corte: 21-10-2026",
+                "Actualización: permanente"],
+        "descripcion": DESCRIPCION_RUAC,
     },
     {
         "codigo": "organizaciones",
         "titulo": "Organizaciones sociales y empresas culturales",
         "items": [
-            ("Organizaciones sociales", 227),
-            ("Empresa cultural", 482),
+            ("Organizaciones sociales", 252),
+            ("Empresa cultural", 488),
         ],
-        "periodo": "Corte: julio de 2026",
+        "pie": ["Año 2026", "Fecha de corte: 21-10-2026",
+                "Actualización: permanente"],
+        "descripcion": DESCRIPCION_RUAC,
     },
     {
         "codigo": "patrimonio-cultural",
         "titulo": "Espacios e infraestructura",
         "items": [
-            ("Museos", None),
-            ("Archivos", None),
-            ("Bibliotecas", None),
-            ("Teatro", None),
+            ("Museos", 20),
+            ("Archivos", 3),
+            ("Bibliotecas", 2),
         ],
-        "periodo": "Información pendiente",
-    },
-    {
-        "codigo": "cultura",
-        "titulo": "Colectivos",
-        "items": [
-            ("Gremios", None),
-            ("Asociaciones", None),
-        ],
-        "periodo": "Información pendiente",
+        "pie": ["Año 2025", "Fecha de corte: diciembre de 2025",
+                "Actualización: permanente · consolidación trimestral"],
+        "descripcion": DESCRIPCION_REPOSITORIOS,
     },
 ]
 
 
-# Estructura prevista en la matriz de Cultura. Todavía no contiene cifras,
-# pero se deja lista para incorporarlas sin rediseñar la página.
 PROGRAMAS_SERVICIOS_CULTURA = [
     {
         "codigo": "memoria-social",
         "titulo": "Visitas de repositorios de la memoria social",
         "anios": ["2023", "2024", "2025"],
         "categorias": ["Museos", "Archivos", "Bibliotecas"],
+        "valores": {
+            "2023": {"Museos": 1199962, "Archivos": 15638, "Bibliotecas": 25826},
+            "2024": {"Museos": 1226390, "Archivos": 16605, "Bibliotecas": 27601},
+            "2025": {"Museos": 1614640, "Archivos": 26552, "Bibliotecas": 20915},
+        },
+        "corte": "Fecha de corte: diciembre de 2025",
+        "actualizacion": "Actualización: permanente · consolidación trimestral",
+        "descripcion": DESCRIPCION_REPOSITORIOS,
     },
     {
-        "codigo": "cultura",
-        "titulo": "Beneficiarios de Líneas de Fomento",
-        "anios": ["2023", "2024", "2025"],
-        "categorias": ["Artes e innovación", "Memoria social", "Patrimonio cultural"],
+        "codigo": "linea-fomento",
+        "titulo": "Beneficiarios de Línea de Fomento",
+        "anios": ["2024", "2025", "2026"],
+        "categorias": [
+            "Creación cinematográfica y audiovisual",
+            "Artes y la creatividad",
+            "Memoria social y patrimonio cultural",
+            "Festival Internacional de Artes Vivas de Loja",
+        ],
+        "valores": {
+            "2024": {
+                "Creación cinematográfica y audiovisual": 35,
+                "Artes y la creatividad": 474,
+                "Memoria social y patrimonio cultural": 90,
+                "Festival Internacional de Artes Vivas de Loja": None,
+            },
+            "2025": {
+                "Creación cinematográfica y audiovisual": 27,
+                "Artes y la creatividad": 416,
+                "Memoria social y patrimonio cultural": 81,
+                "Festival Internacional de Artes Vivas de Loja": None,
+            },
+            "2026": {
+                "Creación cinematográfica y audiovisual": 73,
+                "Artes y la creatividad": 149,
+                "Memoria social y patrimonio cultural": 36,
+                "Festival Internacional de Artes Vivas de Loja": 10,
+            },
+        },
+        "corte": "Fecha de corte: 21-10-2026",
+        "actualizacion": "Actualización: conforme a las convocatorias de cada período",
+        "descripcion": (
+            "La información corresponde a los proyectos seleccionados "
+            "(ganadores) de cada línea de financiamiento en el año "
+            "correspondiente. La actualización se realiza de acuerdo con las "
+            "convocatorias efectuadas dentro de cada período."
+        ),
     },
     {
-        "codigo": "cultura",
-        "titulo": "Festival Internacional de Artes Vivas de Loja",
+        "codigo": "festival-loja",
+        "titulo": "Festival de Loja",
         "anios": ["2024", "2025"],
-        "categorias": ["Asistentes", "Artistas", "Eventos"],
+        "categorias": [
+            "Asistentes",
+            "Artistas (trabajadores de la cultura)",
+            "Eventos (funciones y clases)",
+        ],
+        "valores": {
+            "2024": {
+                "Asistentes": 120163,
+                "Artistas (trabajadores de la cultura)": 4260,
+                "Eventos (funciones y clases)": 273,
+            },
+            "2025": {
+                "Asistentes": 164077,
+                "Artistas (trabajadores de la cultura)": 7002,
+                "Eventos (funciones y clases)": 310,
+            },
+        },
+        "corte": "Último período disponible: 2025",
+        "actualizacion": "Actualización: anual",
+        "descripcion": (
+            "El Festival de Loja es el encuentro cultural más importante del "
+            "Ecuador. Se celebra cada mes de noviembre en la ciudad de Loja, "
+            "transformando teatros, calles, parques y plazas en un gran "
+            "escenario abierto para el teatro, la danza, la ópera, el circo y "
+            "la música."
+        ),
     },
 ]
 
 
 def _tarjeta_resumen_cultura(dato, color):
-    """Tarjeta principal con la desagregación de una tabla de Cultura."""
+    """Tarjeta general con cifras, corte y explicación emergente."""
     items = [
         html.Div([
             html.Span(etiqueta),
-            html.Strong(formato_valor(valor) if valor is not None else "—"),
-        ], className=("programa-metrica-periodo cultura-resumen-item"
-                      + (" pendiente" if valor is None else "")))
+            html.Strong(formato_valor(valor)),
+        ], className="programa-metrica-periodo cultura-resumen-item")
         for etiqueta, valor in dato["items"]
     ]
     return html.Article([
+        _ayuda_tarjeta(dato["titulo"] + ".", dato["descripcion"]),
         cabecera_tarjeta(dato["codigo"], dato["titulo"]),
         html.Div(items, className=f"cultura-resumen-desglose items-{len(items)}"),
+        html.Div(
+            [html.Span(linea) for linea in dato["pie"]],
+            className="educacion-media-periodo-pie",
+        ),
+    ], className=(f"vision-exec-card programa-resumen-card programa-con-ayuda "
+                  f"cultura-resumen-card programa-{color} {dato['codigo']}"),
+       tabIndex=0)
+
+
+def _metricas_programa_cultura(dato, anio):
+    """Valores y pie del año escogido en una tarjeta cultural."""
+    if anio not in dato["anios"]:
+        anio = dato["anios"][-1]
+    valores = dato["valores"].get(anio, {})
+    metricas = []
+    for categoria in dato["categorias"]:
+        valor = valores.get(categoria)
+        metricas.append(html.Div([
+            html.Span(categoria),
+            html.Strong(formato_valor(valor) if valor is not None else "—"),
+        ], className=("programa-metrica-periodo cultura-programa-metrica"
+                      + (" pendiente" if valor is None else ""))))
+    return [
+        html.Div(
+            metricas,
+            className=f"cultura-programa-desglose items-{len(metricas)}",
+        ),
         html.Div([
-            html.Span(dato["periodo"]),
-            html.Span("Actualización: conforme al corte institucional"),
+            html.Span(f"Año {anio}"),
+            html.Span(dato["corte"]),
+            html.Span(dato["actualizacion"]),
         ], className="educacion-media-periodo-pie"),
-    ], className=(f"vision-exec-card programa-resumen-card "
-                  f"cultura-resumen-card programa-{color} {dato['codigo']}"))
+    ]
 
 
 def _tarjeta_programa_cultura(dato, color):
-    """Reserva visual con el mismo patrón de SAFPI/NAP, aún sin valores."""
+    """Programa cultural con selector y actualización independiente."""
     anio_inicial = dato["anios"][-1]
-    metricas = [
-        html.Div([
-            html.Span(categoria),
-            html.Strong("—"),
-        ], className="programa-metrica-periodo cultura-programa-metrica pendiente")
-        for categoria in dato["categorias"]
-    ]
     return html.Article([
+        _ayuda_tarjeta(dato["titulo"] + ".", dato["descripcion"]),
         html.Div([
             html.Span("Año"),
             dcc.Dropdown(
+                id={"type": "cultura-programa-anio", "index": dato["codigo"]},
                 options=[{"label": anio, "value": anio} for anio in dato["anios"]],
                 value=anio_inicial, clearable=False, searchable=False,
                 className="programa-anio-dropdown",
             ),
         ], className="programa-anio-control"),
         cabecera_tarjeta(dato["codigo"], dato["titulo"]),
-        html.Div(metricas, className="cultura-programa-desglose"),
-        html.Div([
-            html.Span(f"Año {anio_inicial}"),
-            html.Span("Actualización: pendiente de carga"),
-        ], className="educacion-media-periodo-pie"),
-    ], className=(f"vision-exec-card programa-resumen-card "
-                  f"cultura-programa-card programa-{color} {dato['codigo']}"))
+        html.Div(
+            _metricas_programa_cultura(dato, anio_inicial),
+            id={"type": "cultura-programa-metricas", "index": dato["codigo"]},
+        ),
+    ], className=(f"vision-exec-card programa-resumen-card programa-con-ayuda "
+                  f"cultura-programa-card programa-{color} {dato['codigo']}"),
+       tabIndex=0)
 
 
 def seccion_informacion_general_cultura():
-    """Cuatro tablas generales de Cultura convertidas en tarjetas ejecutivas."""
+    """Tres cuadros generales de Cultura con el último corte disponible."""
     return html.Div([
         html.H2("Información general", className="vision-eje-banner"),
         html.Div(
             [_tarjeta_resumen_cultura(dato, color)
              for dato, color in zip(
                  DATOS_INFORMACION_GENERAL_CULTURA,
-                 ["azul", "verde", "morado", "amarillo"],
+                 ["azul", "verde", "morado"],
              )],
             className=("vision-exec-grid gestion-educativa-grid "
                        "programas-servicios-grid cultura-resumen-grid"),
         ),
-        html.P([
-            html.Strong("Fuente: "),
-            "Registro Único de Artistas y Gestores Culturales.",
-        ], className="eje2-source-note cultura-informacion-fuente"),
     ], className="cultura-informacion-general")
 
 
 def seccion_programas_servicios_cultura():
-    """Tres tablas previstas por Cultura, visibles aun cuando falten cifras."""
+    """Programas culturales con cifras históricas seleccionables."""
     return html.Div([
         html.H2("Programas y servicios de Cultura", className="vision-eje-banner"),
-        html.P("Espacios preparados para incorporar las cifras institucionales por año.",
+        html.P("Cifras consolidadas de los programas y servicios institucionales.",
                className="eje1-subtitulo"),
         html.Div(
             [_tarjeta_programa_cultura(dato, color)
@@ -5129,6 +5227,21 @@ def seccion_programas_servicios_cultura():
                        "programas-servicios-grid cultura-programas-grid"),
         ),
     ], className="cultura-programas-servicios")
+
+
+@app.callback(
+    Output({"type": "cultura-programa-metricas", "index": MATCH}, "children"),
+    Input({"type": "cultura-programa-anio", "index": MATCH}, "value"),
+    State({"type": "cultura-programa-anio", "index": MATCH}, "id"),
+)
+def actualizar_metricas_cultura(anio, identificador):
+    """Actualiza solo la tarjeta cultural cuyo año cambió."""
+    codigo = identificador["index"]
+    dato = next(
+        (d for d in PROGRAMAS_SERVICIOS_CULTURA if d["codigo"] == codigo),
+        PROGRAMAS_SERVICIOS_CULTURA[0],
+    )
+    return _metricas_programa_cultura(dato, anio)
 
 
 EJES_VICEMINISTERIALES = {
