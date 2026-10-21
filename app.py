@@ -2537,6 +2537,133 @@ app.index_string = """<!DOCTYPE html>
             overflow-wrap: break-word !important;
           }
         }
+
+        /* Cultura reutiliza el lenguaje visual de Gestión Educativa:
+           tarjetas, selector de período, métricas internas y pie de corte. */
+        .cultura-resumen-grid,
+        .cultura-programas-grid {
+          width: 100% !important;
+          max-width: none !important;
+          gap: 12px !important;
+          margin: 12px 0 18px;
+        }
+        .cultura-resumen-grid {
+          grid-template-columns: repeat(6, minmax(0, 1fr)) !important;
+        }
+        .cultura-resumen-grid > .cultura-resumen-card {
+          grid-column: span 2;
+          width: auto !important;
+          min-width: 0 !important;
+          max-width: none !important;
+          min-height: 220px;
+          align-self: stretch !important;
+        }
+        .cultura-resumen-grid > .cultura-resumen-card:nth-child(4) {
+          grid-column: 3 / span 2;
+        }
+        .cultura-programas-grid {
+          grid-template-columns: repeat(3, minmax(0, 1fr)) !important;
+        }
+        .cultura-programas-grid > .cultura-programa-card {
+          width: auto !important;
+          min-width: 0 !important;
+          max-width: none !important;
+          min-height: 255px;
+          align-self: stretch !important;
+        }
+        .cultura-resumen-card .vision-card-title-row,
+        .cultura-programa-card .vision-card-title-row {
+          min-height: 42px;
+          align-items: center !important;
+        }
+        .cultura-resumen-card .vision-card-label,
+        .cultura-programa-card .vision-card-label {
+          min-height: 0 !important;
+          color: #17245b;
+          font-size: 12px !important;
+          line-height: 1.2 !important;
+          font-weight: 900 !important;
+          overflow-wrap: anywhere;
+        }
+        .cultura-resumen-desglose,
+        .cultura-programa-desglose {
+          display: grid;
+          grid-template-columns: repeat(2, minmax(0, 1fr));
+          gap: 8px;
+          margin: 8px 0 10px;
+        }
+        .cultura-resumen-desglose.items-3,
+        .cultura-programa-desglose {
+          grid-template-columns: repeat(3, minmax(0, 1fr));
+        }
+        .cultura-resumen-item,
+        .cultura-programa-metrica {
+          display: flex;
+          flex-direction: column;
+          align-items: center;
+          justify-content: center;
+          min-width: 0;
+          min-height: 76px;
+          padding: 9px 6px;
+        }
+        .cultura-resumen-item:nth-child(even),
+        .cultura-programa-metrica:nth-child(even) {
+          background: #f8f4e8;
+        }
+        .cultura-resumen-item span,
+        .cultura-programa-metrica span {
+          min-height: 22px;
+          font-size: 9px !important;
+          line-height: 1.15;
+          overflow-wrap: anywhere;
+        }
+        .cultura-resumen-item strong,
+        .cultura-programa-metrica strong {
+          font-size: clamp(18px, 1.45vw, 24px) !important;
+        }
+        .cultura-resumen-item.pendiente strong,
+        .cultura-programa-metrica.pendiente strong {
+          color: #9aa2b3;
+        }
+        @media (min-width: 701px) and (max-width: 1400px) {
+          .cultura-resumen-grid,
+          .cultura-programas-grid {
+            grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+          }
+          .cultura-resumen-grid > .cultura-resumen-card,
+          .cultura-resumen-grid > .cultura-resumen-card:nth-child(4) {
+            grid-column: auto !important;
+          }
+          .cultura-programas-grid > .cultura-programa-card:last-child {
+            grid-column: 1 / -1;
+            width: calc(50% - 7px) !important;
+            justify-self: center;
+          }
+        }
+        @media (max-width: 700px) {
+          .cultura-resumen-grid,
+          .cultura-programas-grid {
+            grid-template-columns: minmax(0, 1fr) !important;
+            gap: 12px;
+          }
+          .cultura-resumen-grid > .cultura-resumen-card,
+          .cultura-resumen-grid > .cultura-resumen-card:nth-child(4),
+          .cultura-programas-grid > .cultura-programa-card,
+          .cultura-programas-grid > .cultura-programa-card:last-child {
+            grid-column: 1;
+            width: 100% !important;
+          }
+          .cultura-resumen-desglose.items-3 {
+            grid-template-columns: repeat(3, minmax(0, 1fr));
+          }
+          .cultura-programa-desglose {
+            grid-template-columns: repeat(3, minmax(0, 1fr));
+          }
+          .cultura-resumen-item strong,
+          .cultura-programa-metrica strong {
+            font-size: clamp(18px, 6vw, 23px) !important;
+          }
+        }
         </style>
         <script>
         window.MathJax = {
@@ -4858,52 +4985,161 @@ def seccion_informacion_general_deporte():
     ], className="deporte-informacion-general")
 
 
-# Información general de Cultura. Solo se publican categorías que tienen un
-# valor registrado en la matriz entregada por el Viceministerio de Cultura.
-DATOS_ARTISTAS_GESTORES_CULTURA = [
-    ("artes-innovacion", "Artes e innovación", 23990, "Beneficiarios"),
-    ("patrimonio-cultural", "Patrimonio cultural", 916, "Beneficiarios"),
-    ("memoria-social", "Memoria social", 479, "Beneficiarios"),
+# Información general de Cultura. Cada encabezado de la matriz corresponde a
+# una tarjeta y sus filas se presentan como desagregaciones internas.
+DATOS_INFORMACION_GENERAL_CULTURA = [
+    {
+        "codigo": "cultura",
+        "titulo": "Artistas y gestores culturales",
+        "items": [
+            ("Artes e innovación", 23990),
+            ("Patrimonio cultural", 916),
+            ("Memoria social", 479),
+        ],
+        "periodo": "Corte: julio de 2026",
+    },
+    {
+        "codigo": "organizaciones",
+        "titulo": "Organizaciones sociales y empresas culturales",
+        "items": [
+            ("Organizaciones sociales", 227),
+            ("Empresa cultural", 482),
+        ],
+        "periodo": "Corte: julio de 2026",
+    },
+    {
+        "codigo": "patrimonio-cultural",
+        "titulo": "Espacios e infraestructura",
+        "items": [
+            ("Museos", None),
+            ("Archivos", None),
+            ("Bibliotecas", None),
+            ("Teatro", None),
+        ],
+        "periodo": "Información pendiente",
+    },
+    {
+        "codigo": "cultura",
+        "titulo": "Colectivos",
+        "items": [
+            ("Gremios", None),
+            ("Asociaciones", None),
+        ],
+        "periodo": "Información pendiente",
+    },
 ]
 
-DATOS_ORGANIZACIONES_CULTURA = [
-    ("organizaciones-sociales", "Organizaciones sociales", 227, "Organizaciones"),
-    ("empresa-cultural", "Empresa cultural", 482, "Empresas"),
+
+# Estructura prevista en la matriz de Cultura. Todavía no contiene cifras,
+# pero se deja lista para incorporarlas sin rediseñar la página.
+PROGRAMAS_SERVICIOS_CULTURA = [
+    {
+        "codigo": "memoria-social",
+        "titulo": "Visitas de repositorios de la memoria social",
+        "anios": ["2023", "2024", "2025"],
+        "categorias": ["Museos", "Archivos", "Bibliotecas"],
+    },
+    {
+        "codigo": "cultura",
+        "titulo": "Beneficiarios de Líneas de Fomento",
+        "anios": ["2023", "2024", "2025"],
+        "categorias": ["Artes e innovación", "Memoria social", "Patrimonio cultural"],
+    },
+    {
+        "codigo": "cultura",
+        "titulo": "Festival Internacional de Artes Vivas de Loja",
+        "anios": ["2024", "2025"],
+        "categorias": ["Asistentes", "Artistas", "Eventos"],
+    },
 ]
 
-def _tarjetas_informacion_general_cultura(datos):
-    return [
-        tarjeta_gestion_educativa(
-            codigo, titulo, None, formato_valor(valor), unidad=unidad,
-            periodo="Corte: julio de 2026",
-        )
-        for codigo, titulo, valor, unidad in datos
-        if valor is not None
+
+def _tarjeta_resumen_cultura(dato, color):
+    """Tarjeta principal con la desagregación de una tabla de Cultura."""
+    items = [
+        html.Div([
+            html.Span(etiqueta),
+            html.Strong(formato_valor(valor) if valor is not None else "—"),
+        ], className=("programa-metrica-periodo cultura-resumen-item"
+                      + (" pendiente" if valor is None else "")))
+        for etiqueta, valor in dato["items"]
     ]
+    return html.Article([
+        cabecera_tarjeta(dato["codigo"], dato["titulo"]),
+        html.Div(items, className=f"cultura-resumen-desglose items-{len(items)}"),
+        html.Div([
+            html.Span(dato["periodo"]),
+            html.Span("Actualización: conforme al corte institucional"),
+        ], className="educacion-media-periodo-pie"),
+    ], className=(f"vision-exec-card programa-resumen-card "
+                  f"cultura-resumen-card programa-{color} {dato['codigo']}"))
+
+
+def _tarjeta_programa_cultura(dato, color):
+    """Reserva visual con el mismo patrón de SAFPI/NAP, aún sin valores."""
+    anio_inicial = dato["anios"][-1]
+    metricas = [
+        html.Div([
+            html.Span(categoria),
+            html.Strong("—"),
+        ], className="programa-metrica-periodo cultura-programa-metrica pendiente")
+        for categoria in dato["categorias"]
+    ]
+    return html.Article([
+        html.Div([
+            html.Span("Año"),
+            dcc.Dropdown(
+                options=[{"label": anio, "value": anio} for anio in dato["anios"]],
+                value=anio_inicial, clearable=False, searchable=False,
+                className="programa-anio-dropdown",
+            ),
+        ], className="programa-anio-control"),
+        cabecera_tarjeta(dato["codigo"], dato["titulo"]),
+        html.Div(metricas, className="cultura-programa-desglose"),
+        html.Div([
+            html.Span(f"Año {anio_inicial}"),
+            html.Span("Actualización: pendiente de carga"),
+        ], className="educacion-media-periodo-pie"),
+    ], className=(f"vision-exec-card programa-resumen-card "
+                  f"cultura-programa-card programa-{color} {dato['codigo']}"))
 
 
 def seccion_informacion_general_cultura():
-    """Las tablas generales de Cultura convertidas en tarjetas ejecutivas."""
+    """Cuatro tablas generales de Cultura convertidas en tarjetas ejecutivas."""
     return html.Div([
         html.H2("Información general", className="vision-eje-banner"),
-        html.H3("Artistas y gestores culturales", className="cultura-subseccion-titulo"),
         html.Div(
-            _tarjetas_informacion_general_cultura(DATOS_ARTISTAS_GESTORES_CULTURA),
+            [_tarjeta_resumen_cultura(dato, color)
+             for dato, color in zip(
+                 DATOS_INFORMACION_GENERAL_CULTURA,
+                 ["azul", "verde", "morado", "amarillo"],
+             )],
             className=("vision-exec-grid gestion-educativa-grid "
-                       "datos-generales-grid cultura-artistas-grid"),
-        ),
-        html.H3("Organizaciones sociales y empresas culturales",
-                className="cultura-subseccion-titulo"),
-        html.Div(
-            _tarjetas_informacion_general_cultura(DATOS_ORGANIZACIONES_CULTURA),
-            className=("vision-exec-grid gestion-educativa-grid "
-                       "datos-generales-grid cultura-organizaciones-grid"),
+                       "programas-servicios-grid cultura-resumen-grid"),
         ),
         html.P([
             html.Strong("Fuente: "),
             "Registro Único de Artistas y Gestores Culturales.",
         ], className="eje2-source-note cultura-informacion-fuente"),
     ], className="cultura-informacion-general")
+
+
+def seccion_programas_servicios_cultura():
+    """Tres tablas previstas por Cultura, visibles aun cuando falten cifras."""
+    return html.Div([
+        html.H2("Programas y servicios de Cultura", className="vision-eje-banner"),
+        html.P("Espacios preparados para incorporar las cifras institucionales por año.",
+               className="eje1-subtitulo"),
+        html.Div(
+            [_tarjeta_programa_cultura(dato, color)
+             for dato, color in zip(
+                 PROGRAMAS_SERVICIOS_CULTURA,
+                 ["azul", "verde", "morado"],
+             )],
+            className=("vision-exec-grid gestion-educativa-grid "
+                       "programas-servicios-grid cultura-programas-grid"),
+        ),
+    ], className="cultura-programas-servicios")
 
 
 EJES_VICEMINISTERIALES = {
@@ -5017,11 +5253,24 @@ def _tarjetas_acciones_eje(acciones):
 
 def pagina_eje_viceministerial(codigo):
     eje = EJES_VICEMINISTERIALES[codigo]
-    programas, aviso = cargar_programas_viceministerio(eje["vice_excel"])
+    programas, aviso = (([], None) if codigo == "cultura"
+                        else cargar_programas_viceministerio(eje["vice_excel"]))
     informacion_general = (
         seccion_informacion_general_deporte() if codigo == "deporte"
         else seccion_informacion_general_cultura() if codigo == "cultura"
         else None
+    )
+    programas_y_servicios = (
+        seccion_programas_servicios_cultura() if codigo == "cultura"
+        else html.Div([
+            html.H2(f"Programas y servicios de {eje['vice_excel']}",
+                    className="vision-eje-banner"),
+            html.Div(
+                _tarjetas_programas_eje2(programas),
+                className="eje-programas-fila-unica",
+            ) if programas else None,
+            html.P(aviso, className="eje2-source-note") if aviso else None,
+        ])
     )
     return html.Section(className="vision-exec-page eje-viceministerial-page", children=[
         html.Div(className="vision-exec-header vision-exec-header-compacta", children=[
@@ -5038,12 +5287,7 @@ def pagina_eje_viceministerial(codigo):
                       ),
                       html.P(eje["introduccion"])])]),
         informacion_general,
-        html.H2(f"Programas y servicios de {eje['vice_excel']}", className="vision-eje-banner"),
-        html.Div(
-            _tarjetas_programas_eje2(programas),
-            className="eje-programas-fila-unica",
-        ) if programas else None,
-        html.P(aviso, className="eje2-source-note") if aviso else None,
+        programas_y_servicios,
     ])
 
 
