@@ -3781,10 +3781,7 @@ DATOS_INSTITUTOS_TECNICOS_TECNOLOGICOS = {
     "docentes_total": 9315,
     "docentes_financiamiento": {"Público": 3586, "Particular": 5729},
     "docentes_sexo": {"Hombre": 5312, "Mujer": 4003},
-    "corte": "año 2025",
-    # En la matriz entregada, el corte de Docentes del ITT queda un año
-    # atrás (2024) respecto a Instituciones y Estudiantes (2025).
-    "corte_docentes": "año 2024",
+    "corte": "segundo II semestre 2025",
     "actualizacion": "junio de cada año",
 }
 
@@ -3867,9 +3864,6 @@ def tarjetas_institutos_tecnicos_tecnologicos():
     Técnicos Tecnológicos, con el mismo formato que Educación Media."""
     d = DATOS_INSTITUTOS_TECNICOS_TECNOLOGICOS
     pie = _pie_corte_actualizacion(d["corte"], d["actualizacion"])
-    pie_docentes = _pie_corte_actualizacion(
-        d.get("corte_docentes", d["corte"]), d["actualizacion"]
-    )
     return [
         _tarjeta_educacion_superior_nivel(
             "itts-instituciones", "Instituciones",
@@ -3893,7 +3887,7 @@ def tarjetas_institutos_tecnicos_tecnologicos():
                 ("Financiamiento", d["docentes_financiamiento"]),
                 ("Sexo", d["docentes_sexo"]),
             ],
-            pie_docentes,
+            pie,
         ),
     ]
 
