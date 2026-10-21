@@ -1259,6 +1259,42 @@ app.index_string = """<!DOCTYPE html>
           color: #515b7a; font-size: 10px; font-weight: 900;
           text-transform: uppercase;
         }
+        .safpi-estudiantes-fila {
+          display: grid;
+          grid-template-columns: minmax(0, 1fr) repeat(2, minmax(72px, .48fr));
+          align-items: stretch;
+          gap: 8px;
+          margin: 0 0 8px;
+        }
+        .safpi-estudiantes-fila .programa-estudiantes-principal {
+          margin: 0;
+          align-self: center;
+        }
+        .safpi-regimen-mini {
+          min-width: 0;
+          padding: 7px 6px;
+          border: 1px solid #f8f4e8;
+          border-radius: 9px;
+          background: #f8f4e8;
+          text-align: center;
+        }
+        .safpi-regimen-mini span {
+          display: block;
+          color: #69738c;
+          font-size: 8px;
+          font-weight: 800;
+          line-height: 1.1;
+          text-transform: uppercase;
+        }
+        .safpi-regimen-mini strong {
+          display: block;
+          margin-top: 4px;
+          color: #17245b;
+          font-size: clamp(15px, 1.15vw, 19px);
+          font-weight: 900;
+          line-height: 1;
+          white-space: nowrap;
+        }
         .programa-desglose-inferior {
           display: grid; grid-template-columns: minmax(95px, .72fr) minmax(0, 1.45fr);
           gap: 10px;
@@ -3769,11 +3805,18 @@ PROGRAMAS_CON_DETALLE = {
             "cobertura y mejorar la calidad educativa."
         ),
         "filas": [
-            ("2023-2024", "18.563", "746", "$ 9.537.415,44"),
+            ("2023-2024", "18.578", "746", "$ 9.537.415,44"),
             ("2024-2025", "19.142", "746", "$ 9.544.875,44"),
             ("2025-2026", "20.564", "747", "$ 9.565.140,18"),
             ("2026-2027*", "20.669", "752", "$ 9.638.187,88"),
         ],
+        "regimenes": {
+            "2023-2024": {"Costa": 9098, "Sierra": 9480},
+            "2024-2025": {"Costa": 10147, "Sierra": 8995},
+            "2025-2026": {"Costa": 10274, "Sierra": 10290},
+            "2026-2027*": {"Costa": 10434, "Sierra": 10235},
+        },
+        "actualizacion": "julio y diciembre de cada año",
         "nota": "*Nota: En el régimen Sierra-Amazonía se sigue levantando información de niños y niñas.",
     },
     "nap": {
@@ -3954,11 +3997,27 @@ def _metricas_programa_por_anio(clave, anio):
     fila = next((f for f in detalle["filas"] if f[0] == anio), detalle["filas"][-1])
     _, estudiantes, docentes, inversion = fila
     inversion = inversion.replace("$ ", "$")
+    estudiantes_principal = html.Div([
+        html.Strong(estudiantes),
+        html.Span("Estudiantes"),
+    ], className="programa-estudiantes-principal")
+    if clave == "safpi":
+        regimenes = detalle.get("regimenes", {}).get(anio, {})
+        fila_estudiantes = html.Div([
+            estudiantes_principal,
+            *[
+                html.Div([
+                    html.Span(regimen),
+                    html.Strong(formato_valor(valor)),
+                ], className="safpi-regimen-mini")
+                for regimen, valor in regimenes.items()
+            ],
+        ], className="safpi-estudiantes-fila")
+    else:
+        fila_estudiantes = estudiantes_principal
+
     contenido = [html.Div([
-        html.Div([
-            html.Strong(estudiantes),
-            html.Span("Estudiantes"),
-        ], className="programa-estudiantes-principal"),
+        fila_estudiantes,
         html.Div([
             html.Div([html.Span("Docentes"), html.Strong(docentes)],
                      className="programa-metrica-periodo"),
@@ -3974,6 +4033,15 @@ def _metricas_programa_por_anio(clave, anio):
     ultimo_periodo = detalle["filas"][-1][0]
     if nota and (not es_nota_condicional or anio == ultimo_periodo):
         contenido.append(html.P(nota, className="programa-periodo-nota"))
+    if clave == "safpi":
+        contenido.append(html.Div([
+            html.Span(f"Año lectivo {str(anio).replace('-', '–')}"),
+            html.Span(
+                "Actualización: " + detalle.get(
+                    "actualizacion", "julio y diciembre de cada año"
+                )
+            ),
+        ], className="educacion-media-periodo-pie"))
     return contenido
 
 
