@@ -1671,20 +1671,31 @@ app.index_string = """<!DOCTYPE html>
         .cultura-artistas-grid,
         .cultura-artistas-grid.vision-exec-grid {
           width: 100% !important; max-width: none !important;
-          grid-template-columns: repeat(6, minmax(0, 1fr)) !important;
+          grid-template-columns: repeat(3, minmax(0, 1fr)) !important;
           gap: 10px !important;
         }
         .cultura-organizaciones-grid,
         .cultura-organizaciones-grid.vision-exec-grid {
           width: 100% !important; max-width: none !important;
-          grid-template-columns: repeat(4, minmax(0, 1fr)) !important;
+          grid-template-columns: repeat(6, minmax(0, 1fr)) !important;
           gap: 12px !important;
         }
-        .cultura-artistas-grid > .vision-exec-card,
-        .cultura-organizaciones-grid > .vision-exec-card {
+        .cultura-artistas-grid > .vision-exec-card {
           width: auto !important; min-width: 0 !important;
           max-width: none !important; min-height: 142px;
           align-self: stretch !important;
+        }
+        .cultura-organizaciones-grid > .vision-exec-card {
+          grid-column: span 2;
+          width: auto !important; min-width: 0 !important;
+          max-width: none !important; min-height: 142px;
+          align-self: stretch !important;
+        }
+        .cultura-organizaciones-grid > .vision-exec-card:first-child {
+          grid-column: 2 / span 2;
+        }
+        .cultura-organizaciones-grid > .vision-exec-card:nth-child(2) {
+          grid-column: 4 / span 2;
         }
         .cultura-artistas-grid .vision-card-label,
         .cultura-organizaciones-grid .vision-card-label {
@@ -1711,7 +1722,7 @@ app.index_string = """<!DOCTYPE html>
         .mobile-menu-overlay {
           display: none;
         }
-        @media (max-width: 1180px) {
+        @media (max-width: 1400px) {
           body.mobile-menu-open {
             overflow: hidden;
           }
@@ -2064,7 +2075,7 @@ app.index_string = """<!DOCTYPE html>
             grid-template-columns: minmax(0, 1fr) !important;
           }
         }
-        @media (min-width: 601px) and (max-width: 1180px) {
+        @media (min-width: 601px) and (max-width: 1400px) {
           /* En tablet se aprovecha el espacio con dos tarjetas por fila, sin
              conservar las seis columnas auxiliares usadas en escritorio. */
           .module-main .vision-exec-page .datos-generales-grid.educacion-media-cifras-grid,
@@ -2441,6 +2452,91 @@ app.index_string = """<!DOCTYPE html>
             flex: none !important;
           }
         }
+
+        /* Ajuste final de cuadrículas. Se ubica al final para que ninguna
+           regla anterior vuelva a estrechar o cortar las tarjetas. */
+        .module-main .vision-exec-page .vision-exec-card {
+          min-width: 0 !important;
+          box-sizing: border-box !important;
+        }
+        .module-main .vision-exec-page .vision-card-label,
+        .module-main .vision-exec-page .vision-card-unit,
+        .module-main .vision-exec-page .vision-mini-stat span {
+          max-width: 100% !important;
+          overflow-wrap: break-word !important;
+          word-break: normal !important;
+          white-space: normal !important;
+        }
+        .module-main .vision-exec-page .vision-card-total,
+        .module-main .vision-exec-page .vision-mini-stat strong {
+          max-width: 100% !important;
+          white-space: nowrap;
+        }
+        @media (min-width: 1401px) {
+          .module-main .vision-exec-page .cultura-artistas-grid.vision-exec-grid {
+            grid-template-columns: repeat(3, minmax(0, 1fr)) !important;
+          }
+          .module-main .vision-exec-page .cultura-organizaciones-grid.vision-exec-grid {
+            grid-template-columns: repeat(6, minmax(0, 1fr)) !important;
+          }
+          .module-main .vision-exec-page .cultura-organizaciones-grid > .vision-exec-card:first-child {
+            grid-column: 2 / span 2 !important;
+          }
+          .module-main .vision-exec-page .cultura-organizaciones-grid > .vision-exec-card:nth-child(2) {
+            grid-column: 4 / span 2 !important;
+          }
+          .module-main .vision-exec-page .educacion-superior-cifras-grid.vision-exec-grid {
+            grid-template-columns: repeat(3, minmax(0, 1fr)) !important;
+          }
+        }
+        @media (min-width: 601px) and (max-width: 1400px) {
+          .module-main .vision-exec-page .datos-generales-grid.educacion-media-cifras-grid,
+          .module-main .vision-exec-page .datos-generales-grid.educacion-media-segunda-fila,
+          .module-main .vision-exec-page .cultura-artistas-grid.vision-exec-grid,
+          .module-main .vision-exec-page .cultura-organizaciones-grid.vision-exec-grid,
+          .module-main .vision-exec-page .educacion-superior-cifras-grid.vision-exec-grid,
+          .module-main .vision-exec-page .recursos-gestion-grid.vision-exec-grid,
+          .module-main .vision-exec-page .programas-servicios-grid.vision-exec-grid,
+          .module-main .vision-exec-page .programas-complementarios-grid,
+          .module-main .vision-exec-page .deporte-informacion-grid.vision-exec-grid,
+          .module-main .vision-exec-page .deporte-programas-generales-grid.vision-exec-grid {
+            grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+          }
+          .module-main .vision-exec-page .educacion-media-segunda-fila > .vision-exec-card,
+          .module-main .vision-exec-page .programas-complementarios-grid > .vision-exec-card,
+          .module-main .vision-exec-page .deporte-programas-generales-grid > .vision-exec-card {
+            grid-column: auto !important;
+            width: 100% !important;
+          }
+          .module-main .vision-exec-page .cultura-organizaciones-grid > .vision-exec-card {
+            grid-column: auto !important;
+          }
+        }
+        @media (max-width: 600px) {
+          .module-main .vision-exec-page .datos-generales-grid.educacion-media-cifras-grid,
+          .module-main .vision-exec-page .datos-generales-grid.educacion-media-segunda-fila,
+          .module-main .vision-exec-page .cultura-artistas-grid.vision-exec-grid,
+          .module-main .vision-exec-page .cultura-organizaciones-grid.vision-exec-grid,
+          .module-main .vision-exec-page .educacion-superior-cifras-grid.vision-exec-grid,
+          .module-main .vision-exec-page .recursos-gestion-grid.vision-exec-grid,
+          .module-main .vision-exec-page .programas-servicios-grid.vision-exec-grid,
+          .module-main .vision-exec-page .programas-complementarios-grid,
+          .module-main .vision-exec-page .deporte-informacion-grid.vision-exec-grid,
+          .module-main .vision-exec-page .deporte-programas-generales-grid.vision-exec-grid {
+            grid-template-columns: minmax(0, 1fr) !important;
+          }
+          .module-main .vision-exec-page .educacion-media-segunda-fila > .vision-exec-card,
+          .module-main .vision-exec-page .programas-complementarios-grid > .vision-exec-card,
+          .module-main .vision-exec-page .deporte-programas-generales-grid > .vision-exec-card,
+          .module-main .vision-exec-page .cultura-organizaciones-grid > .vision-exec-card {
+            grid-column: 1 !important;
+          }
+          .module-main .vision-exec-page .vision-card-total,
+          .module-main .vision-exec-page .vision-mini-stat strong {
+            white-space: normal !important;
+            overflow-wrap: break-word !important;
+          }
+        }
         </style>
         <script>
         window.MathJax = {
@@ -2543,7 +2639,7 @@ app.index_string = """<!DOCTYPE html>
             if (evento.key === 'Escape') cerrarMenu();
           });
           window.addEventListener('resize', function () {
-            if (window.innerWidth > 1180) cerrarMenu();
+            if (window.innerWidth > 1400) cerrarMenu();
           });
         })();
         </script>
@@ -3781,7 +3877,7 @@ DATOS_INSTITUTOS_TECNICOS_TECNOLOGICOS = {
     "docentes_total": 9315,
     "docentes_financiamiento": {"Público": 3586, "Particular": 5729},
     "docentes_sexo": {"Hombre": 5312, "Mujer": 4003},
-    "corte": "segundo II semestre 2025",
+    "corte": "II semestre 2025",
     "actualizacion": "junio de cada año",
 }
 
@@ -4762,24 +4858,18 @@ def seccion_informacion_general_deporte():
     ], className="deporte-informacion-general")
 
 
-# Información general de Cultura, corte julio de 2026.
+# Información general de Cultura. Solo se publican categorías que tienen un
+# valor registrado en la matriz entregada por el Viceministerio de Cultura.
 DATOS_ARTISTAS_GESTORES_CULTURA = [
-    ("artes-innovacion", "Artes e innovación", 23990, "Registros"),
-    ("patrimonio-cultural", "Patrimonio cultural", 916, "Registros"),
-    ("educacion-cultural", "Educación cultural formal", 1136, "Registros"),
-    ("memoria-social", "Memoria social", 479, "Registros"),
-    ("otras-categorias-culturales", "Otras categorías", 249, "Registros"),
-    ("total-artistas", "Total de artistas y gestores culturales", 26770,
-     "Artistas y gestores"),
+    ("artes-innovacion", "Artes e innovación", 23990, "Beneficiarios"),
+    ("patrimonio-cultural", "Patrimonio cultural", 916, "Beneficiarios"),
+    ("memoria-social", "Memoria social", 479, "Beneficiarios"),
 ]
 
 DATOS_ORGANIZACIONES_CULTURA = [
     ("organizaciones-sociales", "Organizaciones sociales", 227, "Organizaciones"),
     ("empresa-cultural", "Empresa cultural", 482, "Empresas"),
-    ("instituciones-educativas", "Instituciones educativas", 2, "Instituciones"),
-    ("total-organizaciones", "Total", 711, "Registros"),
 ]
-
 
 def _tarjetas_informacion_general_cultura(datos):
     return [
@@ -4788,11 +4878,12 @@ def _tarjetas_informacion_general_cultura(datos):
             periodo="Corte: julio de 2026",
         )
         for codigo, titulo, valor, unidad in datos
+        if valor is not None
     ]
 
 
 def seccion_informacion_general_cultura():
-    """Las dos tablas generales de Cultura convertidas en tarjetas ejecutivas."""
+    """Las tablas generales de Cultura convertidas en tarjetas ejecutivas."""
     return html.Div([
         html.H2("Información general", className="vision-eje-banner"),
         html.H3("Artistas y gestores culturales", className="cultura-subseccion-titulo"),
@@ -4812,10 +4903,6 @@ def seccion_informacion_general_cultura():
             html.Strong("Fuente: "),
             "Registro Único de Artistas y Gestores Culturales.",
         ], className="eje2-source-note cultura-informacion-fuente"),
-        html.P([
-            html.Strong("Nota: "),
-            "El registro de artistas y gestores culturales incluye defunciones.",
-        ], className="eje2-source-note cultura-informacion-nota"),
     ], className="cultura-informacion-general")
 
 
