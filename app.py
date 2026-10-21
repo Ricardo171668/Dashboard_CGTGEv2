@@ -3848,7 +3848,6 @@ def tarjetas_universidades_politecnicas():
             "politecnicas-estudiantes", "Estudiantes",
             d["estudiantes_total"],
             [
-                ("Financiamiento", d["estudiantes_financiamiento"]),
                 ("Sexo", d["estudiantes_sexo"]),
                 ("Nivel de formación", d["estudiantes_nivel"]),
             ],
@@ -3857,10 +3856,7 @@ def tarjetas_universidades_politecnicas():
         _tarjeta_educacion_superior_nivel(
             "politecnicas-docentes", "Docentes",
             d["docentes_total"],
-            [
-                ("Financiamiento", d["docentes_financiamiento"]),
-                ("Sexo", d["docentes_sexo"]),
-            ],
+            [("Sexo", d["docentes_sexo"])],
             pie,
         ),
     ]
@@ -3900,6 +3896,109 @@ def tarjetas_institutos_tecnicos_tecnologicos():
             pie_docentes,
         ),
     ]
+
+
+# ---------------------------------------------------------------------------
+# Educación Superior · Programas y servicios de becas (actualizado a pedido
+# de la Viceministra, octubre 2026). Reemplaza la carga anterior desde
+# "Mapeo - Rendicion de cuentas.xlsx": estos 6 programas se mantienen fijos
+# en código hasta que se defina una fuente propia para becas.
+EJE2_BECAS_EDUCACION_SUPERIOR = [
+    {
+        "titulo": "Becas Fulbright",
+        "beneficiarios": 8,
+        "unidad_beneficiarios": "Beneficiarios",
+        "inversion": "$677.800,00",
+        "descripcion": (
+            "Las Becas Fulbright financian estudios de posgrado (maestrías) en "
+            "Estados Unidos, con la comisión Fulbright Ecuador."
+        ),
+    },
+    {
+        "titulo": "Becas Nacionales para Fortalecimiento de la Industria de Hidrocarburos",
+        "beneficiarios": 141,
+        "unidad_beneficiarios": "Beneficiarios",
+        "inversion": "$899.870,10",
+        "descripcion": (
+            "Fortalece las competencias técnicas y de cuarto nivel en áreas "
+            "estratégicas de la industria de hidrocarburos, articulando las "
+            "necesidades del sector energético con la oferta académica nacional "
+            "de las instituciones de educación superior."
+        ),
+    },
+    {
+        "titulo": "Programa de Educación Continua “Because He Is Nice”",
+        "beneficiarios": 71570,
+        "unidad_beneficiarios": "Beneficiarios",
+        "inversion": "$1.431.400,00",
+        "descripcion": (
+            "El programa de Educación Continua “Because He Is Nice” ofrece "
+            "becas para estudiar inglés gratis y en línea. Está dirigido a "
+            "mayores de 18 años con título de bachiller registrado en el país."
+        ),
+    },
+    {
+        "titulo": "Jóvenes del Nuevo Ecuador",
+        "beneficiarios": 3276,
+        "unidad_beneficiarios": "Beneficiarios",
+        "inversion": "$2.715.705,00",
+        "descripcion": (
+            "Promueve la permanencia de jóvenes de 18 a 29 años en la educación "
+            "superior, mediante la entrega de becas parciales que brindan un "
+            "apoyo económico único para cubrir gastos de manutención y "
+            "facilitar la continuidad de sus estudios de tercer nivel."
+        ),
+    },
+    {
+        "titulo": "Mujeres que Transforman",
+        "beneficiarios": 2627,
+        "unidad_beneficiarios": "Beneficiarias",
+        "inversion": "$1.266.214,00",
+        "descripcion": (
+            "Apoya los gastos de permanencia (alimentación, vivienda, servicios "
+            "básicos y transporte interno) durante un período académico del "
+            "segundo semestre de 2026, con una subvención de un SBU."
+        ),
+    },
+    {
+        "titulo": "Talento Joven",
+        "beneficiarios": 3200,
+        "unidad_beneficiarios": "Beneficiarios",
+        "inversion": "$1.821.536,00",
+        "descripcion": (
+            "Evitar la deserción: contribuir con un solo pago a los estudiantes "
+            "de grado en instituciones públicas para que continúen y culminen "
+            "sus carreras universitarias."
+        ),
+    },
+]
+
+
+def _tarjeta_beca_educacion_superior(dato):
+    """Beneficiarios + inversión de un programa de becas, con la nota de
+    actualización/corte fija que pidió la Viceministra (no es un período
+    histórico seleccionable, como SAFPI/NAP)."""
+    ayuda_texto = f"{dato['titulo']}. {dato['descripcion']}"
+    return html.Article([
+        _ayuda_tarjeta(dato["titulo"], dato["descripcion"]),
+        cabecera_tarjeta("becas", dato["titulo"], ayuda_texto),
+        html.Div([
+            html.Strong(formato_valor(dato["beneficiarios"]), className="vision-card-total"),
+            html.Span(dato["unidad_beneficiarios"], className="vision-card-unit"),
+        ], className="vision-card-value-row"),
+        html.Div([
+            html.Span("Inversión"),
+            html.Strong(dato["inversion"]),
+        ], className="programa-metrica-periodo inversion"),
+        html.Div([
+            html.Span("Actualización: conforme a planificación de cada programa"),
+            html.Span("Corte: octubre 2026"),
+        ], className="educacion-media-periodo-pie"),
+    ], className="vision-exec-card becas programa-con-ayuda", tabIndex=0)
+
+
+def tarjetas_becas_educacion_superior():
+    return [_tarjeta_beca_educacion_superior(d) for d in EJE2_BECAS_EDUCACION_SUPERIOR]
 
 
 EJE2_PROYECTOS_FUTUROS = [
@@ -4547,7 +4646,6 @@ def _cartera_futura_eje2(proyectos):
 
 
 def pagina_educacion_superior():
-    programas, aviso = cargar_programas_educacion_superior()
     return html.Section(className="vision-exec-page educacion-superior-page", children=[
         html.Div(className="vision-exec-header vision-exec-header-compacta", children=[
             html.Div(className="vision-title-mark"),
@@ -4580,8 +4678,10 @@ def pagina_educacion_superior():
             style={"gridTemplateColumns": "repeat(3, minmax(0, 1fr))"},
         ),
         html.H2("Programas y servicios de Educación Superior", className="vision-eje-banner"),
-        _tarjetas_programas_eje2(programas),
-        html.P(aviso, className="eje2-source-note") if aviso else None,
+        html.Div(
+            className="vision-exec-grid gestion-educativa-grid programas-servicios-grid",
+            children=tarjetas_becas_educacion_superior(),
+        ),
     ])
 
 
