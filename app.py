@@ -3740,6 +3740,168 @@ def tarjetas_datos_educacion_superior():
         ),
     ]
 
+
+# ---------------------------------------------------------------------------
+# Educación Superior · Universidades y Escuelas Politécnicas / Institutos
+# Superiores Técnicos Tecnológicos. Cifras de la matriz institucional
+# "POLITECNICAS" / "Instituto Superior Técnico Tecnológico"; se muestran
+# únicamente los totales ("Nro."), sin los porcentajes de la matriz.
+DATOS_UNIVERSIDADES_POLITECNICAS = {
+    "instituciones_total": 64,
+    "instituciones_financiamiento": {
+        "Particular Autofinanciada": 20,
+        "Particular Cofinanciada": 8,
+        "Pública": 36,
+    },
+    "estudiantes_total": 909116,
+    "estudiantes_financiamiento": {
+        "Particular Autofinanciada": 162081,
+        "Particular Cofinanciada": 170545,
+        "Pública": 576490,
+    },
+    "estudiantes_sexo": {"Hombre": 391975, "Mujer": 517141},
+    "estudiantes_nivel": {"Tercer Nivel": 805739, "Cuarto Nivel": 103377},
+    "docentes_total": 38828,
+    "docentes_financiamiento": {
+        "Particular Autofinanciada": 7820,
+        "Particular Cofinanciada": 10443,
+        "Pública": 20565,
+    },
+    "docentes_sexo": {"Hombre": 22124, "Mujer": 16704},
+    "corte": "año 2025",
+    "actualizacion": "septiembre de cada año",
+}
+
+DATOS_INSTITUTOS_TECNICOS_TECNOLOGICOS = {
+    "instituciones_total": 214,
+    "instituciones_financiamiento": {"Público": 152, "Particular": 62},
+    "estudiantes_total": 122044,
+    "estudiantes_financiamiento": {"Público": 39318, "Particular": 82726},
+    "estudiantes_sexo": {"Hombre": 57011, "Mujer": 65033},
+    "docentes_total": 9315,
+    "docentes_financiamiento": {"Público": 3586, "Particular": 5729},
+    "docentes_sexo": {"Hombre": 5312, "Mujer": 4003},
+    "corte": "año 2025",
+    # En la matriz entregada, el corte de Docentes del ITT queda un año
+    # atrás (2024) respecto a Instituciones y Estudiantes (2025).
+    "corte_docentes": "año 2024",
+    "actualizacion": "junio de cada año",
+}
+
+
+def _pie_corte_actualizacion(corte, actualizacion):
+    """Mismo pie de dos líneas (período / frecuencia) que usan las tarjetas
+    de Educación Media, pero con el texto 'Corte' en vez de 'Año lectivo'."""
+    return html.Div([
+        html.Span(f"Corte: {corte}"),
+        html.Span(f"Actualización: {actualizacion}"),
+    ], className="educacion-media-periodo-pie")
+
+
+def _desglose_con_grupos(grupos):
+    """Arma los mini-cuadros de desglose (mismo formato que usan las
+    tarjetas de Educación Media). 'grupos' es una lista de tuplas
+    (titulo_del_grupo_o_None, {etiqueta: valor}); si hay más de un grupo se
+    antepone un rótulo (igual que 'Sostenimiento'/'Régimen' en la tarjeta de
+    necesidades educativas especiales)."""
+    mostrar_titulos = len(grupos) > 1
+    hijos = []
+    for titulo, datos in grupos:
+        if mostrar_titulos and titulo:
+            hijos.append(html.Span(titulo, className="nee-grupo-titulo"))
+        hijos.extend(
+            html.Div([
+                html.Span(nombre),
+                html.Strong(formato_valor(valor)),
+            ], className=("vision-mini-stat secondary" if i % 2 else "vision-mini-stat"))
+            for i, (nombre, valor) in enumerate(datos.items())
+        )
+    return hijos
+
+
+def _tarjeta_educacion_superior_nivel(codigo, titulo, total, grupos, pie):
+    """Tarjeta con el mismo formato que las de Educación Media: total
+    principal + desglose(s) en mini-cuadros + pie de período."""
+    return html.Article([
+        cabecera_tarjeta(codigo, titulo),
+        html.Div([
+            html.Strong(formato_valor(total), className="vision-card-total"),
+        ], className="vision-card-value-row"),
+        html.Div(_desglose_con_grupos(grupos), className="nee-desglose"),
+        pie,
+    ], className=f"vision-exec-card {codigo} educacion-superior-nivel-card")
+
+
+def tarjetas_universidades_politecnicas():
+    """Instituciones, Estudiantes y Docentes de Universidades y Escuelas
+    Politécnicas, con el mismo formato que Educación Media."""
+    d = DATOS_UNIVERSIDADES_POLITECNICAS
+    pie = _pie_corte_actualizacion(d["corte"], d["actualizacion"])
+    return [
+        _tarjeta_educacion_superior_nivel(
+            "politecnicas-instituciones", "Instituciones",
+            d["instituciones_total"],
+            [(None, d["instituciones_financiamiento"])],
+            pie,
+        ),
+        _tarjeta_educacion_superior_nivel(
+            "politecnicas-estudiantes", "Estudiantes",
+            d["estudiantes_total"],
+            [
+                ("Financiamiento", d["estudiantes_financiamiento"]),
+                ("Sexo", d["estudiantes_sexo"]),
+                ("Nivel de formación", d["estudiantes_nivel"]),
+            ],
+            pie,
+        ),
+        _tarjeta_educacion_superior_nivel(
+            "politecnicas-docentes", "Docentes",
+            d["docentes_total"],
+            [
+                ("Financiamiento", d["docentes_financiamiento"]),
+                ("Sexo", d["docentes_sexo"]),
+            ],
+            pie,
+        ),
+    ]
+
+
+def tarjetas_institutos_tecnicos_tecnologicos():
+    """Instituciones, Estudiantes y Docentes de Institutos Superiores
+    Técnicos Tecnológicos, con el mismo formato que Educación Media."""
+    d = DATOS_INSTITUTOS_TECNICOS_TECNOLOGICOS
+    pie = _pie_corte_actualizacion(d["corte"], d["actualizacion"])
+    pie_docentes = _pie_corte_actualizacion(
+        d.get("corte_docentes", d["corte"]), d["actualizacion"]
+    )
+    return [
+        _tarjeta_educacion_superior_nivel(
+            "itts-instituciones", "Instituciones",
+            d["instituciones_total"],
+            [(None, d["instituciones_financiamiento"])],
+            pie,
+        ),
+        _tarjeta_educacion_superior_nivel(
+            "itts-estudiantes", "Estudiantes",
+            d["estudiantes_total"],
+            [
+                ("Financiamiento", d["estudiantes_financiamiento"]),
+                ("Sexo", d["estudiantes_sexo"]),
+            ],
+            pie,
+        ),
+        _tarjeta_educacion_superior_nivel(
+            "itts-docentes", "Docentes",
+            d["docentes_total"],
+            [
+                ("Financiamiento", d["docentes_financiamiento"]),
+                ("Sexo", d["docentes_sexo"]),
+            ],
+            pie_docentes,
+        ),
+    ]
+
+
 EJE2_PROYECTOS_FUTUROS = [
     {"mes": "Octubre", "titulo": "Entrega de 595 becas",
      "descripcion": "Becas de especialización y posgrado para ampliar las oportunidades de formación.",
@@ -4401,11 +4563,21 @@ def pagina_educacion_superior():
                       ),
                       html.P("Programas vigentes para ampliar el acceso, reconocer trayectorias "
                              "académicas y fortalecer la formación técnica, tecnológica y universitaria.")])]),
-        html.H2("Educación Superior en cifras", className="vision-eje-banner"),
+        html.H2("Información de Universidades y Escuelas Politécnicas",
+                className="vision-eje-banner"),
         html.Div(
             className="vision-exec-grid gestion-educativa-grid datos-generales-grid "
-                      "educacion-superior-cifras-grid",
-            children=tarjetas_datos_educacion_superior(),
+                      "educacion-superior-cifras-grid universidades-politecnicas-grid",
+            children=tarjetas_universidades_politecnicas(),
+            style={"gridTemplateColumns": "repeat(3, minmax(0, 1fr))"},
+        ),
+        html.H2("Información de Institutos Superiores Técnicos Tecnológicos",
+                className="vision-eje-banner"),
+        html.Div(
+            className="vision-exec-grid gestion-educativa-grid datos-generales-grid "
+                      "educacion-superior-cifras-grid institutos-tecnicos-grid",
+            children=tarjetas_institutos_tecnicos_tecnologicos(),
+            style={"gridTemplateColumns": "repeat(3, minmax(0, 1fr))"},
         ),
         html.H2("Programas y servicios de Educación Superior", className="vision-eje-banner"),
         _tarjetas_programas_eje2(programas),
