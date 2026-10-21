@@ -1103,13 +1103,6 @@ app.index_string = """<!DOCTYPE html>
         .programa-con-ayuda:focus-within .programa-info-tooltip {
           opacity: 1; visibility: visible; transform: translateY(0);
         }
-        .programa-info-icon {
-          display: inline-flex; align-items: center; justify-content: center;
-          width: 21px; height: 21px; flex: 0 0 21px; margin-left: auto;
-          border: 0; border-radius: 50%; background: #4f3c98; color: #fff;
-          font: 800 12px/1 Arial, sans-serif; cursor: help;
-          box-shadow: 0 3px 8px rgba(79,60,152,.22);
-        }
         .programa-con-ayuda:hover,
         .programa-con-ayuda:focus-within { z-index: 1000 !important; }
 
@@ -3838,17 +3831,13 @@ def icono_tarjeta(codigo="", titulo=""):
 
 
 def cabecera_tarjeta(codigo, titulo, ayuda_texto=None):
-    """Alinea símbolo y título en una misma fila, como una unidad visual."""
+    """Alinea símbolo y título; la ayuda aparece al pasar por la tarjeta."""
     return html.Div([
         icono_tarjeta(codigo, titulo),
         html.Span(
             titulo, className="vision-card-label",
             style={"minHeight": "0", "margin": "0", "flex": "1 1 auto"},
         ),
-        html.Button(
-            "i", className="programa-info-icon", type="button",
-            **{"aria-label": f"Información sobre {titulo}"},
-        ) if ayuda_texto else None,
     ], className="vision-card-title-row", style={
         "display": "flex", "alignItems": "center", "gap": "10px",
         "minWidth": "0", "marginBottom": "7px",
