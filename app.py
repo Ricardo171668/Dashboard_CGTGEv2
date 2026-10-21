@@ -106,8 +106,8 @@ VISION_TABS = [
 # Las 4 bases de Gestión Educativa, cada una con su propia estructura real
 # (no siguen el formato PND/KPI): tablas por Zona/Provincia/Cantón con
 # beneficiarios y, en Mobiliario y Transporte, estudiantes por institución.
-# Solo se usan conteos — nunca los montos de inversión (pedido explícito:
-# "sin mostrar dinero").
+# Estas fuentes siguen aportando los conteos operativos. La vista ejecutiva usa,
+# además, el último consolidado institucional de inversión por régimen.
 BASES_GESTION_EDUCATIVA = [
     # El prefijo debe ser el INICIO real del nombre de archivo que llega de
     # OneDrive (buscar_archivo solo ignora tildes/mayúsculas, no cambia
@@ -528,9 +528,10 @@ def version_kpi_inst():
 # Escolares y Mobiliario y Transporte). A diferencia del PND/KPI, cada Excel
 # es una tabla de beneficiarios por Zona/Provincia/Cantón (o por institución,
 # en Mobiliario), sin la estructura de indicador con Meta/Línea base. Aquí
-# solo se agregan conteos (beneficiarios, instituciones, estudiantes); el
-# monto de inversión de cada base NUNCA se usa para la tarjeta de resumen
-# (pedido explícito del usuario: "sin mostrar dinero").
+# desde estas bases se agregan conteos (beneficiarios, instituciones y
+# estudiantes). Los montos que aparecen en la vista ejecutiva proceden del
+# consolidado institucional por régimen, no de una suma implícita de estas
+# matrices operativas.
 # ---------------------------------------------------------------------------
 def _localizar_hoja_con_columna(ruta, columna_clave, filas_busqueda=30):
     """Devuelve el primer DataFrame, de cualquier hoja del libro, cuya fila de
@@ -1271,10 +1272,131 @@ app.index_string = """<!DOCTYPE html>
         .programa-desglose-inferior .programa-metrica-periodo.inversion strong {
           font-size: clamp(17px, 1.2vw, 22px);
         }
+        .reinsercion-desglose {
+          display: grid;
+          grid-template-columns: repeat(2, minmax(0, 1fr));
+          gap: 7px;
+          margin-top: 8px;
+        }
+        .reinsercion-desglose .programa-metrica-periodo {
+          padding: 8px 7px;
+        }
+        .reinsercion-desglose .programa-metrica-periodo strong {
+          font-size: clamp(16px, 1.2vw, 20px);
+        }
+        .hospital-desglose {
+          display: grid;
+          grid-template-columns: minmax(70px, .65fr) minmax(75px, .65fr) minmax(0, 1.45fr);
+          gap: 7px;
+        }
+        .hospital-desglose .programa-metrica-periodo {
+          padding: 8px 6px;
+        }
+        .hospital-desglose .programa-metrica-periodo strong {
+          font-size: clamp(16px, 1.15vw, 20px);
+        }
+        .hospital-desglose .programa-metrica-periodo.inversion strong {
+          font-size: clamp(14px, .95vw, 17px);
+        }
         .programa-periodo-nota {
           margin: 7px 0 0 !important; color: #59627d !important;
           font-size: 9px !important; line-height: 1.35 !important;
+          font-weight: 400 !important;
           text-align: justify;
+        }
+        .educacion-media-periodo-pie {
+          display: flex; flex-direction: column; gap: 2px;
+          margin-top: 8px; color: #59627d;
+          /* Igual que las etiquetas secundarias de las demás tarjetas. */
+          font-size: 12px; line-height: 1.4;
+          font-weight: 400;
+        }
+        .nee-desglose {
+          display: grid;
+          grid-template-columns: repeat(2, minmax(0, 1fr));
+          gap: 7px;
+          margin-top: 9px;
+        }
+        .nee-grupo-titulo {
+          grid-column: 1 / -1;
+          margin: 3px 0 -1px;
+          color: #4f5876;
+          font-size: 11px;
+          font-weight: 700;
+          text-transform: uppercase;
+          letter-spacing: .02em;
+        }
+        .nee-desglose .vision-mini-stat {
+          min-width: 0;
+          padding: 8px 10px !important;
+        }
+        .nee-desglose .vision-mini-stat span {
+          font-size: 12px !important;
+          line-height: 1.2 !important;
+          font-weight: 400 !important;
+        }
+        .nee-desglose .vision-mini-stat strong {
+          margin-top: 3px !important;
+          font-size: 17px !important;
+          line-height: 1.05 !important;
+        }
+        .recurso-resumen-nacional {
+          display: grid;
+          grid-template-columns: minmax(90px, .72fr) minmax(0, 1.35fr);
+          gap: 7px;
+          margin-top: 8px;
+        }
+        .recurso-resumen-nacional .programa-metrica-periodo {
+          padding: 8px 7px;
+        }
+        .recurso-resumen-nacional .programa-metrica-periodo strong {
+          font-size: clamp(16px, 1.2vw, 20px);
+        }
+        .recurso-resumen-nacional .programa-metrica-periodo.inversion strong {
+          font-size: clamp(14px, .95vw, 17px);
+        }
+        .recurso-regimenes {
+          display: grid;
+          grid-template-columns: repeat(2, minmax(0, 1fr));
+          gap: 7px;
+          margin-top: 7px;
+        }
+        .recurso-regimen-panel {
+          min-width: 0;
+          padding: 8px 9px;
+          border-radius: 9px;
+          background: #f3f4fa;
+        }
+        .recurso-regimen-panel.secondary { background: #f8f4e9; }
+        .recurso-regimen-panel h4 {
+          margin: 0 0 5px;
+          color: #4f3c98;
+          font-size: 11px;
+          font-weight: 900;
+          text-transform: uppercase;
+        }
+        .recurso-regimen-fila {
+          display: flex;
+          justify-content: space-between;
+          gap: 5px;
+          margin-top: 3px;
+          color: #626a83;
+          font-size: 10px;
+        }
+        .recurso-regimen-fila strong {
+          color: #17245b;
+          white-space: nowrap;
+        }
+        .recurso-regimen-fila.inversion {
+          display: block;
+          margin-top: 5px;
+        }
+        .recurso-regimen-fila.inversion strong {
+          display: block;
+          margin-top: 2px;
+          font-size: 11px;
+          overflow-wrap: anywhere;
+          white-space: normal;
         }
         .instituciones-anio-control,
         .estudiantes-anio-control,
@@ -1397,7 +1519,7 @@ app.index_string = """<!DOCTYPE html>
         }
         .vision-card-periodo {
           display: block; margin-top: 5px; color: #65708c;
-          font-size: 10px; font-weight: 800;
+          font-size: 10px; font-weight: 400;
         }
         .programas-complementarios-grid {
           grid-template-columns: repeat(6, minmax(0, 1fr)) !important;
@@ -1411,6 +1533,9 @@ app.index_string = """<!DOCTYPE html>
         }
         .programas-complementarios-grid > .vision-exec-card:nth-child(2) {
           grid-column: 4 / span 2;
+        }
+        .programas-complementarios-grid > .vision-exec-card:only-child {
+          grid-column: 3 / span 2;
         }
         .deporte-informacion-grid,
         .deporte-informacion-grid.vision-exec-grid {
@@ -1803,6 +1928,9 @@ app.index_string = """<!DOCTYPE html>
           .module-main .vision-exec-page .vision-mini-stat span {
             font-size: 10px !important;
             overflow-wrap: anywhere !important;
+          }
+          .module-main .vision-exec-page .educacion-media-periodo-pie {
+            font-size: 10px;
           }
           .module-main .vision-exec-page .vision-mini-stat strong {
             font-size: 15px !important;
@@ -3667,21 +3795,26 @@ PROGRAMAS_CON_DETALLE = {
 }
 
 
+REINSERCION_POR_ANIO_LECTIVO = {
+    "2023-2024": {"Fiscal": 11456, "Fiscomisional": 153, "Municipal": 26, "Particular": 256},
+    "2024-2025": {"Fiscal": 45641, "Fiscomisional": 18, "Municipal": 1, "Particular": 40},
+    "2025-2026": {"Fiscal": 62512, "Fiscomisional": 2244, "Municipal": 248, "Particular": 5859},
+    "2026-2027": {"Fiscal": 40061, "Fiscomisional": 1046, "Municipal": 110, "Particular": 9564},
+}
+
+
+AULAS_HOSPITALARIAS_POR_ANIO = {
+    "2023": {"aulas": 90, "beneficiarios": 46148, "docentes": 151, "inversion": "$1.937.946,98"},
+    "2024": {"aulas": 97, "beneficiarios": 46248, "docentes": 157, "inversion": "$2.016.521,50"},
+    "2025": {"aulas": 98, "beneficiarios": 42965, "docentes": 158, "inversion": "$2.030.945,58"},
+    "2026": {"aulas": 99, "beneficiarios": 27142, "docentes": 156, "inversion": "$1.537.195,06"},
+}
+
+
 PROGRAMAS_GESTION_COMPLEMENTARIOS = [
     {
-        "titulo": "Reforma Integral al Bachillerato (Equipamiento Tecnológico)",
-        "periodo": "2025",
-        "metricas": [("Instituciones", "79"), ("Inversión", "$3,1 millones")],
-        "descripcion": (
-            "Es un proyecto de inversión, su objetivo es dotar de infraestructura, mobiliario "
-            "y laboratorios tecnológicos a las instituciones educativas fiscales que imparten "
-            "Bachillerato General y Técnico."
-        ),
-    },
-    {
+        "clave": "hospital",
         "titulo": "Aulas Hospitalarias",
-        "periodo": "2025",
-        "metricas": [("Aulas Hospitalarias", "98"), ("Estudiantes", "42.965")],
         "descripcion": (
             "Son espacios educativos y pedagógicos ubicados dentro de recintos de salud que "
             "brindan atención escolar a niños, niñas y jóvenes en situación de enfermedad "
@@ -3861,6 +3994,79 @@ def _control_anio_programa(clave):
     ]
 
 
+def _control_anio_complementario(clave, periodos, etiqueta):
+    """Selector compacto para Reinserción y Aulas Hospitalarias."""
+    return html.Div([
+        html.Span(etiqueta),
+        dcc.Dropdown(
+            id={"type": "programa-complementario-anio", "index": clave},
+            options=[
+                {"label": periodo.replace("-", "–"), "value": periodo}
+                for periodo in periodos
+            ],
+            value=periodos[-1],
+            clearable=False,
+            searchable=False,
+            className="programa-anio-dropdown",
+        ),
+    ], className="programa-anio-control")
+
+
+def _pie_programa_actualizable(etiqueta_periodo, periodo):
+    periodo_visible = str(periodo).replace("-", "–")
+    return html.Div([
+        html.Span(f"{etiqueta_periodo} {periodo_visible}"),
+        html.Span("Actualización: diciembre de cada año"),
+    ], className="educacion-media-periodo-pie")
+
+
+def _metricas_reinsercion(anio_lectivo):
+    if anio_lectivo not in REINSERCION_POR_ANIO_LECTIVO:
+        anio_lectivo = list(REINSERCION_POR_ANIO_LECTIVO)[-1]
+    datos = REINSERCION_POR_ANIO_LECTIVO[anio_lectivo]
+    return [
+        html.Div([
+            html.Strong(formato_valor(sum(datos.values()))),
+            html.Span("Estudiantes"),
+        ], className="vision-card-value-row programa-card-resultado"),
+        html.Div([
+            html.Div([
+                html.Span(nombre),
+                html.Strong(formato_valor(valor)),
+            ], className="programa-metrica-periodo")
+            for nombre, valor in datos.items()
+        ], className="reinsercion-desglose"),
+        _pie_programa_actualizable("Año lectivo", anio_lectivo),
+    ]
+
+
+def _metricas_aulas_hospitalarias(anio):
+    if anio not in AULAS_HOSPITALARIAS_POR_ANIO:
+        anio = list(AULAS_HOSPITALARIAS_POR_ANIO)[-1]
+    datos = AULAS_HOSPITALARIAS_POR_ANIO[anio]
+    return [
+        html.Div([
+            html.Strong(formato_valor(datos["beneficiarios"])),
+            html.Span("Beneficiarios"),
+        ], className="programa-estudiantes-principal"),
+        html.Div([
+            html.Div([
+                html.Span("Aulas hospitalarias"),
+                html.Strong(formato_valor(datos["aulas"])),
+            ], className="programa-metrica-periodo"),
+            html.Div([
+                html.Span("Docentes"),
+                html.Strong(formato_valor(datos["docentes"])),
+            ], className="programa-metrica-periodo"),
+            html.Div([
+                html.Span("Inversión"),
+                html.Strong(datos["inversion"]),
+            ], className="programa-metrica-periodo inversion"),
+        ], className="hospital-desglose"),
+        _pie_programa_actualizable("Año", anio),
+    ]
+
+
 def _tarjetas_programas_eje2(datos):
     """Presenta cada programa con el mismo lenguaje visual de las cifras."""
     tarjetas = []
@@ -3890,25 +4096,30 @@ def _tarjetas_programas_eje2(datos):
         unidad = ("Comunidad Educativa" if es_comunidades
                   else "DECEs contratados" if es_dece
                   else str(dato["tipo"]).strip())
+        ayuda_reinsercion = (
+            "Todos al Aula por el Nuevo Ecuador.",
+            "Promueve el acceso y/o reinserción escolar de niños, niñas, adolescentes, "
+            "jóvenes y adultos que se encuentran fuera del Sistema Nacional de Educación, "
+            "a través de acciones focalizadas en territorio y coordinación interinstitucional.",
+        )
         contenido = []
         if clave_detalle:
             contenido.extend(_control_anio_programa(clave_detalle))
         elif es_reinsercion:
             contenido.extend([
-                _ayuda_programa(
-                    "Todos al Aula por el Nuevo Ecuador.",
-                    "Promueve el acceso y/o reinserción escolar de niños, niñas, adolescentes, "
-                    "jóvenes y adultos que se encuentran fuera del Sistema Nacional de Educación, "
-                    "a través de acciones focalizadas en territorio y coordinación interinstitucional.",
+                _ayuda_programa(*ayuda_reinsercion),
+                _control_anio_complementario(
+                    "reinsercion", list(REINSERCION_POR_ANIO_LECTIVO), "Año lectivo"
                 ),
-                html.Div([html.Span("Período"), html.Strong("2022 a septiembre 2026")],
-                         className="programa-periodo-fijo"),
             ])
         elif ayuda_oficial:
             contenido.append(_ayuda_programa(ayuda_oficial[0], ayuda_oficial[1]))
-        texto_ayuda = (f"{ayuda_oficial[0]} {ayuda_oficial[1]}"
+        texto_ayuda = (f"{ayuda_reinsercion[0]} {ayuda_reinsercion[1]}"
+                       if es_reinsercion else
+                       f"{ayuda_oficial[0]} {ayuda_oficial[1]}"
                        if ayuda_oficial else None)
-        contenido.append(cabecera_tarjeta("programa", titulo, texto_ayuda))
+        codigo_icono = "reinsercion" if es_reinsercion else "programa"
+        contenido.append(cabecera_tarjeta(codigo_icono, titulo, texto_ayuda))
         if clave_detalle:
             periodo_inicial = PROGRAMAS_CON_DETALLE[clave_detalle]["filas"][-1][0]
             contenido.append(html.Div(
@@ -3916,10 +4127,11 @@ def _tarjetas_programas_eje2(datos):
                 id={"type": "programa-metricas", "index": clave_detalle},
             ))
         elif es_reinsercion:
-            contenido.append(html.Div([
-                html.Strong("179.235"),
-                html.Span("Estudiantes"),
-            ], className="vision-card-value-row programa-card-resultado"))
+            periodo_inicial = list(REINSERCION_POR_ANIO_LECTIVO)[-1]
+            contenido.append(html.Div(
+                _metricas_reinsercion(periodo_inicial),
+                id={"type": "programa-complementario-metricas", "index": "reinsercion"},
+            ))
         else:
             contenido.append(html.Div([
                 html.Strong(formato_valor(dato["beneficiarios"])),
@@ -3939,18 +4151,17 @@ def _tarjetas_programas_eje2(datos):
 
     if incluye_reinsercion:
         for j, programa in enumerate(PROGRAMAS_GESTION_COMPLEMENTARIOS):
+            clave = programa["clave"]
+            periodos = list(AULAS_HOSPITALARIAS_POR_ANIO)
+            periodo_inicial = periodos[-1]
             tarjetas_complementarias.append(html.Article([
                 _ayuda_programa(programa["titulo"] + ".", programa["descripcion"]),
-                html.Div([html.Span("Año"), html.Strong(programa["periodo"])],
-                         className="programa-periodo-fijo"),
-                cabecera_tarjeta("programa", programa["titulo"]),
-                html.Div([
-                    html.Div([html.Span(etiqueta), html.Strong(valor)],
-                             className=("programa-metrica-periodo inversion"
-                                        if etiqueta == "Inversión"
-                                        else "programa-metrica-periodo"))
-                    for etiqueta, valor in programa["metricas"]
-                ], className="programa-metricas-horizontales programa-metricas-dos"),
+                _control_anio_complementario(clave, periodos, "Año"),
+                cabecera_tarjeta("hospital", programa["titulo"]),
+                html.Div(
+                    _metricas_aulas_hospitalarias(periodo_inicial),
+                    id={"type": "programa-complementario-metricas", "index": clave},
+                ),
             ], className=("vision-exec-card programa-resumen-card programa-con-ayuda "
                           f"programa-{colores[(len(tarjetas) + j) % len(colores)]}"),
                tabIndex=0))
@@ -3984,6 +4195,21 @@ def actualizar_metricas_programa(anio, identificador):
     """Actualiza SAFPI o NAP sin reconstruir el resto de la página."""
     clave = identificador["index"]
     return _metricas_programa_por_anio(clave, anio)
+
+
+@app.callback(
+    Output({"type": "programa-complementario-metricas", "index": MATCH}, "children"),
+    Input({"type": "programa-complementario-anio", "index": MATCH}, "value"),
+    State({"type": "programa-complementario-anio", "index": MATCH}, "id"),
+)
+def actualizar_programa_complementario(periodo, identificador):
+    """Actualiza de forma independiente Reinserción o Aulas Hospitalarias."""
+    clave = identificador["index"]
+    if clave == "reinsercion":
+        return _metricas_reinsercion(periodo)
+    if clave == "hospital":
+        return _metricas_aulas_hospitalarias(periodo)
+    return no_update
 
 
 def _cartera_futura_eje2(proyectos):
@@ -4373,8 +4599,22 @@ DATOS_GENERALES_GESTION_EDUCATIVA = {
     "docentes_total": 217693,
     "docentes_mujeres": 157629,
     "docentes_hombres": 60064,
-    "nee_educacion_especial": 9762,
-    "nee_educacion_ordinaria": 25602,
+    "nee_total": 35582,
+    "nee_sostenimiento": {
+        "Fiscal": 24658,
+        "Fiscomisional": 2665,
+        "Municipal": 571,
+        "Particular": 7688,
+    },
+    "nee_regimen": {
+        "Costa": 19527,
+        "Sierra": 16055,
+    },
+    "escolaridad_inconclusa_total": 242941,
+    "escolaridad_inconclusa_sexo": {
+        "Hombres": 116326,
+        "Mujeres": 126615,
+    },
 }
 
 
@@ -4438,6 +4678,15 @@ DOCENTES_POR_ANIO_LECTIVO = {
 DATOS_ABIERTOS_MINEDEC_URL = "https://educacion.gob.ec/datos-abiertos-minedec/"
 
 
+def _pie_actualizacion_educacion_media(anio_lectivo):
+    """Período y frecuencia de actualización de las cifras generales."""
+    periodo = str(anio_lectivo).replace("-", "–")
+    return html.Div([
+        html.Span(f"Año lectivo {periodo}"),
+        html.Span("Actualización: marzo de cada año"),
+    ], className="educacion-media-periodo-pie")
+
+
 def _contenido_instituciones_educativas(anio_lectivo):
     """Total y desglose por sostenimiento para el año lectivo seleccionado."""
     if anio_lectivo not in INSTITUCIONES_EDUCATIVAS_POR_ANIO:
@@ -4455,6 +4704,7 @@ def _contenido_instituciones_educativas(anio_lectivo):
             ], className=("vision-mini-stat secondary" if i % 2 else "vision-mini-stat"))
             for i, (nombre, valor) in enumerate(sostenimientos.items())
         ], className="vision-card-details instituciones-sostenimientos"),
+        _pie_actualizacion_educacion_media(anio_lectivo),
     ]
 
 
@@ -4510,6 +4760,7 @@ def _contenido_estudiantes(anio_lectivo):
             ], className=("vision-mini-stat secondary" if i % 2 else "vision-mini-stat"))
             for i, categoria in enumerate(categorias)
         ], className="vision-card-details desglose-demografico"),
+        _pie_actualizacion_educacion_media(anio_lectivo),
     ]
 
 
@@ -4564,6 +4815,7 @@ def _contenido_docentes(anio_lectivo):
             ], className=("vision-mini-stat secondary" if i % 2 else "vision-mini-stat"))
             for i, categoria in enumerate(categorias)
         ], className="vision-card-details desglose-demografico"),
+        _pie_actualizacion_educacion_media(anio_lectivo),
     ]
 
 
@@ -4601,44 +4853,69 @@ def actualizar_docentes(anio_lectivo):
     return _contenido_docentes(anio_lectivo)
 
 
-def tarjetas_datos_generales(epja=None):
-    """Cifras de Educación Media y, cuando existe, la fila EPJA del Excel."""
+def tarjetas_datos_generales():
+    """Cifras generales de Educación Media y escolaridad inconclusa."""
     tarjetas = [
         tarjeta_instituciones_educativas(),
         tarjeta_estudiantes(),
         tarjeta_docentes(),
+        tarjeta_escolaridad_inconclusa(),
     ]
-    if epja is not None:
-        tarjetas.append(tarjeta_gestion_educativa(
-            "epja", "Educación para Jóvenes y Adultos (EPJA)",
-            "Programa de Gestión Educativa",
-            formato_valor(epja["beneficiarios"]),
-            unidad=str(epja["tipo"]).strip(),
-        ))
     return tarjetas
 
 
-def tarjeta_necesidades_educativas_especiales():
-    """Cuadro complementario de estudiantes con discapacidad por modalidad."""
+def tarjeta_escolaridad_inconclusa():
+    """Total de estudiantes con escolaridad inconclusa desagregado por sexo."""
     d = DATOS_GENERALES_GESTION_EDUCATIVA
-    especial = d["nee_educacion_especial"]
-    ordinaria = d["nee_educacion_ordinaria"]
-    return tarjeta_gestion_educativa(
-        "generales", "Estudiantes con necesidades educativas especiales",
-        f"Año lectivo {d['anio_lectivo']}",
-        formato_valor(especial + ordinaria),
-        unidad="Estudiantes",
-        detalles=[
-            html.Div([
-                html.Span("Educación Especial"),
-                html.Strong(formato_valor(especial)),
-            ], className="vision-mini-stat"),
-            html.Div([
-                html.Span("Educación Ordinaria"),
-                html.Strong(formato_valor(ordinaria)),
-            ], className="vision-mini-stat secondary"),
-        ],
+    detalles = [
+        html.Div([
+            html.Span(nombre),
+            html.Strong(formato_valor(valor)),
+        ], className=("vision-mini-stat secondary" if i % 2 else "vision-mini-stat"))
+        for i, (nombre, valor) in enumerate(d["escolaridad_inconclusa_sexo"].items())
+    ]
+    return html.Article([
+        cabecera_tarjeta("epja", "Escolaridad Inconclusa"),
+        html.Div([
+            html.Strong(
+                formato_valor(d["escolaridad_inconclusa_total"]),
+                className="vision-card-total",
+            ),
+            html.Span("Estudiantes", className="vision-card-unit"),
+        ], className="vision-card-value-row"),
+        html.Div(detalles, className="vision-card-details"),
+        _pie_actualizacion_educacion_media(d["anio_lectivo"]),
+    ], className="vision-exec-card epja escolaridad-inconclusa-card")
+
+
+def tarjeta_necesidades_educativas_especiales():
+    """Estudiantes con NEE por sostenimiento y régimen, en valores absolutos."""
+    d = DATOS_GENERALES_GESTION_EDUCATIVA
+    detalles = [html.Span("Sostenimiento", className="nee-grupo-titulo")]
+    detalles.extend(
+        html.Div([
+            html.Span(nombre),
+            html.Strong(formato_valor(valor)),
+        ], className=("vision-mini-stat secondary" if i % 2 else "vision-mini-stat"))
+        for i, (nombre, valor) in enumerate(d["nee_sostenimiento"].items())
     )
+    detalles.append(html.Span("Régimen", className="nee-grupo-titulo"))
+    detalles.extend(
+        html.Div([
+            html.Span(nombre),
+            html.Strong(formato_valor(valor)),
+        ], className=("vision-mini-stat secondary" if i % 2 else "vision-mini-stat"))
+        for i, (nombre, valor) in enumerate(d["nee_regimen"].items())
+    )
+    return html.Article([
+        cabecera_tarjeta("generales", "Estudiantes con necesidades educativas especiales"),
+        html.Div([
+            html.Strong(formato_valor(d["nee_total"]), className="vision-card-total"),
+            html.Span("Estudiantes", className="vision-card-unit"),
+        ], className="vision-card-value-row"),
+        html.Div(detalles, className="nee-desglose"),
+        _pie_actualizacion_educacion_media(d["anio_lectivo"]),
+    ], className="vision-exec-card generales nee-card")
 
 
 # ---------------------------------------------------------------------------
@@ -5155,18 +5432,62 @@ def seccion_proximamente(titulo, descripcion):
     ], className="vision-proximamente")
 
 
-# (código CSS, fuente, título, subtítulo, clave principal, unidad, subgrupo)
-TARJETAS_GESTION_EDUCATIVA = [
-    ("alimentacion", "Alimentación Escolar", "Alimentación Escolar",
-     "Raciones entregadas por cantón", "beneficiarios", "Estudiantes", None),
-    ("uniformes", "Uniformes Escolares", "Uniformes Escolares",
-     "Entrega de uniformes por cantón", "beneficiarios", "Estudiantes", None),
-    ("textos", "Textos Escolares", "Textos Escolares",
-     "Entrega de textos por cantón", "beneficiarios", "Estudiantes", None),
-    ("mobiliario", "Mobiliario y Transporte Escolar", "Mobiliario Escolar",
-     "Instituciones atendidas con mobiliario", "instituciones", "Instituciones", "mobiliario"),
-    ("transporte", "Mobiliario y Transporte Escolar", "Transporte Escolar",
-     "Estudiantes atendidos con transporte", "estudiantes", "Estudiantes", "transporte"),
+RECURSOS_EDUCATIVOS_ACTUALIZADOS = [
+    {
+        "codigo": "alimentacion", "titulo": "Alimentación Escolar",
+        "nacional": {"instituciones": 12493, "estudiantes": 2493993,
+                     "inversion": "$190.476.720,79"},
+        "regimen": {
+            "Costa": {"instituciones": 7602, "estudiantes": 1436502,
+                      "inversion": "$109.711.691,40"},
+            "Sierra": {"instituciones": 4891, "estudiantes": 1057491,
+                       "inversion": "$80.765.029,39"},
+        },
+    },
+    {
+        "codigo": "uniformes", "titulo": "Uniformes Escolares",
+        "nacional": {"instituciones": 10136, "estudiantes": 1291398,
+                     "inversion": "$42.845.083,30"},
+        "regimen": {
+            "Costa": {"instituciones": 5608, "estudiantes": 664234,
+                      "inversion": "$21.974.683,86"},
+            "Sierra": {"instituciones": 4528, "estudiantes": 627164,
+                       "inversion": "$20.870.399,44"},
+        },
+    },
+    {
+        "codigo": "textos", "titulo": "Textos Escolares",
+        "nacional": {"instituciones": 12603, "estudiantes": 2859894,
+                     "inversion": "$35.156.870,66"},
+        "regimen": {
+            "Costa": {"instituciones": 6939, "estudiantes": 1599739,
+                      "inversion": "$18.890.301,65"},
+            "Sierra": {"instituciones": 5664, "estudiantes": 1260155,
+                       "inversion": "$16.266.569,01"},
+        },
+    },
+    {
+        "codigo": "mobiliario", "titulo": "Equipamiento y Mobiliario",
+        "nacional": {"instituciones": 1413, "estudiantes": 307800,
+                     "inversion": "$6.991.867,72"},
+        "regimen": {
+            "Costa": {"instituciones": 906, "estudiantes": 198640,
+                      "inversion": "$4.831.279,59"},
+            "Sierra": {"instituciones": 507, "estudiantes": 109160,
+                       "inversion": "$2.160.588,13"},
+        },
+    },
+    {
+        "codigo": "transporte", "titulo": "Transporte Escolar",
+        "nacional": {"instituciones": 167, "estudiantes": 23525,
+                     "inversion": "$13.738.150,61"},
+        "regimen": {
+            "Costa": {"instituciones": 63, "estudiantes": 9761,
+                      "inversion": "$5.091.583,64"},
+            "Sierra": {"instituciones": 104, "estudiantes": 13764,
+                       "inversion": "$8.646.566,97"},
+        },
+    },
 ]
 
 DEFINICIONES_RECURSOS_GESTION = {
@@ -5200,25 +5521,62 @@ DEFINICIONES_RECURSOS_GESTION = {
 }
 
 
-def _detalles_tarjeta_gestion(dato):
-    detalles = [html.Div([
-        html.Span("Instituciones"),
-        html.Strong(formato_valor(dato.get("instituciones", 0)))
-    ], className="vision-mini-stat secondary")]
-    return detalles
+def tarjeta_recurso_educativo(dato):
+    """Resumen nacional y desglose Costa/Sierra de un recurso educativo."""
+    codigo = dato["codigo"]
+    nacional = dato["nacional"]
+    ayuda = DEFINICIONES_RECURSOS_GESTION.get(codigo, (None, None))
+    paneles_regimen = []
+    for i, (regimen, valores) in enumerate(dato["regimen"].items()):
+        paneles_regimen.append(html.Div([
+            html.H4(regimen),
+            html.Div([
+                html.Span("Instituciones"),
+                html.Strong(formato_valor(valores["instituciones"])),
+            ], className="recurso-regimen-fila"),
+            html.Div([
+                html.Span("Estudiantes"),
+                html.Strong(formato_valor(valores["estudiantes"])),
+            ], className="recurso-regimen-fila"),
+            html.Div([
+                html.Span("Inversión"),
+                html.Strong(valores["inversion"]),
+            ], className="recurso-regimen-fila inversion"),
+        ], className=("recurso-regimen-panel secondary" if i % 2
+                      else "recurso-regimen-panel")))
+
+    return html.Article([
+        _ayuda_tarjeta(ayuda[0], ayuda[1]) if all(ayuda) else None,
+        cabecera_tarjeta(
+            codigo, dato["titulo"],
+            f"{ayuda[0]} {ayuda[1]}" if all(ayuda) else None,
+        ),
+        html.Div([
+            html.Strong(formato_valor(nacional["estudiantes"]), className="vision-card-total"),
+            html.Span("Estudiantes", className="vision-card-unit"),
+        ], className="vision-card-value-row"),
+        html.Div([
+            html.Div([
+                html.Span("Instituciones"),
+                html.Strong(formato_valor(nacional["instituciones"])),
+            ], className="programa-metrica-periodo"),
+            html.Div([
+                html.Span("Inversión nacional"),
+                html.Strong(nacional["inversion"]),
+            ], className="programa-metrica-periodo inversion"),
+        ], className="recurso-resumen-nacional"),
+        html.Div(paneles_regimen, className="recurso-regimenes"),
+        html.Div([
+            html.Span("Año lectivo 2025–2026"),
+            html.Span("Actualización: diciembre de cada año"),
+        ], className="educacion-media-periodo-pie"),
+    ], className=(f"vision-exec-card {codigo} programa-con-ayuda "
+                  "recurso-educativo-actualizado"), tabIndex=0)
 
 
 def pagina_gestion_educativa():
-    """Una tarjeta por cada una de las 4 bases reales, mostrando exactamente
-    lo que cada una tiene (beneficiarios/instituciones y su cobertura por
-    provincia) — nunca el monto de inversión. No se inventan tarjetas de
-    Matrícula, Permanencia o Riesgos de continuidad: esas requieren la base
-    de matrícula estudiantil, que todavía no está conectada aquí."""
-    resumen = RESUMEN_GESTION_EDUCATIVA
-    pendientes = PENDIENTES_GESTION_EDUCATIVA
+    """Visión consolidada de Educación Media y sus programas institucionales."""
     programas_gestion, aviso_programas = cargar_programas_viceministerio("Gestión Educativa")
-    epja = next((p for p in programas_gestion
-                 if "epja" in _sin_tildes(p.get("programa", ""))), None)
     programas_gestion = [
         p for p in programas_gestion
         if "epja" not in _sin_tildes(p.get("programa", ""))
@@ -5227,54 +5585,16 @@ def pagina_gestion_educativa():
             and "bienestar" in _sin_tildes(p.get("programa", ""))
         )
     ]
-    tarjetas_media = tarjetas_datos_generales(epja)
+    tarjetas_media = tarjetas_datos_generales()
     tarjetas_media_principales = tarjetas_media[:3]
     # Orden visual solicitado: primero Necesidades Educativas Especiales y,
-    # a continuación, Educación para Jóvenes y Adultos (EPJA).
+    # a continuación, Escolaridad Inconclusa.
     tarjetas_media_segunda_fila = [
         tarjeta_necesidades_educativas_especiales()
     ] + tarjetas_media[3:]
 
-    def dato(nombre_legible, clave):
-        return resumen.get(nombre_legible, {}).get(clave)
-
-    tarjetas = []
-    for (codigo, nombre_legible, titulo, subtitulo, clave_principal,
-         etiqueta_principal, subgrupo) in TARJETAS_GESTION_EDUCATIVA:
-        fuente_completa = resumen.get(nombre_legible, {})
-        fuente = (fuente_completa.get("por_recurso", {}).get(subgrupo, {})
-                  if subgrupo else fuente_completa)
-        valor_principal = fuente.get(clave_principal)
-        if valor_principal is None and clave_principal == "estudiantes":
-            valor_principal = fuente.get("beneficiarios")
-        dato_disponible = valor_principal is not None
-        # En Mobiliario el total principal ya está expresado en instituciones;
-        # repetir el mismo dato en el recuadro inferior no agrega información.
-        detalles = (_detalles_tarjeta_gestion(fuente)
-                    if dato_disponible and codigo != "mobiliario" else None)
-        ayuda = DEFINICIONES_RECURSOS_GESTION.get(codigo, (None, None))
-        tarjetas.append(tarjeta_gestion_educativa(
-            codigo, titulo, subtitulo,
-            formato_valor(valor_principal) if dato_disponible else "En actualización",
-            detalles=detalles,
-            unidad=etiqueta_principal if dato_disponible else None,
-            ayuda_nombre=ayuda[0], ayuda_descripcion=ayuda[1],
-            periodo="Año lectivo 2025-2026",
-        ))
-
-    pie = None
-    base_mt = resumen.get("Mobiliario y Transporte Escolar")
-    if base_mt is not None and not base_mt.get("por_recurso"):
-        pendientes = list(pendientes) + [
-            "Mobiliario y Transporte Escolar (la hoja leída no tiene la columna "
-            "'Clasificación' con los valores 'Equipamiento y mobiliario' y "
-            "'Transporte escolar')"
-        ]
-    if pendientes:
-        pie = html.Div([
-            html.Strong("Fuentes por complementar: "),
-            html.Span("aún no se pudieron leer las bases de " + "; ".join(pendientes) + "."),
-        ], className="vision-exec-footer-aviso")
+    tarjetas = [tarjeta_recurso_educativo(dato)
+                for dato in RECURSOS_EDUCATIVOS_ACTUALIZADOS]
 
     return html.Section(className="vision-exec-page gestion-educativa-page", children=[
         html.Div(className="vision-exec-header vision-exec-header-compacta", children=[
@@ -5321,7 +5641,6 @@ def pagina_gestion_educativa():
             children=tarjetas,
             style={"gridTemplateColumns": "repeat(3, minmax(0, 1fr))"},
         ),
-        pie,
     ])
 
 
