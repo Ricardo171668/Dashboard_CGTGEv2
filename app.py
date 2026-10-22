@@ -2684,7 +2684,18 @@ app.index_string = """<!DOCTYPE html>
         }
         @media (min-width: 1101px) {
           .module-main .vision-exec-page .deporte-servicios-grid.vision-exec-grid {
-            grid-template-columns: repeat(3, minmax(0, 1fr)) !important;
+            grid-template-columns: repeat(6, minmax(0, 1fr)) !important;
+          }
+          .module-main .vision-exec-page .deporte-servicios-grid > .deporte-resumen-card {
+            width: auto !important;
+            min-width: 0 !important;
+            max-width: none !important;
+          }
+          .module-main .vision-exec-page .deporte-servicios-grid > .deporte-resumen-card:first-child {
+            grid-column: 2 / span 2 !important;
+          }
+          .module-main .vision-exec-page .deporte-servicios-grid > .deporte-resumen-card:nth-child(2) {
+            grid-column: 4 / span 2 !important;
           }
         }
         @media (min-width: 701px) and (max-width: 1450px) {
@@ -4996,7 +5007,7 @@ DATOS_SERVICIOS_DEPORTE = [
             ("Puntos", 585),
             ("Instructores", 104),
             ("Beneficiarios permanentes", 24643),
-            ("Beneficiarios de eventos", 10600),
+            ("Beneficiarios eventuales", 10600),
         ],
     },
     {
@@ -5006,16 +5017,7 @@ DATOS_SERVICIOS_DEPORTE = [
             ("Puntos", 480),
             ("Instructores", 90),
             ("Beneficiarios permanentes", 15727),
-            ("Beneficiarios de eventos", 5495),
-        ],
-    },
-    {
-        "codigo": "usuarios-deporte",
-        "titulo": "Usuarios del deporte",
-        "items": [
-            ("Gratuitos", 134306),
-            ("Pagados", 62830),
-            ("Ingresos", "$ 96.192"),
+            ("Beneficiarios eventuales", 5495),
         ],
     },
 ]
@@ -5061,7 +5063,7 @@ def seccion_programas_servicios_deporte():
             [_tarjeta_resumen_deporte(dato, color)
              for dato, color in zip(
                  DATOS_SERVICIOS_DEPORTE,
-                 ["azul", "verde", "morado"],
+                 ["azul", "verde"],
              )],
             className=("vision-exec-grid gestion-educativa-grid "
                        "deporte-programas-generales-grid deporte-servicios-grid"),
@@ -5392,22 +5394,8 @@ EJES_VICEMINISTERIALES = {
     "deporte": {
         "numero": 4, "vice_excel": "Deporte", "titulo": "Deporte para el Nuevo Ecuador",
         "introduccion": "Programas de recreación, actividad física e infraestructura deportiva con alcance territorial.",
-        "resumen": [("4", "Programas estratégicos"), ("98.500", "Beneficiarios directos"),
-                    ("USD 2.120.195,10", "Inversión ejecutada")],
-        "acciones": [
-            {"icono": "▧", "mes": "Octubre–Noviembre", "titulo": "Programa «Pinta tu Cancha»",
-             "descripcion": "Pintado de canchas comunitarias e institucionales mediante autogestión.",
-             "detalle": "8.300 beneficiarios · 6 provincias · 9 intervenciones"},
-            {"icono": "⌂", "mes": "Octubre–Noviembre", "titulo": "Infraestructura deportiva",
-             "descripcion": "Rehabilitación, adecuación y mantenimiento de escenarios deportivos emblemáticos.",
-             "detalle": "85.720 beneficiarios · USD 2.088.465,10 · 14 inauguraciones"},
-            {"icono": "●", "mes": "Octubre–Noviembre", "titulo": "Programa «Actívate»",
-             "descripcion": "Eventos y festivales orientados a promover actividad física en adultos y adultos mayores.",
-             "detalle": "2.930 beneficiarios · USD 24.692 · 6 actividades"},
-            {"icono": "★", "mes": "Octubre–Noviembre", "titulo": "Programa «Vamos a la Cancha»",
-             "descripcion": "Práctica deportiva para niñas, niños y adolescentes de 5 a 17 años.",
-             "detalle": "1.550 beneficiarios · USD 7.038 · 6 actividades"},
-        ],
+        "resumen": [],
+        "acciones": [],
     },
     "cultura": {
         "numero": 5, "vice_excel": "Cultura", "titulo": "Cultura para el Nuevo Ecuador",
