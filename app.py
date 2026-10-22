@@ -4981,19 +4981,33 @@ def seccion_informacion_general_deporte():
 # institucional entregado el 21-10-2026. Las fuentes y explicaciones se
 # presentan al pasar el cursor por cada tarjeta, no como notas sueltas.
 DESCRIPCION_RUAC = (
-    "El Registro Único de Artistas y Gestores Culturales (RUAC) es una "
-    "herramienta que consolida información de profesionales, trabajadores, "
-    "colectivos, empresas y organizaciones del sector cultural y artístico, "
-    "tanto a nivel nacional como en el exterior o en situación de movilidad "
-    "humana. La incorporación es voluntaria y la actualización es permanente."
+    "Comprende a los profesionales, creadores, productores, gestores, técnicos "
+    "y trabajadores de diversos oficios, así como a las agrupaciones, "
+    "colectivos, empresas y entidades, cuya actividad principal se dedica a la "
+    "creación, soporte, gestión, difusión y sostenibilidad de la cultura y las artes."
 )
 
-DESCRIPCION_REPOSITORIOS = (
-    "La información corresponde a los repositorios y visitas de usuarios de "
-    "los servicios que ofrecen los museos, archivos y bibliotecas de las "
-    "Entidades Operativas Desconcentradas adscritas al ente rector de la "
-    "Cultura y el Patrimonio. La actualización es permanente y la información "
-    "se consolida trimestralmente."
+NOTA_REPOSITORIOS = (
+    "La información presentada corresponde únicamente a los repositorios de "
+    "memoria social de las Entidades Operativas Desconcentradas adscritas al ente rector."
+)
+
+DESCRIPCION_ESPACIOS_CULTURALES = (
+    "Los espacios e infraestructura cultural constituyen el soporte físico, "
+    "técnico y comunitario indispensable para el sector. Comprenden los archivos, "
+    "museos y bibliotecas que custodian, investigan y difunden el patrimonio "
+    "cultural del territorio; se articulan de forma directa con teatros, centros "
+    "culturales, galerías y plazas que dinamizan la formación, la producción y la "
+    "circulación artística, garantizando el acceso ciudadano a la cultura y la "
+    "preservación de la identidad colectiva. Nota: " + NOTA_REPOSITORIOS
+)
+
+DESCRIPCION_VISITAS_REPOSITORIOS = (
+    "Las visitas a repositorios y espacios culturales constituyen la interacción "
+    "de la ciudadanía, el consumo cultural y la apropiación pública del patrimonio "
+    "y las artes. Consolidan la asistencia de la comunidad a museos, archivos, "
+    "bibliotecas, teatros y centros culturales, evaluando el acceso democrático a "
+    "la cultura en el territorio. Nota: " + NOTA_REPOSITORIOS
 )
 
 DATOS_INFORMACION_GENERAL_CULTURA = [
@@ -5030,7 +5044,7 @@ DATOS_INFORMACION_GENERAL_CULTURA = [
         ],
         "pie": ["Año 2025", "Fecha de corte: diciembre de 2025",
                 "Actualización: permanente · consolidación trimestral"],
-        "descripcion": DESCRIPCION_REPOSITORIOS,
+        "descripcion": DESCRIPCION_ESPACIOS_CULTURALES,
     },
 ]
 
@@ -5048,7 +5062,7 @@ PROGRAMAS_SERVICIOS_CULTURA = [
         },
         "corte": "Fecha de corte: diciembre de 2025",
         "actualizacion": "Actualización: permanente · consolidación trimestral",
-        "descripcion": DESCRIPCION_REPOSITORIOS,
+        "descripcion": DESCRIPCION_VISITAS_REPOSITORIOS,
     },
     {
         "codigo": "linea-fomento",
@@ -5083,10 +5097,13 @@ PROGRAMAS_SERVICIOS_CULTURA = [
         "corte": "Fecha de corte: 21-10-2026",
         "actualizacion": "Actualización: conforme a las convocatorias de cada período",
         "descripcion": (
-            "La información corresponde a los proyectos seleccionados "
-            "(ganadores) de cada línea de financiamiento en el año "
-            "correspondiente. La actualización se realiza de acuerdo con las "
-            "convocatorias efectuadas dentro de cada período."
+            "Los beneficiarios de fondos de fomento son proyectos artísticos y "
+            "culturales ejecutados por artistas, gestores y colectivos que han "
+            "sido financiados mediante recursos públicos no reembolsables. Estos "
+            "fondos estatales están orientados a fomentar la creación, producción, "
+            "circulación, investigación o salvaguarda en áreas clave como las artes "
+            "y la creatividad, la creación cinematográfica y audiovisual, la "
+            "memoria social y el patrimonio cultural."
         ),
     },
     {
@@ -5113,11 +5130,15 @@ PROGRAMAS_SERVICIOS_CULTURA = [
         "corte": "Último período disponible: 2025",
         "actualizacion": "Actualización: anual",
         "descripcion": (
-            "El Festival de Loja es el encuentro cultural más importante del "
-            "Ecuador. Se celebra cada mes de noviembre en la ciudad de Loja, "
-            "transformando teatros, calles, parques y plazas en un gran "
-            "escenario abierto para el teatro, la danza, la ópera, el circo y "
-            "la música."
+            "El Festival Internacional de Artes Vivas Loja (FIAVL) es el mayor "
+            "encuentro de las artes y la cultura del Ecuador, celebrado anualmente "
+            "cada mes de noviembre en la ciudad de Loja. Esta plataforma de fomento "
+            "dinamiza la economía naranja al transformar la infraestructura cultural, "
+            "calles, parques y plazas de la ciudad en un gran escenario abierto para "
+            "la circulación de obras nacionales e internacionales de teatro, danza, "
+            "circo y música, entre otros. Funciona como un componente clave para "
+            "medir el impacto de las artes vivas, el flujo de públicos, la activación "
+            "del espacio público y la circulación de obras de artistas y gestores culturales."
         ),
     },
 ]
