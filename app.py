@@ -1600,12 +1600,12 @@ app.index_string = """<!DOCTYPE html>
         .deporte-informacion-grid,
         .deporte-informacion-grid.vision-exec-grid {
           width: 100% !important; max-width: none !important;
-          grid-template-columns: repeat(5, minmax(0, 1fr)) !important;
+          grid-template-columns: repeat(4, minmax(0, 1fr)) !important;
           gap: 12px !important;
         }
         .deporte-informacion-grid > .vision-exec-card {
           width: auto !important; min-width: 0 !important;
-          max-width: none !important; min-height: 142px;
+          max-width: none !important; min-height: 230px;
           align-self: stretch !important;
         }
         .deporte-informacion-grid .vision-card-label {
@@ -1621,22 +1621,25 @@ app.index_string = """<!DOCTYPE html>
         .deporte-programas-generales-grid,
         .deporte-programas-generales-grid.vision-exec-grid {
           width: 100% !important; max-width: none !important;
-          grid-template-columns: repeat(6, minmax(0, 1fr)) !important;
+          grid-template-columns: repeat(3, minmax(0, 1fr)) !important;
           gap: 12px !important;
         }
         .deporte-programas-generales-grid > .vision-exec-card {
-          grid-column: span 2; width: auto !important; min-width: 0 !important;
+          grid-column: auto; width: auto !important; min-width: 0 !important;
           max-width: none !important; align-self: stretch !important;
         }
         .deporte-programas-generales-grid > .vision-exec-card:first-child {
-          grid-column: 2 / span 2;
+          grid-column: auto;
         }
         .deporte-programas-generales-grid > .vision-exec-card:nth-child(2) {
-          grid-column: 4 / span 2;
+          grid-column: auto;
         }
         .deporte-programa-metricas {
           display: grid; grid-template-columns: repeat(2, minmax(0, 1fr));
           gap: 8px; margin-top: 10px;
+        }
+        .deporte-programa-metricas.items-3 {
+          grid-template-columns: repeat(3, minmax(0, 1fr));
         }
         .deporte-programa-metrica {
           min-width: 0; padding: 10px 8px; border-radius: 9px;
@@ -1650,6 +1653,7 @@ app.index_string = """<!DOCTYPE html>
         .deporte-programa-metrica strong {
           display: block; margin-top: 4px; color: #17245b;
           font-size: clamp(20px, 1.6vw, 28px); font-weight: 900;
+          overflow-wrap: anywhere;
         }
         .deporte-informacion-fuente {
           margin: 10px 0 0 !important;
@@ -2658,6 +2662,52 @@ app.index_string = """<!DOCTYPE html>
           .cultura-resumen-item strong,
           .cultura-programa-metrica strong {
             font-size: clamp(18px, 6vw, 23px) !important;
+          }
+        }
+
+        /* Deporte: las cifras nunca se parten en dos líneas. Las tres tarjetas
+           de servicios ocupan la franja completa cuando el ancho lo permite. */
+        .deporte-resumen-card {
+          min-width: 0 !important;
+          overflow: hidden !important;
+        }
+        .deporte-programa-metrica {
+          min-width: 0 !important;
+        }
+        .deporte-programa-metrica strong {
+          max-width: 100% !important;
+          font-size: clamp(18px, 1.35vw, 27px) !important;
+          line-height: 1.05 !important;
+          white-space: nowrap !important;
+          overflow-wrap: normal !important;
+          word-break: normal !important;
+        }
+        @media (min-width: 1101px) {
+          .module-main .vision-exec-page .deporte-servicios-grid.vision-exec-grid {
+            grid-template-columns: repeat(3, minmax(0, 1fr)) !important;
+          }
+        }
+        @media (min-width: 701px) and (max-width: 1450px) {
+          .deporte-programa-metricas.items-3 {
+            grid-template-columns: repeat(2, minmax(0, 1fr));
+          }
+          .deporte-programa-metricas.items-3 > .deporte-programa-metrica:last-child {
+            grid-column: 1 / -1;
+          }
+          .deporte-programa-metrica strong {
+            font-size: clamp(18px, 1.8vw, 24px) !important;
+          }
+        }
+        @media (max-width: 700px) {
+          .deporte-programa-metricas,
+          .deporte-programa-metricas.items-3 {
+            grid-template-columns: repeat(2, minmax(0, 1fr));
+          }
+          .deporte-programa-metricas.items-3 > .deporte-programa-metrica:last-child {
+            grid-column: 1 / -1;
+          }
+          .deporte-programa-metrica strong {
+            font-size: clamp(20px, 7vw, 27px) !important;
           }
         }
         </style>
@@ -4895,86 +4945,128 @@ def pagina_educacion_superior():
     ])
 
 
-# Información institucional del Viceministerio del Deporte. Corresponde al
-# corte de agosto de 2026 entregado para la Visión Ejecutiva.
+# Información institucional actualizada del Viceministerio del Deporte.
 DATOS_GENERALES_DEPORTE = [
-    ("vitalicios", "Exdeportistas vitalicios", 334, "Exdeportistas"),
-    ("alto-rendimiento", "Deportistas de alto rendimiento", 401, "Deportistas"),
-    ("entrenadores", "Entrenadores", 324, "Entrenadores"),
-    ("usuarios-deporte", "Usuarios de deporte", 455632, "Usuarios"),
-    ("juegos-juveniles", "Juegos Deportivos Nacionales · Ciclo Juvenil", 2538,
-     "Deportistas"),
-]
-
-DATOS_PROGRAMAS_GENERALES_DEPORTE = [
     {
-        "codigo": "activate", "titulo": "Actívate", "puntos_activos": 492,
-        "instructores": 12, "beneficiarios_permanentes": 22030,
-        "beneficiarios_eventos": 27370,
+        "codigo": "alto-rendimiento",
+        "titulo": "Alto rendimiento",
+        "items": [
+            ("Deportistas de alto rendimiento", 293),
+            ("Vitaliciados", 339),
+        ],
     },
     {
-        "codigo": "vamos-cancha", "titulo": "Vamos a la Cancha", "puntos_activos": 415,
-        "instructores": 9, "beneficiarios_permanentes": 13232,
-        "beneficiarios_eventos": 16683,
+        "codigo": "deporte-formativo",
+        "titulo": "Formativo",
+        "items": [
+            ("Deportistas juveniles", 2520),
+            ("Beneficiarios", 5120),
+            ("Entrenadores", 340),
+        ],
+    },
+    {
+        "codigo": "organismos-deportivos",
+        "titulo": "Organismos deportivos",
+        "items": [
+            ("Club deportivo", 4187),
+            ("Liga", 1288),
+            ("Básico", 11671),
+            ("Otros", 448),
+        ],
+    },
+    {
+        "codigo": "infraestructura-deportiva",
+        "titulo": "Infraestructura deportiva",
+        "items": [
+            ("Centros activos", 6),
+            ("Centros de alto rendimiento", 6),
+            ("Coliseos", 5),
+            ("Inmuebles", 5),
+            ("Complejos deportivos", 3),
+            ("Otros (canchas, piscina y polideportivo)", 3),
+        ],
+    },
+]
+
+DATOS_SERVICIOS_DEPORTE = [
+    {
+        "codigo": "activate",
+        "titulo": "Actívate",
+        "items": [
+            ("Puntos", 585),
+            ("Instructores", 104),
+            ("Beneficiarios permanentes", 24643),
+            ("Beneficiarios de eventos", 10600),
+        ],
+    },
+    {
+        "codigo": "vamos-cancha",
+        "titulo": "Vamos a la Cancha",
+        "items": [
+            ("Puntos", 480),
+            ("Instructores", 90),
+            ("Beneficiarios permanentes", 15727),
+            ("Beneficiarios de eventos", 5495),
+        ],
+    },
+    {
+        "codigo": "usuarios-deporte",
+        "titulo": "Usuarios del deporte",
+        "items": [
+            ("Gratuitos", 134306),
+            ("Pagados", 62830),
+            ("Ingresos", "$ 96.192"),
+        ],
     },
 ]
 
 
-def _tarjeta_programa_general_deporte(dato):
-    metricas = [
-        ("Puntos activos", dato["puntos_activos"]),
-        ("Instructores", dato["instructores"]),
-        ("Beneficiarios permanentes", dato["beneficiarios_permanentes"]),
-        ("Beneficiarios de eventos masivos", dato["beneficiarios_eventos"]),
-    ]
+def _tarjeta_resumen_deporte(dato, color):
+    """Tarjeta deportiva homogénea para información y servicios."""
+    metricas = dato["items"]
     return html.Article([
         cabecera_tarjeta(dato["codigo"], dato["titulo"]),
         html.Div([
             html.Div([
                 html.Span(etiqueta),
-                html.Strong(formato_valor(valor)),
+                html.Strong(formato_valor(valor) if isinstance(valor, (int, float)) else valor),
             ], className="deporte-programa-metrica")
             for etiqueta, valor in metricas
-        ], className="deporte-programa-metricas"),
-        html.Small("Corte: agosto de 2026", className="vision-card-periodo"),
-    ], className=(f"vision-exec-card deporte-programa-general "
-                  f"{dato['codigo']}"))
+        ], className=f"deporte-programa-metricas items-{len(metricas)}"),
+    ], className=(f"vision-exec-card programa-resumen-card deporte-resumen-card "
+                  f"programa-{color} {dato['codigo']}"))
 
 
 def seccion_informacion_general_deporte():
-    """Cifras generales de Deporte, separadas de sus programas y servicios."""
-    tarjetas = [
-        tarjeta_gestion_educativa(
-            codigo, titulo, None, formato_valor(valor), unidad=unidad,
-            periodo="Corte: agosto de 2026",
-        )
-        for codigo, titulo, valor, unidad in DATOS_GENERALES_DEPORTE
-    ]
+    """Nueva síntesis general de alto rendimiento, formación e infraestructura."""
     return html.Div([
         html.H2("Información general", className="vision-eje-banner"),
         html.Div(
-            tarjetas,
+            [_tarjeta_resumen_deporte(dato, color)
+             for dato, color in zip(
+                 DATOS_GENERALES_DEPORTE,
+                 ["azul", "verde", "amarillo", "morado"],
+             )],
             className=("vision-exec-grid gestion-educativa-grid "
                        "datos-generales-grid deporte-informacion-grid"),
         ),
-        html.H3("Actívate y Vamos a la Cancha", className="deporte-subseccion-titulo"),
-        html.Div(
-            [_tarjeta_programa_general_deporte(dato)
-             for dato in DATOS_PROGRAMAS_GENERALES_DEPORTE],
-            className=("vision-exec-grid gestion-educativa-grid "
-                       "deporte-programas-generales-grid"),
-        ),
-        html.P([
-            html.Strong("Fuente: "),
-            "Dirección de Alto Rendimiento, Subsecretaría de Servicios del "
-            "Sistema Deportivo y reportes de recaudación de usuarios de centros activos.",
-        ], className="eje2-source-note deporte-informacion-fuente"),
-        html.P([
-            html.Strong("Nota: "),
-            "Los registros del Viceministerio del Deporte no todos cuentan con "
-            "desagregación a nivel cantonal.",
-        ], className="eje2-source-note deporte-informacion-nota"),
     ], className="deporte-informacion-general")
+
+
+def seccion_programas_servicios_deporte():
+    """Servicios deportivos y usuarios con las cifras de la matriz vigente."""
+    return html.Div([
+        html.H2("Programas y servicios de Deporte", className="vision-eje-banner"),
+        html.Div(
+            [_tarjeta_resumen_deporte(dato, color)
+             for dato, color in zip(
+                 DATOS_SERVICIOS_DEPORTE,
+                 ["azul", "verde", "morado"],
+             )],
+            className=("vision-exec-grid gestion-educativa-grid "
+                       "deporte-programas-generales-grid deporte-servicios-grid"),
+        ),
+    ], className="deporte-programas-servicios")
 
 
 # Información general y programas de Cultura, actualizados con el corte
@@ -5376,7 +5468,7 @@ def _tarjetas_acciones_eje(acciones):
 
 def pagina_eje_viceministerial(codigo):
     eje = EJES_VICEMINISTERIALES[codigo]
-    programas, aviso = (([], None) if codigo == "cultura"
+    programas, aviso = (([], None) if codigo in {"deporte", "cultura"}
                         else cargar_programas_viceministerio(eje["vice_excel"]))
     informacion_general = (
         seccion_informacion_general_deporte() if codigo == "deporte"
@@ -5384,7 +5476,8 @@ def pagina_eje_viceministerial(codigo):
         else None
     )
     programas_y_servicios = (
-        seccion_programas_servicios_cultura() if codigo == "cultura"
+        seccion_programas_servicios_deporte() if codigo == "deporte"
+        else seccion_programas_servicios_cultura() if codigo == "cultura"
         else html.Div([
             html.H2(f"Programas y servicios de {eje['vice_excel']}",
                     className="vision-eje-banner"),
