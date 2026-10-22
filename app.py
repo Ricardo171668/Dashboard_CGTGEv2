@@ -642,6 +642,34 @@ def _metricas_gestion(df, mapa):
     return dato
 
 
+REGION_POR_PROVINCIA = {
+    "ESMERALDAS": "Costa", "MANABI": "Costa", "SANTO DOMINGO DE LOS TSACHILAS": "Costa",
+    "LOS RIOS": "Costa", "GUAYAS": "Costa", "SANTA ELENA": "Costa", "EL ORO": "Costa",
+    "CARCHI": "Sierra", "IMBABURA": "Sierra", "PICHINCHA": "Sierra",
+    "COTOPAXI": "Sierra", "TUNGURAHUA": "Sierra", "BOLIVAR": "Sierra",
+    "CHIMBORAZO": "Sierra", "CANAR": "Sierra", "AZUAY": "Sierra", "LOJA": "Sierra",
+    "SUCUMBIOS": "Amazonía", "NAPO": "Amazonía", "ORELLANA": "Amazonía",
+    "PASTAZA": "Amazonía", "MORONA SANTIAGO": "Amazonía",
+    "ZAMORA CHINCHIPE": "Amazonía", "GALAPAGOS": "Insular",
+}
+
+
+def _metricas_gestion_por_provincia(df, mapa):
+    """Agrega las métricas reales por provincia, sin completar datos ausentes."""
+    col_prov = mapa.get("PROVINCIA") or _columna_por_fragmentos(
+        mapa, ("PROVINCIA",), excluir=("CODIGO",)
+    )
+    if col_prov is None:
+        return {}
+    trabajo = df.copy()
+    trabajo["_provincia_mapa"] = trabajo[col_prov].map(_provincia_homologada)
+    trabajo = trabajo.dropna(subset=["_provincia_mapa"])
+    return {
+        provincia: _metricas_gestion(grupo, mapa)
+        for provincia, grupo in trabajo.groupby("_provincia_mapa", sort=True)
+    }
+
+
 def _resumen_base_gestion_educativa(archivo, nombre_legible):
     """Lee una base, homologa provincias y precalcula sus filtros reales."""
     df = None
@@ -666,6 +694,7 @@ def _resumen_base_gestion_educativa(archivo, nombre_legible):
     df.columns = [" ".join(str(c).strip().split()) for c in df.columns]
     mapa = {_normalizar_encabezado_presupuesto(c): c for c in df.columns}
     dato = _metricas_gestion(df, mapa)
+    dato["por_provincia"] = _metricas_gestion_por_provincia(df, mapa)
     col_regimen = next((c for k, c in mapa.items() if "REGIMEN" in k), None)
     col_clasificacion = _columna_por_claves(
         mapa,
@@ -706,13 +735,17 @@ def _resumen_base_gestion_educativa(archivo, nombre_legible):
             clasificacion_normalizada.eq("TRANSPORTE_ESCOLAR")
             | clasificacion_normalizada.str.contains("TRANSPORTE", na=False)
         )
+        mobiliario = _metricas_gestion(df.loc[es_mobiliario], mapa)
+        mobiliario["por_provincia"] = _metricas_gestion_por_provincia(
+            df.loc[es_mobiliario], mapa
+        )
+        transporte = _metricas_gestion(df.loc[es_transporte], mapa)
+        transporte["por_provincia"] = _metricas_gestion_por_provincia(
+            df.loc[es_transporte], mapa
+        )
         dato["por_recurso"] = {
-            "mobiliario": _metricas_gestion(
-                df.loc[es_mobiliario], mapa
-            ),
-            "transporte": _metricas_gestion(
-                df.loc[es_transporte], mapa
-            ),
+            "mobiliario": mobiliario,
+            "transporte": transporte,
         }
     return dato
 
@@ -1068,6 +1101,23 @@ def descargar_entregable(nombre_archivo):
                          download_name=nombre_archivo)
     abort(404, description="El entregable no se encuentra en la carpeta Quipux/Entregables05102026.")
 
+
+@server.route("/recurso-portada/<path:nombre_archivo>")
+def recurso_portada(nombre_archivo):
+    """Sirve las dos imágenes institucionales de la portada.
+
+    En los despliegues históricos estos archivos quedaron unas veces junto a
+    ``app.py`` y otras dentro de ``assets``. La ruta unificada evita que la
+    portada se rompa al publicar el proyecto desde GitHub o Posit Cloud.
+    """
+    permitidos = {"logo-minedec.png", "imagen_minedec.png"}
+    if Path(nombre_archivo).name != nombre_archivo or nombre_archivo not in permitidos:
+        abort(404)
+    for ruta in (BASE_DIR / "assets" / nombre_archivo, BASE_DIR / nombre_archivo):
+        if ruta.is_file():
+            return send_file(ruta, conditional=True, max_age=86400)
+    abort(404, description=f"No se encontró el recurso institucional '{nombre_archivo}'.")
+
 # MathJax renderiza las fórmulas en LaTeX (delimitadas con $...$, $$...$$,
 # \(...\) o \[...\]) que
 # se escriban en la celda "Fórmula de cálculo" del Excel. Se configura antes de
@@ -1122,34 +1172,43 @@ app.index_string = """<!DOCTYPE html>
         .vision-landing-menu {
           width: 100%; margin-top: 54px !important;
         }
+        .vision-landing-kpis {
+          display: flex !important; flex-wrap: wrap; justify-content: center;
+          gap: 10px; margin-top: 18px;
+        }
+        .vision-landing-kpi {
+          display: flex; flex-direction: column; align-items: center;
+          min-width: 108px; padding: 8px 16px; border-radius: 12px;
+          background: rgba(255,255,255,.14); color: #fff;
+        }
+        .vision-landing-kpi span {
+          font-size: 10px; font-weight: 800; letter-spacing: .04em;
+          text-transform: uppercase; color: #d9d4f5;
+        }
+        .vision-landing-kpi strong {
+          font-size: 17px; font-weight: 900; line-height: 1.3;
+        }
         .vision-landing-menu .vision-vice-menu {
           display: grid !important;
-          grid-template-columns: repeat(6, minmax(0, 1fr)) !important;
-          gap: 18px !important; width: min(100%, 1120px) !important;
-          max-width: 1120px !important; margin: 0 auto !important;
+          grid-template-columns: repeat(5, minmax(0, 1fr)) !important;
+          gap: 18px !important; width: min(100%, 1280px) !important;
+          max-width: 1280px !important; margin: 0 auto !important;
           padding: 0 0 24px !important; overflow: visible !important;
         }
         .vision-landing-menu .vision-vice-row {
-          grid-column: span 2; min-width: 0 !important; padding: 0 !important;
+          grid-column: auto; min-width: 0 !important; padding: 0 !important;
           border: 0 !important; border-radius: 18px !important;
           background: transparent !important; box-shadow: none !important;
         }
-        .vision-landing-menu .vision-vice-row:nth-child(4) {
-          grid-column: 2 / span 2;
-        }
-        .vision-landing-menu .vision-vice-row:nth-child(5) {
-          grid-column: 4 / span 2;
-        }
         .vision-landing-menu .vision-vice-pill {
-          display: grid !important;
-          grid-template-columns: minmax(0, 1fr) !important;
-          grid-template-rows: 1fr auto !important;
-          align-items: center !important;
-          width: 100% !important; min-height: 132px !important;
-          padding: 20px !important; border: 1px solid #dfe3ef !important;
+          display: flex !important;
+          flex-direction: column !important;
+          align-items: stretch !important;
+          width: 100% !important; height: 100% !important; min-height: 280px !important;
+          padding: 22px 20px 20px !important; border: 1px solid #dfe3ef !important;
           border-top: 5px solid #4f3c98 !important;
           border-radius: 18px !important; background: #ffffff !important;
-          color: #232d5a !important; text-align: center !important;
+          color: #232d5a !important; text-align: left !important;
           box-shadow: 0 10px 26px rgba(24,37,87,.09) !important;
           cursor: pointer; transition: transform .16s ease, box-shadow .16s ease;
         }
@@ -1159,13 +1218,32 @@ app.index_string = """<!DOCTYPE html>
           box-shadow: 0 16px 32px rgba(24,37,87,.16) !important;
           outline: 3px solid rgba(241,182,32,.35);
         }
+        .vision-vice-card-top {
+          display: flex; align-items: flex-start; justify-content: space-between;
+          margin-bottom: 14px;
+        }
+        .vision-vice-card-numero {
+          color: #c3c7e0; font-size: 20px; font-weight: 900;
+        }
         .vision-landing-vice-nombre {
-          align-self: end; color: #232d5a; font-size: 15px;
-          font-weight: 900; line-height: 1.25; text-align: center;
+          display: block; margin-bottom: 14px; color: #232d5a; font-size: 15px;
+          font-weight: 900; line-height: 1.3; text-align: left;
+          text-transform: uppercase;
+        }
+        .vision-vice-card-bullets {
+          flex: 1 1 auto; margin: 0 0 16px; padding: 0; list-style: none;
+          color: #526079; font-size: 12.5px; line-height: 1.9; text-align: left;
+        }
+        .vision-vice-card-bullets li {
+          position: relative; padding-left: 14px;
+        }
+        .vision-vice-card-bullets li::before {
+          content: "•"; position: absolute; left: 0; color: #80BBBF;
+          font-weight: 900;
         }
         .vision-landing-vice-accion {
-          align-self: start; margin-top: 6px; color: #7a829b;
-          font-size: 11px; font-weight: 800; text-align: center;
+          align-self: flex-start; margin-top: auto; color: #4f3c98;
+          font-size: 12.5px; font-weight: 900; text-align: left;
         }
         .programa-anio-control {
           display: flex; align-items: center; gap: 5px;
@@ -1276,9 +1354,20 @@ app.index_string = """<!DOCTYPE html>
           color: #69738c;
           font-size: 8px;
           font-weight: 800;
-          line-height: 1.1;
+          line-height: 1.15;
           text-transform: uppercase;
         }
+        .gestion-regimen-aclaracion {
+          margin: 10px 0 14px !important;
+          padding: 9px 12px;
+          border-left: 4px solid #80BBBF;
+          border-radius: 0 8px 8px 0;
+          color: #59627d;
+          background: #f2f7f8;
+          font-size: 12px;
+          line-height: 1.4;
+        }
+        .gestion-regimen-aclaracion strong { color: #232d5a; }
         .programa-regimen-mini strong {
           display: block;
           margin-top: 4px;
@@ -1372,7 +1461,7 @@ app.index_string = """<!DOCTYPE html>
         /* Los recursos educativos (Alimentación, Uniformes, Textos, etc.)
            manejan cifras de estudiantes mucho más grandes que SAFPI/NAP
            (hasta 7 dígitos), así que reducimos un poco más estos tamaños
-           para que "Estudiantes" y los números de Costa/Sierra no se
+           para que "Estudiantes" y los números por régimen no se
            corten dentro del cuadro. */
         .recurso-educativo-actualizado .programa-estudiantes-principal {
           flex-wrap: wrap;
@@ -1393,6 +1482,13 @@ app.index_string = """<!DOCTYPE html>
         .recurso-educativo-actualizado .programa-regimen-mini {
           min-width: 0;
           padding: 6px 4px;
+        }
+        .recurso-educativo-actualizado .programa-regimen-mini span {
+          min-height: 19px;
+          font-size: 7px;
+          overflow-wrap: normal;
+          word-break: normal;
+          hyphens: none;
         }
         .recurso-educativo-actualizado .programa-regimen-mini strong {
           font-size: clamp(10px, .85vw, 13px);
@@ -1710,6 +1806,96 @@ app.index_string = """<!DOCTYPE html>
         .cultura-informacion-fuente {
           margin: 10px 0 0 !important;
         }
+        /* ANEXO 4: resumen y ranking de becas de Educación Superior. */
+        .becas-seccion-subtitulo {
+          margin: -6px 0 14px; color: #66708d; font-size: 12.5px;
+        }
+        .becas-resumen-grid {
+          display: grid; grid-template-columns: repeat(4, minmax(0, 1fr));
+          gap: 14px; margin-bottom: 16px;
+        }
+        .becas-resumen-card {
+          display: flex; flex-direction: column; gap: 4px; min-width: 0;
+          padding: 16px 18px; border: 1px solid #D9E2E8; border-radius: 14px;
+          background: #ffffff; box-shadow: 0 6px 16px rgba(35,45,90,.07);
+        }
+        .becas-resumen-card.destacada {
+          color: #fff; background: #232D5A; border-color: #232D5A;
+        }
+        .becas-resumen-card.destacada .becas-resumen-etiqueta,
+        .becas-resumen-card.destacada .becas-resumen-nota {
+          color: #d9d4f5;
+        }
+        .becas-resumen-etiqueta {
+          font-size: 11px; font-weight: 800; letter-spacing: .03em;
+          text-transform: uppercase; color: #7a829b;
+        }
+        .becas-resumen-valor {
+          font-size: clamp(17px, 1.6vw, 22px); font-weight: 900; color: inherit;
+          line-height: 1.2;
+        }
+        .becas-resumen-valor.texto {
+          font-size: 15px; overflow: hidden; text-overflow: ellipsis;
+          white-space: nowrap;
+        }
+        .becas-resumen-nota {
+          font-size: 11px; color: #7a829b; line-height: 1.35;
+        }
+        .becas-ranking-grid {
+          display: grid; grid-template-columns: repeat(2, minmax(0, 1fr));
+          gap: 14px; margin-bottom: 20px;
+        }
+        .becas-ranking-panel {
+          min-width: 0; padding: 16px 18px; border: 1px solid #D9E2E8;
+          border-radius: 14px; background: #ffffff;
+          box-shadow: 0 6px 16px rgba(35,45,90,.07);
+        }
+        .becas-ranking-titulo {
+          margin: 0 0 2px; color: #232D5A; font-size: 14px; font-weight: 900;
+        }
+        .becas-ranking-subtitulo {
+          margin: 0 0 12px; color: #9aa1b8; font-size: 10.5px;
+        }
+        .becas-ranking-lista {
+          display: flex; flex-direction: column; gap: 9px;
+        }
+        .becas-ranking-fila {
+          display: grid;
+          grid-template-columns: 18px minmax(0, 1.3fr) minmax(0, 1fr) 44px;
+          align-items: center; gap: 8px;
+        }
+        .becas-ranking-indice {
+          color: #9aa1b8; font-size: 11px; font-weight: 800;
+        }
+        .becas-ranking-nombre {
+          overflow: hidden; color: #232D5A; font-size: 11.5px; font-weight: 700;
+          text-overflow: ellipsis; white-space: nowrap;
+        }
+        .becas-ranking-barra {
+          height: 8px; border-radius: 6px; background: #EDF4F6; overflow: hidden;
+        }
+        .becas-ranking-barra-relleno {
+          height: 100%; border-radius: 6px; background: #80BBBF;
+        }
+        .becas-ranking-fila:nth-child(1) .becas-ranking-barra-relleno { background: #F1B620; }
+        .becas-ranking-fila:nth-child(2) .becas-ranking-barra-relleno { background: #e0558e; }
+        .becas-ranking-fila:nth-child(3) .becas-ranking-barra-relleno { background: #446381; }
+        .becas-ranking-fila:nth-child(4) .becas-ranking-barra-relleno { background: #4f3c98; }
+        .becas-ranking-fila:nth-child(5) .becas-ranking-barra-relleno { background: #80BBBF; }
+        .becas-ranking-fila:nth-child(6) .becas-ranking-barra-relleno { background: #232D5A; }
+        .becas-ranking-porcentaje {
+          color: #526079; font-size: 11px; font-weight: 800; text-align: right;
+        }
+        .becas-categoria-badge {
+          display: inline-block; margin-bottom: 8px; padding: 3px 10px;
+          border-radius: 999px; background: #EDF4F6; color: #4f3c98;
+          font-size: 10px; font-weight: 800; letter-spacing: .03em;
+          text-transform: uppercase;
+        }
+        .becas-metricas-fila {
+          display: grid; grid-template-columns: repeat(2, minmax(0, 1fr));
+          gap: 8px;
+        }
         .cultura-informacion-nota {
           margin: 4px 0 16px !important;
         }
@@ -1801,8 +1987,29 @@ app.index_string = """<!DOCTYPE html>
             grid-column: 1 / -1 !important; width: calc(50% - 9px);
             justify-self: center;
           }
+          .becas-resumen-grid {
+            grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+          }
+          .becas-ranking-grid {
+            grid-template-columns: minmax(0, 1fr) !important;
+          }
         }
         @media (max-width: 600px) {
+          .becas-resumen-grid {
+            grid-template-columns: minmax(0, 1fr) !important;
+          }
+          .becas-metricas-fila {
+            grid-template-columns: minmax(0, 1fr) !important;
+          }
+          .becas-ranking-fila {
+            grid-template-columns: 16px minmax(0, 1fr) 36px !important;
+          }
+          .becas-ranking-porcentaje {
+            order: 2;
+          }
+          .becas-ranking-barra {
+            order: 3; grid-column: 1 / -1;
+          }
           .mobile-menu-button {
             width: 44px; padding: 0;
           }
@@ -2116,6 +2323,95 @@ app.index_string = """<!DOCTYPE html>
         .module-main .vision-exec-page .programa-info-tooltip {
           z-index: 1001 !important;
         }
+
+        /* Observación de la viceministra: el menú de navegación del panel
+           institucional debe ir en la parte superior y no en una columna
+           lateral. En escritorio convertimos el sidebar en una barra
+           horizontal pegada bajo el encabezado; en móvil se conserva el
+           menú deslizable existente (ya es accesible desde un botón
+           superior). */
+        @media (min-width: 1401px) {
+          .module-layout {
+            display: flex !important;
+            flex-direction: column !important;
+            min-height: calc(100dvh - 72px) !important;
+          }
+          .module-sidebar {
+            position: static !important;
+            top: auto !important;
+            left: auto !important;
+            bottom: auto !important;
+            z-index: 900 !important;
+            width: 100% !important;
+            height: auto !important;
+            min-height: auto !important;
+            max-height: none !important;
+            overflow: visible !important;
+            box-shadow: 0 6px 18px rgba(24,37,87,.16) !important;
+            display: flex !important;
+            flex-direction: row !important;
+            flex-wrap: wrap !important;
+            align-items: center !important;
+            gap: 8px 14px !important;
+            padding: 12px 22px !important;
+            box-sizing: border-box !important;
+          }
+          .module-sidebar .sidebar-logo {
+            width: 34px !important; height: 34px !important;
+            flex: 0 0 auto !important;
+            margin: 0 10px 0 0 !important;
+          }
+          .module-sidebar .sidebar-kicker {
+            width: auto !important;
+            max-width: none !important;
+            flex: 0 0 auto !important;
+            margin: 0 14px 0 0 !important;
+            padding-right: 14px !important;
+            border-right: 1px solid rgba(255,255,255,.3);
+            font-size: 11px !important;
+            white-space: nowrap !important;
+          }
+          .module-sidebar .side-back {
+            width: auto !important;
+            max-width: none !important;
+            flex: 0 0 auto !important;
+            margin: 0 14px 0 0 !important;
+          }
+          .module-sidebar .sidebar-menu {
+            display: flex !important;
+            flex: 1 1 auto !important;
+            flex-wrap: wrap !important;
+            align-items: center !important;
+            width: auto !important;
+            gap: 8px 10px !important;
+          }
+          .module-sidebar .side-section,
+          .module-sidebar .vice-button,
+          .module-sidebar .indicator-button {
+            width: auto !important;
+            max-width: none !important;
+            flex: 0 0 auto !important;
+            white-space: nowrap !important;
+          }
+          .module-sidebar .indicator-group {
+            flex-basis: 100% !important;
+            width: 100% !important;
+            max-height: none !important;
+            display: none;
+            flex-wrap: wrap;
+            gap: 8px;
+            padding-top: 8px !important;
+          }
+          .module-sidebar .indicator-group.open {
+            display: flex !important;
+          }
+          .module-main {
+            width: 100% !important;
+            min-width: 0 !important;
+            margin-left: 0 !important;
+            padding: 22px 26px 34px !important;
+          }
+        }
         </style>
         <style id="minedec-institutional-theme">
         /* Tema institucional unificado según el manual técnico de Presidencia.
@@ -2302,19 +2598,23 @@ app.index_string = """<!DOCTYPE html>
           margin-top: 42px !important;
         }
         .vision-landing-menu .vision-vice-pill {
-          grid-template-rows: 1fr !important;
-          min-height: 150px !important;
-          border: 1px solid #51678B !important;
-          border-top: 1px solid #51678B !important;
-          color: #FFFFFF !important;
-          background: #344A71 !important;
-          box-shadow: 0 9px 0 rgba(79, 68, 154, .18),
-                      0 15px 26px rgba(35, 45, 90, .12) !important;
+          min-height: 280px !important;
+          border: 1px solid #dfe3ef !important;
+          border-top: 5px solid #232D5A !important;
+          color: #232D5A !important;
+          background: #FFFFFF !important;
+          box-shadow: 0 10px 26px rgba(35, 45, 90, .1) !important;
+        }
+        .vision-landing-menu .vision-vice-row:nth-child(3n + 2) .vision-vice-pill {
+          border-top-color: #80BBBF !important;
+        }
+        .vision-landing-menu .vision-vice-row:nth-child(3n) .vision-vice-pill {
+          border-top-color: #F1B620 !important;
         }
         .vision-landing-menu .vision-landing-vice-nombre {
-          align-self: center !important;
-          color: #FFFFFF !important;
-          font-size: 16px !important;
+          align-self: flex-start !important;
+          color: #232D5A !important;
+          font-size: 15px !important;
         }
         .documentation-page {
           width: 100% !important;
@@ -2721,6 +3021,1222 @@ app.index_string = """<!DOCTYPE html>
             font-size: clamp(20px, 7vw, 27px) !important;
           }
         }
+
+        /* Portada institucional 2026: composición solicitada para el portal.
+           Se declara al final para reemplazar únicamente la portada anterior
+           y conservar intactos los módulos internos del tablero. */
+        .header-bar {
+          min-height: 72px !important;
+          padding: 8px clamp(18px, 3vw, 46px) !important;
+          gap: 16px !important;
+          border-bottom: 3px solid #F1B620;
+          background: #403392 !important;
+          box-sizing: border-box;
+        }
+        .header-brand-button.home-button {
+          width: clamp(108px, 9.5vw, 138px) !important;
+          height: 48px !important;
+          padding: 3px 7px !important;
+          flex: 0 0 auto;
+          border: 1px solid rgba(255,255,255,.58) !important;
+          border-radius: 10px !important;
+          background: #FFFFFF !important;
+          box-shadow: none !important;
+        }
+        .header-brand-logo {
+          display: block; width: 100%; height: 100%; object-fit: contain;
+          transform: scale(1.55);
+        }
+        .header-title { min-width: 0; margin: 0 !important; }
+        .header-title strong {
+          display: block; color: #FFFFFF; font-size: clamp(14px, 1.25vw, 20px);
+          font-weight: 900; line-height: 1.05; letter-spacing: .015em;
+        }
+        .header-title span {
+          display: block; margin-top: 3px; color: #DED8F3;
+          font-size: 9px; font-weight: 800; letter-spacing: .18em;
+        }
+        .header-actions { margin-left: auto; }
+        .cutoff-date {
+          padding: 7px 12px !important; border: 1px solid rgba(255,255,255,.2);
+          border-radius: 12px; background: rgba(255,255,255,.09);
+        }
+        .cutoff-date span { color: #E7E3F7 !important; }
+
+        .portada-pagina {
+          min-height: calc(100vh - 72px) !important;
+          overflow: visible !important;
+          color: #232D5A;
+          background: #F5F6FB !important;
+        }
+        .portada-nav {
+          min-height: 52px; padding: 0 clamp(18px, 4.7vw, 74px);
+          display: flex; align-items: stretch; gap: clamp(4px, .9vw, 16px);
+          overflow-x: auto; scrollbar-width: thin;
+          border-bottom: 1px solid #E0E4EC; background: #FFFFFF;
+          box-sizing: border-box;
+        }
+        .portada-nav-inicio,
+        .portada-nav-enlace {
+          position: relative; flex: 0 0 auto; min-height: 52px;
+          padding: 0 10px; display: inline-flex; align-items: center; gap: 7px;
+          border: 0; color: #536079; background: transparent;
+          font: 700 12px/1.2 Arial, sans-serif; white-space: nowrap;
+        }
+        .portada-nav-inicio { color: #4F449A; }
+        .portada-nav-inicio::after {
+          content: ""; position: absolute; right: 6px; bottom: 0; left: 6px;
+          height: 3px; border-radius: 4px 4px 0 0; background: #F1B620;
+        }
+        .portada-nav-enlace { cursor: pointer; }
+        .portada-nav-enlace:hover,
+        .portada-nav-enlace:focus-visible {
+          color: #4F449A; background: #F7F5FC; outline: none;
+        }
+        .portada-contenido {
+          width: min(1900px, 100%) !important;
+          min-height: 0 !important; margin: 0 auto !important;
+          padding: clamp(16px, 1.7vw, 30px) clamp(16px, 2.4vw, 46px) 34px !important;
+          display: block !important; box-sizing: border-box;
+        }
+        .portada-hero {
+          width: 100%; height: clamp(300px, 22vw, 420px); min-height: 0;
+          padding: 12px; display: grid;
+          grid-template-columns: minmax(390px, .92fr) minmax(560px, 1.38fr);
+          grid-template-rows: minmax(0, 1fr);
+          align-items: stretch; gap: 12px;
+          border-radius: 24px; color: #FFFFFF; background: #392A83;
+          box-shadow: 0 12px 28px rgba(35,45,90,.12);
+        }
+        .portada-hero-texto {
+          grid-column: 1; grid-row: 1; min-width: 0; min-height: 0;
+          padding: clamp(24px, 3vw, 48px); display: flex;
+          flex-direction: column; align-items: flex-start; justify-content: center;
+        }
+        .portada-hero-kicker {
+          margin: 0 0 13px; color: #F1C21B;
+          font-size: clamp(9px, .8vw, 12px); font-weight: 900;
+          letter-spacing: .16em;
+        }
+        .portada-hero h1 {
+          max-width: 660px; margin: 0; color: #FFFFFF;
+          font-size: clamp(31px, 3.15vw, 52px); font-weight: 900;
+          line-height: 1.03; letter-spacing: -.025em;
+        }
+        .portada-hero-descripcion {
+          max-width: 600px; margin: 18px 0 0; color: #DCD8F0;
+          font-size: clamp(13px, 1vw, 16px); line-height: 1.5;
+        }
+        .portada-hero-accion {
+          margin-top: 24px; padding: 12px 18px; display: inline-flex;
+          align-items: center; gap: 12px; border: 0; border-radius: 11px;
+          color: #232D5A; background: #F1B620;
+          font-size: 13px; font-weight: 900; cursor: pointer;
+          box-shadow: 0 7px 15px rgba(22,25,70,.18);
+        }
+        .portada-hero-accion:hover,
+        .portada-hero-accion:focus-visible {
+          transform: translateY(-2px); outline: 3px solid rgba(255,255,255,.5);
+        }
+        .portada-ilustracion-contenedor {
+          grid-area: auto !important; grid-column: 2; grid-row: 1;
+          width: 100% !important; min-height: 0 !important;
+          overflow: hidden; border-radius: 17px; background: #FFFFFF;
+        }
+        .portada-ilustracion {
+          width: 100% !important; max-width: none !important;
+          height: 100% !important; max-height: none !important;
+          object-fit: cover !important; object-position: center 42%;
+          filter: none !important;
+        }
+        .portada-menu-cabecera {
+          margin: 25px 0 10px; display: flex; align-items: center;
+          justify-content: space-between; gap: 16px;
+        }
+        .portada-menu-cabecera h2 {
+          margin: 0; color: #232D5A; font-size: 17px; font-weight: 900;
+        }
+        .portada-corte { color: #7B849B; font-size: 10px; }
+        .portada-menu {
+          width: 100% !important; margin: 0 !important;
+          display: grid !important;
+          grid-template-columns: repeat(5, minmax(0, 1fr)) !important;
+          gap: 14px !important;
+        }
+        .portada-pagina .portada-boton {
+          min-width: 0; min-height: 176px !important; padding: 16px !important;
+          display: grid !important;
+          grid-template-columns: 44px minmax(0, 1fr) !important;
+          grid-template-rows: auto auto 1fr auto !important;
+          align-content: start; align-items: center; gap: 8px 10px !important;
+          border: 1px solid #DDE2EB !important;
+          border-radius: 16px !important; color: #232D5A !important;
+          background: #FFFFFF !important;
+          box-shadow: 0 6px 17px rgba(35,45,90,.08) !important;
+          text-align: left; cursor: pointer;
+        }
+        .portada-pagina .portada-boton:hover,
+        .portada-pagina .portada-boton:focus-visible {
+          transform: translateY(-3px); filter: none;
+          border-color: #BEB5E2 !important;
+          box-shadow: 0 12px 24px rgba(35,45,90,.14) !important;
+          outline: 3px solid rgba(79,68,154,.15) !important;
+        }
+        .portada-pagina .portada-boton-icono {
+          grid-column: 1; grid-row: 1; width: 42px !important; height: 42px !important;
+          border: 1px solid #DED8F1 !important; border-radius: 11px !important;
+          color: #4F449A !important; background: #F1EEFA !important;
+        }
+        .portada-pagina .portada-boton-icono-svg {
+          width: 24px !important; height: 24px !important;
+        }
+        .portada-pagina .portada-boton-texto {
+          grid-column: 1 / -1; grid-row: 2; margin-top: 3px;
+          color: inherit; font-size: clamp(12px, 1vw, 15px) !important;
+          font-weight: 900; line-height: 1.2;
+        }
+        .portada-boton-descripcion {
+          grid-column: 1 / -1; grid-row: 3; color: #748099;
+          font-size: 10px; line-height: 1.35;
+        }
+        .portada-boton-accion {
+          grid-column: 1 / -1; grid-row: 4; display: inline-flex;
+          align-items: center; gap: 6px; color: #5A45B1;
+          font-size: 10px; font-weight: 900;
+        }
+        .portada-boton-accion b { font-size: 14px; }
+        .portada-pagina .portada-boton-destacado {
+          color: #FFFFFF !important; background: #232D5A !important;
+          border-color: #232D5A !important;
+        }
+        .portada-pagina .portada-boton-destacado .portada-boton-icono {
+          border-color: rgba(241,182,32,.25) !important;
+          background: rgba(241,182,32,.13) !important;
+        }
+        .portada-pagina .portada-boton-destacado .portada-boton-descripcion {
+          color: #BFC8DF;
+        }
+        .portada-pagina .portada-boton-destacado .portada-boton-accion {
+          color: #F1B620;
+        }
+
+        @media (max-width: 1100px) {
+          .portada-hero {
+            height: clamp(300px, 31vw, 350px);
+            grid-template-columns: minmax(300px, .9fr) minmax(360px, 1.1fr);
+          }
+          .portada-menu {
+            grid-template-columns: repeat(3, minmax(0, 1fr)) !important;
+          }
+          .portada-pagina .portada-boton { min-height: 154px !important; }
+        }
+        @media (max-width: 760px) {
+          .header-bar { min-height: 62px !important; padding: 6px 9px !important; }
+          .header-brand-button.home-button {
+            width: 82px !important; height: 42px !important; padding: 2px 4px !important;
+          }
+          .header-title strong { font-size: 12px !important; }
+          .header-title span { font-size: 7px !important; }
+          .print-button { width: 40px !important; height: 40px !important; }
+          .portada-pagina { min-height: calc(100vh - 62px) !important; }
+          .portada-nav { padding: 0 10px; }
+          .portada-contenido { padding: 12px 10px 28px !important; }
+          .portada-hero {
+            height: auto; min-height: 0; padding: 9px;
+            grid-template-columns: 1fr; grid-template-rows: auto 220px;
+          }
+          .portada-hero-texto {
+            grid-column: 1; grid-row: 1; padding: 23px 18px 18px;
+          }
+          .portada-hero h1 { font-size: clamp(28px, 9.5vw, 40px); }
+          .portada-ilustracion-contenedor {
+            grid-column: 1; grid-row: 2; height: 220px;
+          }
+          .portada-menu { grid-template-columns: repeat(2, minmax(0, 1fr)) !important; }
+          .portada-pagina .portada-boton { min-height: 160px !important; }
+          .portada-menu-cabecera { align-items: flex-start; }
+          .portada-corte { max-width: 115px; text-align: right; }
+        }
+        @media (max-width: 430px) {
+          .portada-nav { display: none; }
+          .header-brand-button.home-button { width: 68px !important; }
+          .header-title strong { font-size: 10px !important; }
+          .header-title span { letter-spacing: .08em; }
+          .portada-ilustracion-contenedor { height: 185px; }
+          .portada-menu { grid-template-columns: 1fr !important; }
+          .portada-pagina .portada-boton {
+            min-height: 128px !important;
+            grid-template-columns: 42px minmax(0, 1fr) !important;
+            grid-template-rows: auto auto auto !important;
+          }
+          .portada-pagina .portada-boton-icono { grid-row: 1 / span 2; }
+          .portada-pagina .portada-boton-texto { grid-column: 2; grid-row: 1; }
+          .portada-boton-descripcion { grid-column: 2; grid-row: 2; }
+          .portada-boton-accion { grid-column: 2; grid-row: 3; }
+        }
+
+        /* Gestión Educativa · composición del Anexo 3 de Presidencia. Estas
+           reglas están aisladas para no alterar los demás viceministerios. */
+        .presidencia-gestion-page {
+          padding: 14px 16px 24px !important;
+          border-radius: 14px;
+          background: #f4f5fa;
+        }
+        .presidencia-gestion-page .vision-exec-header {
+          margin: 0 0 8px !important; padding: 0 2px !important;
+          background: transparent !important; border: 0 !important;
+          box-shadow: none !important;
+        }
+        .presidencia-gestion-page .vision-exec-header h1 {
+          color: #17245b !important; font-size: clamp(19px, 1.7vw, 27px) !important;
+          line-height: 1.15 !important;
+        }
+        .pres-anclas {
+          display: flex; align-items: center; gap: 7px; flex-wrap: wrap;
+          margin: 4px 0 14px; padding: 0 2px;
+        }
+        .pres-anclas a {
+          padding: 5px 10px; border: 1px solid #d9ddeb; border-radius: 999px;
+          color: #4f5876; background: #fff; font-size: 10px; font-weight: 800;
+          text-decoration: none;
+        }
+        .pres-anclas a:first-child,
+        .pres-anclas a:hover { color: #fff; background: #4f449a; border-color: #4f449a; }
+        .pres-seccion-cabecera {
+          display: flex; align-items: flex-end; justify-content: space-between;
+          gap: 14px; margin: 13px 0 9px; scroll-margin-top: 95px;
+        }
+        .pres-seccion-titulo { display: flex; align-items: flex-start; gap: 8px; min-width: 0; }
+        .pres-eje-etiqueta {
+          flex: 0 0 auto; padding: 4px 8px; border-radius: 6px;
+          color: #fff; background: #4f449a; font-size: 9px; font-weight: 900;
+          letter-spacing: .03em;
+        }
+        .pres-eje-etiqueta:empty { display: none; }
+        .pres-seccion-titulo h2 {
+          margin: 0; color: #17245b; font-size: 23px; font-weight: 900; line-height: 1.15;
+        }
+        .pres-seccion-titulo p {
+          margin: 2px 0 0 !important; color: #7a839a !important;
+          font-size: 13px !important; line-height: 1.35 !important;
+        }
+        .pres-seccion-periodo {
+          flex: 0 0 auto; padding: 5px 9px; border: 1px solid #dce1ec;
+          border-radius: 999px; color: #59627d; background: #fff;
+          font-size: 11.5px; font-weight: 700; white-space: nowrap;
+        }
+        .presidencia-gestion-page .educacion-media-cifras-grid,
+        .presidencia-gestion-page .educacion-media-segunda-fila,
+        .presidencia-gestion-page .recursos-gestion-grid,
+        .presidencia-gestion-page .programas-servicios-grid {
+          width: 100% !important; max-width: none !important;
+          display: grid !important; gap: 10px !important; margin: 0 !important;
+        }
+        .presidencia-gestion-page .educacion-media-cifras-grid {
+          grid-template-columns: repeat(3, minmax(0, 1fr)) !important;
+        }
+        .presidencia-gestion-page .programas-servicios-grid {
+          grid-template-columns: repeat(3, minmax(0, 1fr)) !important;
+        }
+        .presidencia-gestion-page .educacion-media-segunda-fila,
+        .presidencia-gestion-page .recursos-gestion-grid {
+          grid-template-columns: repeat(6, minmax(0, 1fr)) !important;
+        }
+        .presidencia-gestion-page .educacion-media-segunda-fila > .presidencia-card {
+          grid-column: span 3 !important;
+        }
+        .presidencia-gestion-page .educacion-media-segunda-fila > .presidencia-card:first-child {
+          grid-column: 1 / span 3 !important;
+        }
+        .presidencia-gestion-page .educacion-media-segunda-fila > .presidencia-card:nth-child(2) {
+          grid-column: 4 / span 3 !important;
+        }
+        .presidencia-gestion-page .recursos-gestion-grid > .presidencia-recurso-card {
+          grid-column: span 2 !important;
+        }
+        .presidencia-gestion-page .recursos-gestion-grid > .presidencia-recurso-card:nth-child(4) {
+          grid-column: 1 / span 3 !important;
+        }
+        .presidencia-gestion-page .recursos-gestion-grid > .presidencia-recurso-card:nth-child(5) {
+          grid-column: 4 / span 3 !important;
+        }
+        .presidencia-gestion-page .presidencia-card {
+          position: relative; width: 100% !important; min-width: 0 !important;
+          max-width: none !important; min-height: 0 !important; padding: 15px 16px 12px !important;
+          border: 1px solid #dfe3ed !important; border-top: 1px solid #dfe3ed !important;
+          border-radius: 12px !important; background: #fff !important;
+          box-shadow: 0 3px 9px rgba(35,45,90,.07) !important;
+          overflow: visible !important; box-sizing: border-box;
+        }
+        .presidencia-gestion-page .presidencia-card-general { min-height: 240px !important; }
+        .presidencia-gestion-page .presidencia-card-secundaria { min-height: 198px !important; }
+        .presidencia-gestion-page .presidencia-recurso-card { min-height: 228px !important; }
+        .presidencia-gestion-page .presidencia-programa-card { min-height: 228px !important; }
+        .presidencia-card .vision-card-title-row {
+          min-height: 42px; margin: 0 108px 7px 0 !important; gap: 9px !important;
+        }
+        .presidencia-card .vision-card-symbol {
+          width: 36px !important; height: 36px !important; border-radius: 10px !important;
+          box-shadow: none !important;
+        }
+        .presidencia-card .vision-card-symbol img { width: 23px !important; height: 23px !important; }
+        .presidencia-card .vision-card-label {
+          color: #17245b !important; font-size: 15px !important;
+          font-weight: 900 !important; line-height: 1.16 !important;
+          overflow-wrap: normal !important;
+        }
+        .presidencia-card .programa-anio-control {
+          position: absolute; z-index: 5; top: 13px; right: 13px;
+          width: 92px !important; margin: 0 !important; display: block !important;
+        }
+        .presidencia-card .programa-anio-control > span { display: none !important; }
+        .presidencia-card .programa-anio-dropdown,
+        .presidencia-card .programa-anio-dropdown.dash-dropdown {
+          width: 92px !important; min-width: 92px !important;
+          height: 22px !important; min-height: 22px !important;
+          border: 0 !important; background: #f1eefb !important;
+        }
+        .presidencia-card .programa-anio-dropdown * {
+          color: #4f449a !important; font-size: 10px !important;
+          font-weight: 900 !important; line-height: 20px !important;
+        }
+        .pres-periodo-badge {
+          position: absolute; top: 14px; right: 13px; padding: 4px 7px;
+          border-radius: 999px; color: #5b49a8; background: #f1eefb;
+          font-size: 11px; font-weight: 900; white-space: nowrap;
+        }
+        .presidencia-card .vision-card-value-row {
+          display: flex; flex-direction: column; align-items: flex-start; gap: 1px;
+          margin: 5px 0 7px !important;
+        }
+        .presidencia-card .vision-card-total {
+          color: #17245b !important; font-size: clamp(31px, 2.35vw, 40px) !important;
+          font-weight: 900 !important; line-height: 1 !important; white-space: nowrap !important;
+        }
+        .presidencia-card .vision-card-unit {
+          color: #737c94 !important; font-size: 12px !important;
+          font-weight: 700 !important; text-transform: none !important;
+        }
+        .pres-destacado {
+          margin: 5px 0 7px !important; padding: 5px 8px; border-radius: 5px;
+          color: #776000 !important; background: #fff8d8;
+          font-size: 12px !important; font-weight: 800 !important; line-height: 1.3 !important;
+        }
+        .pres-distribucion { margin: 8px 0 0; min-width: 0; }
+        .pres-distribucion-cabecera > strong {
+          display: block; margin: 0 0 3px; color: #525c78;
+          font-size: 12px; font-weight: 900;
+        }
+        .pres-distribucion-etiquetas {
+          display: flex; align-items: center; justify-content: space-between;
+          gap: 7px; min-width: 0;
+        }
+        .pres-distribucion-etiquetas > span {
+          display: inline-flex; align-items: center; gap: 3px; min-width: 0;
+          color: #5f6881; font-size: 11px; white-space: nowrap;
+        }
+        .pres-distribucion-etiquetas i {
+          display: inline-block; width: 7px; height: 7px; border-radius: 2px; flex: 0 0 auto;
+        }
+        .pres-distribucion-etiquetas b { color: #4a5574; font-size: 11px; }
+        .pres-distribucion-etiquetas small { color: #9299aa; font-size: 10px; }
+        .pres-barra-apilada {
+          display: flex; width: 100%; height: 9px; margin-top: 5px;
+          border-radius: 999px; overflow: hidden; background: #e9ebf2;
+        }
+        .pres-barra-apilada span { display: block; height: 100%; min-width: 1px; }
+        .presidencia-card .educacion-media-periodo-pie {
+          margin-top: 9px; padding-top: 6px; border-top: 1px solid #eef0f5;
+          display: flex; flex-direction: row; justify-content: space-between;
+          gap: 8px; color: #747e96; font-size: 10.5px; line-height: 1.3;
+        }
+        .gestion-regimen-aclaracion {
+          margin: 7px 2px 15px !important; padding: 0 !important;
+          border: 0 !important; background: transparent !important;
+          color: #6f7890 !important; font-size: 11.5px !important;
+        }
+        .pres-resumen-recursos {
+          display: grid; grid-template-columns: repeat(4, minmax(0, 1fr));
+          gap: 9px; margin: 0 0 10px;
+        }
+        .pres-resumen-recurso {
+          min-width: 0; min-height: 68px; padding: 10px 12px;
+          display: flex; flex-direction: column; justify-content: center;
+          border: 1px solid #e1e4ed; border-radius: 10px;
+          background: #fff; box-sizing: border-box;
+        }
+        .pres-resumen-recurso span { color: #8a91a5; font-size: 11px; }
+        .pres-resumen-recurso strong {
+          margin: 3px 0 1px; color: #17245b; font-size: 20px;
+          font-weight: 900; line-height: 1.1; overflow-wrap: anywhere;
+        }
+        .pres-resumen-recurso small { color: #c09200; font-size: 10.5px; }
+        .pres-resumen-recurso.destacado { background: #17245b; border-color: #17245b; }
+        .pres-resumen-recurso.destacado span { color: #aeb8d2; }
+        .pres-resumen-recurso.destacado strong { color: #fff; font-size: 22px; }
+        .pres-resumen-recurso.destacado small { color: #f1b620; }
+        .pres-recurso-metricas {
+          display: grid; grid-template-columns: repeat(2, minmax(0, 1fr));
+          gap: 6px; margin-top: 8px;
+        }
+        .pres-recurso-metrica {
+          min-width: 0; padding: 7px 8px; border-radius: 7px;
+          background: #f3f4f9;
+        }
+        .pres-recurso-metrica.inversion { grid-column: 1 / -1; }
+        .pres-recurso-metrica.por-estudiante { background: #f1eefb; }
+        .pres-recurso-metrica span {
+          display: block; color: #7c8498; font-size: 11px; font-weight: 800;
+          text-transform: uppercase;
+        }
+        .pres-recurso-metrica strong {
+          display: block; margin-top: 2px; color: #17245b;
+          font-size: 18px; font-weight: 900; line-height: 1.08;
+          overflow-wrap: anywhere;
+        }
+        .presidencia-gestion-page .programas-gestion-consolidados {
+          width: 100%; margin: 0;
+        }
+        .presidencia-gestion-page .programas-complementarios-grid {
+          grid-template-columns: repeat(3, minmax(0, 1fr)) !important;
+          margin-top: 10px !important;
+        }
+        .presidencia-gestion-page .programas-complementarios-grid > .presidencia-programa-card {
+          grid-column: 2 !important; width: 100% !important;
+        }
+        .pres-programa-metricas {
+          display: grid; grid-template-columns: minmax(90px, .65fr) minmax(0, 1.35fr);
+          gap: 6px; margin-top: 8px;
+        }
+        .pres-programa-metricas .inversion { grid-column: auto; }
+        .pres-aulas-metricas {
+          display: grid; grid-template-columns: repeat(2, minmax(0, 1fr));
+          gap: 6px; margin-top: 8px;
+        }
+        .pres-aulas-metricas .inversion { grid-column: 1 / -1; }
+        .presidencia-programa-card .programa-periodo-nota {
+          margin-top: 7px !important; color: #707a92 !important;
+          font-size: 11px !important; line-height: 1.35 !important;
+        }
+        .presidencia-gestion-page #gestion-programas {
+          margin-top: 18px; scroll-margin-top: 95px;
+        }
+        @media (min-width: 701px) and (max-width: 1450px) {
+          .presidencia-gestion-page .educacion-media-cifras-grid,
+          .presidencia-gestion-page .educacion-media-segunda-fila,
+          .presidencia-gestion-page .recursos-gestion-grid,
+          .presidencia-gestion-page .programas-servicios-grid,
+          .presidencia-gestion-page .programas-complementarios-grid {
+            grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+          }
+          .presidencia-gestion-page .educacion-media-cifras-grid > .presidencia-card,
+          .presidencia-gestion-page .educacion-media-segunda-fila > .presidencia-card,
+          .presidencia-gestion-page .recursos-gestion-grid > .presidencia-recurso-card,
+          .presidencia-gestion-page .programas-servicios-grid > .presidencia-programa-card,
+          .presidencia-gestion-page .programas-complementarios-grid > .presidencia-programa-card {
+            grid-column: auto !important;
+          }
+          .presidencia-gestion-page .recursos-gestion-grid > .presidencia-recurso-card:last-child {
+            grid-column: 1 / -1 !important; width: calc(50% - 5px) !important;
+            justify-self: center;
+          }
+          .presidencia-gestion-page .programas-complementarios-grid > .presidencia-programa-card {
+            grid-column: 1 / -1 !important; width: calc(50% - 5px) !important;
+            justify-self: center;
+          }
+          .pres-resumen-recursos { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+        }
+        @media (max-width: 700px) {
+          .presidencia-gestion-page { padding: 10px 9px 20px !important; }
+          .pres-seccion-cabecera { align-items: flex-start; flex-direction: column; gap: 6px; }
+          .pres-seccion-periodo { white-space: normal; }
+          .presidencia-gestion-page .educacion-media-cifras-grid,
+          .presidencia-gestion-page .educacion-media-segunda-fila,
+          .presidencia-gestion-page .recursos-gestion-grid,
+          .presidencia-gestion-page .programas-servicios-grid,
+          .presidencia-gestion-page .programas-complementarios-grid {
+            grid-template-columns: minmax(0, 1fr) !important;
+          }
+          .presidencia-gestion-page .educacion-media-cifras-grid > .presidencia-card,
+          .presidencia-gestion-page .educacion-media-segunda-fila > .presidencia-card,
+          .presidencia-gestion-page .recursos-gestion-grid > .presidencia-recurso-card,
+          .presidencia-gestion-page .programas-servicios-grid > .presidencia-programa-card,
+          .presidencia-gestion-page .programas-complementarios-grid > .presidencia-programa-card {
+            grid-column: 1 !important; width: 100% !important;
+          }
+          .pres-resumen-recursos { grid-template-columns: minmax(0, 1fr); }
+          .pres-distribucion-etiquetas { flex-wrap: wrap; justify-content: flex-start; }
+          .presidencia-card .vision-card-total { font-size: 34px !important; }
+          .presidencia-card .vision-card-label { font-size: 15px !important; }
+          .pres-distribucion-etiquetas > span,
+          .pres-distribucion-etiquetas b { font-size: 11px !important; }
+          .pres-distribucion-etiquetas small { font-size: 10px !important; }
+        }
+
+        /* ================================================================
+           Ajuste final conforme a los Anexos 2 y 4 de Presidencia.
+           Se mantiene el contenido funcional; cambia únicamente la
+           composición visual y su respuesta por tamaño de pantalla.
+           ================================================================ */
+        @media (min-width: 1401px) {
+          .module-sidebar {
+            padding: 6px 22px !important;
+            color: #394360 !important;
+            background: #ffffff !important;
+            border-bottom: 1px solid #dfe4ed !important;
+            box-shadow: 0 4px 12px rgba(35,45,90,.07) !important;
+          }
+          .module-sidebar .sidebar-logo { display: none !important; }
+          .module-sidebar .sidebar-kicker {
+            color: #232d5a !important; border-right-color: #d9e0e9 !important;
+          }
+          .module-sidebar .side-back,
+          .module-sidebar .side-section,
+          .module-sidebar .vice-button {
+            min-height: 34px !important; padding: 7px 12px !important;
+            color: #4b5673 !important; background: transparent !important;
+            border: 0 !important; border-radius: 0 !important;
+            box-shadow: none !important;
+          }
+          .module-sidebar .side-section.active {
+            color: #4f449a !important; background: transparent !important;
+            border-left: 0 !important; border-bottom: 3px solid #f1b620 !important;
+          }
+        }
+
+        /* Portada de Visión Ejecutiva (Anexo 2). */
+        .vision-landing {
+          gap: 0 !important; padding: 14px 26px 30px !important;
+          background: #f5f6fa !important;
+        }
+        .vision-landing .institutional-landing-header {
+          width: min(100%, 1510px) !important; margin: 0 auto !important;
+          padding: 14px 4px 10px !important;
+          display: grid !important;
+          grid-template-columns: minmax(0, 1fr) auto !important;
+          grid-template-rows: auto auto auto !important;
+          column-gap: 26px !important;
+          color: #232d5a !important; background: transparent !important;
+          border: 0 !important; border-radius: 0 !important;
+          box-shadow: none !important; text-align: left !important;
+        }
+        .vision-landing .institutional-landing-header .content-kicker {
+          grid-column: 1; margin: 0 0 5px !important;
+          color: #4f449a !important; font-size: 11px !important;
+        }
+        .vision-landing .institutional-landing-header .vision-landing-title {
+          grid-column: 1; margin: 0 !important; color: #17245b !important;
+          font-size: clamp(25px, 2.15vw, 37px) !important;
+          line-height: 1.08 !important; text-align: left !important;
+        }
+        .vision-landing .institutional-landing-header .vision-landing-subtitle {
+          grid-column: 1; margin: 5px 0 0 !important; color: #66708d !important;
+          font-size: 12px !important; line-height: 1.35 !important;
+          text-align: left !important;
+        }
+        .vision-landing .institutional-landing-header .vision-landing-kpis {
+          grid-column: 2; grid-row: 1 / span 3; align-self: center;
+          display: grid !important; grid-template-columns: repeat(4, minmax(90px, auto));
+          gap: 0 !important; margin: 0 !important; overflow: hidden;
+          border: 1px solid #dfe3ed; border-radius: 10px; background: #fff;
+        }
+        .vision-landing .vision-landing-kpi {
+          min-width: 0 !important; padding: 9px 13px !important;
+          align-items: flex-start !important; border-radius: 0 !important;
+          color: #17245b !important; background: #ffffff !important;
+          border-right: 1px solid #e5e8ef;
+        }
+        .vision-landing .vision-landing-kpi:last-child { border-right: 0; }
+        .vision-landing .vision-landing-kpi:first-child { background: #232d5a !important; }
+        .vision-landing .vision-landing-kpi span {
+          color: #747d95 !important; font-size: 8.5px !important;
+        }
+        .vision-landing .vision-landing-kpi strong {
+          color: #17245b !important; font-size: 16px !important;
+        }
+        .vision-landing .vision-landing-kpi:first-child span { color: #dce2ef !important; }
+        .vision-landing .vision-landing-kpi:first-child strong { color: #f1b620 !important; }
+        .vision-landing-menu { margin-top: 14px !important; }
+        .vision-landing-menu .vision-vice-menu {
+          width: min(100%, 1510px) !important; max-width: 1510px !important;
+          gap: 14px !important; padding: 0 0 12px !important;
+        }
+        .vision-landing-menu .vision-vice-row { border-radius: 14px !important; }
+        .vision-landing-menu .vision-vice-pill {
+          min-height: 236px !important; padding: 0 !important;
+          display: flex !important; overflow: hidden !important;
+          border: 1px solid #dfe3ed !important; border-top: 0 !important;
+          border-radius: 14px !important; background: #fff !important;
+          box-shadow: 0 8px 18px rgba(35,45,90,.09) !important;
+        }
+        .vision-landing-menu .vision-vice-pill > div {
+          display: flex; flex-direction: column; width: 100%; height: 100%;
+        }
+        .vision-landing-menu .vision-vice-card-top {
+          min-height: 74px; margin: 0 !important; padding: 14px 15px;
+          align-items: flex-start; box-sizing: border-box;
+          color: #fff; background: linear-gradient(135deg, #4f449a, #392986);
+        }
+        .vision-landing-menu .vision-vice-row:nth-child(2) .vision-vice-card-top {
+          background: linear-gradient(135deg, #317be8, #1f5bc2);
+        }
+        .vision-landing-menu .vision-vice-row:nth-child(3) .vision-vice-card-top {
+          background: linear-gradient(135deg, #1caf9a, #087f71);
+        }
+        .vision-landing-menu .vision-vice-row:nth-child(4) .vision-vice-card-top {
+          background: linear-gradient(135deg, #ee9636, #c96f16);
+        }
+        .vision-landing-menu .vision-vice-row:nth-child(5) .vision-vice-card-top {
+          background: linear-gradient(135deg, #d12c6b, #a80f4b);
+        }
+        .vision-landing-menu .vision-vice-card-top .vision-card-symbol {
+          width: 36px !important; height: 36px !important;
+          color: #fff !important; background: rgba(255,255,255,.14) !important;
+          border-color: rgba(255,255,255,.28) !important;
+        }
+        .vision-landing-menu .vision-vice-card-numero {
+          color: rgba(255,255,255,.66) !important; font-size: 13px !important;
+        }
+        .vision-vice-card-cuerpo {
+          flex: 1 1 auto; padding: 12px 15px 7px; box-sizing: border-box;
+        }
+        .vision-vice-card-kicker {
+          display: block; margin-bottom: 2px; color: #80899e;
+          font-size: 8px; font-weight: 900; letter-spacing: .08em;
+          text-transform: uppercase;
+        }
+        .vision-landing-menu .vision-landing-vice-nombre {
+          margin: 0 0 7px !important; color: #17245b !important;
+          font-size: 14px !important; line-height: 1.15 !important;
+          text-transform: none !important;
+        }
+        .vision-landing-menu .vision-vice-card-bullets {
+          margin: 0 !important; color: #59647e !important;
+          font-size: 10.5px !important; line-height: 1.55 !important;
+        }
+        .vision-landing-menu .vision-landing-vice-accion {
+          width: auto; margin: 0 10px 10px !important; padding: 8px 10px;
+          align-self: stretch !important; border-radius: 8px;
+          color: #4f449a !important; background: #eeeafd;
+          font-size: 10px !important;
+        }
+        .vision-landing-menu .vision-vice-row:nth-child(2) .vision-landing-vice-accion {
+          color: #2365c9 !important; background: #edf4ff;
+        }
+        .vision-landing-menu .vision-vice-row:nth-child(3) .vision-landing-vice-accion {
+          color: #087f71 !important; background: #e9f8f5;
+        }
+        .vision-landing-menu .vision-vice-row:nth-child(4) .vision-landing-vice-accion {
+          color: #bd6814 !important; background: #fff3e6;
+        }
+        .vision-landing-menu .vision-vice-row:nth-child(5) .vision-landing-vice-accion {
+          color: #ad174f !important; background: #fdebf2;
+        }
+        .vision-landing-nota {
+          width: min(100%, 1510px); margin: 0 auto !important;
+          color: #747d95; font-size: 9.5px; line-height: 1.35;
+        }
+
+        /* Programas y servicios de Educación Superior (Anexo 4). */
+        .educacion-superior-page .vision-eje-banner {
+          width: fit-content !important; max-width: 100%; min-height: 0 !important;
+          margin: 22px 0 8px !important; padding: 8px 16px 8px 38px !important;
+          border-radius: 999px !important; font-size: 14px !important;
+        }
+        .educacion-superior-page .vision-eje-banner::before {
+          width: 19px !important; height: 19px !important; left: 9px !important;
+          top: 50% !important; border-radius: 50% !important;
+          transform: translateY(-50%) !important;
+        }
+        .educacion-superior-page .becas-seccion-subtitulo {
+          margin: 0 0 10px !important; font-size: 11px !important;
+        }
+        .educacion-superior-page .becas-resumen-grid { gap: 10px; margin-bottom: 10px; }
+        .educacion-superior-page .becas-resumen-card {
+          min-height: 74px; padding: 11px 14px; border-radius: 10px;
+          box-shadow: 0 3px 9px rgba(35,45,90,.06);
+        }
+        .educacion-superior-page .becas-resumen-etiqueta { font-size: 9px; }
+        .educacion-superior-page .becas-resumen-valor {
+          font-size: clamp(16px, 1.45vw, 21px); line-height: 1.05;
+        }
+        .educacion-superior-page .becas-resumen-valor.texto { font-size: 13px; }
+        .educacion-superior-page .becas-resumen-nota { font-size: 9px; }
+        .educacion-superior-page .becas-ranking-grid { gap: 10px; margin-bottom: 12px; }
+        .educacion-superior-page .becas-ranking-panel {
+          padding: 12px 14px; border-radius: 11px;
+          box-shadow: 0 3px 9px rgba(35,45,90,.06);
+        }
+        .becas-ranking-composicion {
+          display: flex; width: 100%; height: 20px; margin: 0 0 9px;
+          overflow: hidden; border-radius: 6px; background: #edf2f4;
+        }
+        .becas-composicion-segmento {
+          min-width: 2px; display: flex; align-items: center; justify-content: center;
+          color: #fff; font-size: 8px; font-weight: 900;
+        }
+        .educacion-superior-page .becas-ranking-lista { gap: 5px; }
+        .educacion-superior-page .becas-ranking-fila {
+          grid-template-columns: 15px minmax(110px, 1.2fr) minmax(80px, .85fr) 88px 38px;
+          gap: 6px;
+        }
+        .educacion-superior-page .becas-ranking-nombre { font-size: 10px; }
+        .educacion-superior-page .becas-ranking-barra { height: 7px; }
+        .becas-ranking-valor {
+          color: #34415f; font-size: 9px; font-weight: 800; text-align: right;
+          white-space: nowrap;
+        }
+        .educacion-superior-page .becas-ranking-porcentaje { font-size: 9px; }
+        .becas-ranking-nota {
+          margin: 9px 0 0; padding: 6px 9px; border-radius: 6px;
+          color: #8c6a00; background: #fff7d9; font-size: 9px;
+        }
+        .educacion-superior-page .programas-servicios-grid {
+          gap: 10px !important; margin-top: 0 !important;
+        }
+        .educacion-superior-page .programas-servicios-grid > .vision-exec-card {
+          min-height: 208px !important; padding: 12px !important;
+          border-radius: 11px !important; box-shadow: 0 4px 10px rgba(35,45,90,.07) !important;
+        }
+        .educacion-superior-page .becas-categoria-badge {
+          margin-bottom: 5px; padding: 3px 8px; font-size: 8px;
+        }
+        .educacion-superior-page .vision-card-title-row { min-height: 40px; margin-bottom: 4px; }
+        .educacion-superior-page .vision-card-label { font-size: 12px !important; }
+        .educacion-superior-page .vision-card-total { font-size: 29px !important; }
+        .educacion-superior-page .vision-card-unit { font-size: 9px !important; }
+        .educacion-superior-page .becas-metricas-fila { gap: 7px; }
+        .educacion-superior-page .programa-metrica-periodo {
+          min-height: 48px; padding: 7px 8px !important; border-radius: 7px !important;
+        }
+        .educacion-superior-page .programa-metrica-periodo span { font-size: 8px !important; }
+        .educacion-superior-page .programa-metrica-periodo strong { font-size: 16px !important; }
+        .educacion-superior-page .educacion-media-periodo-pie { font-size: 8.5px !important; }
+        .becas-nota-metodologica {
+          margin: 7px 1px 0; color: #848ca1; font-size: 8.5px; line-height: 1.35;
+        }
+
+        @media (min-width: 701px) and (max-width: 1400px) {
+          .vision-landing .institutional-landing-header {
+            grid-template-columns: minmax(0, 1fr) !important;
+          }
+          .vision-landing .institutional-landing-header .vision-landing-kpis {
+            grid-column: 1; grid-row: auto; margin-top: 12px !important;
+            width: fit-content;
+          }
+          .vision-landing-menu .vision-vice-menu {
+            grid-template-columns: repeat(3, minmax(0, 1fr)) !important;
+          }
+          .vision-landing-menu .vision-vice-row:nth-child(4) { grid-column: 1 / 2; }
+          .vision-landing-menu .vision-vice-row:nth-child(5) { grid-column: 2 / 3; }
+          .educacion-superior-page .becas-resumen-grid {
+            grid-template-columns: repeat(2, minmax(0, 1fr));
+          }
+        }
+        @media (max-width: 700px) {
+          .vision-landing { padding: 10px 9px 24px !important; }
+          .vision-landing .institutional-landing-header {
+            grid-template-columns: minmax(0, 1fr) !important; padding: 8px 4px !important;
+          }
+          .vision-landing .institutional-landing-header .vision-landing-kpis {
+            grid-column: 1; grid-row: auto; grid-template-columns: repeat(2, minmax(0, 1fr));
+            width: 100%; margin-top: 12px !important;
+          }
+          .vision-landing .vision-landing-kpi:nth-child(2) { border-right: 0; }
+          .vision-landing .vision-landing-kpi:nth-child(-n + 2) { border-bottom: 1px solid #e5e8ef; }
+          .vision-landing-menu .vision-vice-menu {
+            grid-template-columns: minmax(0, 1fr) !important; gap: 10px !important;
+          }
+          .vision-landing-menu .vision-vice-row:nth-child(n) { grid-column: 1 !important; }
+          .vision-landing-menu .vision-vice-pill { min-height: 222px !important; }
+          .educacion-superior-page .becas-resumen-grid,
+          .educacion-superior-page .becas-ranking-grid {
+            grid-template-columns: minmax(0, 1fr);
+          }
+          .educacion-superior-page .becas-ranking-fila {
+            grid-template-columns: 14px minmax(0, 1fr) 62px 34px;
+          }
+          .educacion-superior-page .becas-ranking-barra { display: none; }
+          .educacion-superior-page .programas-servicios-grid {
+            grid-template-columns: minmax(0, 1fr) !important;
+          }
+        }
+
+        /* ANEXO 5 · distribución territorial */
+        .territorial-section {
+          margin: 16px 0 20px; padding: 16px;
+          border: 1px solid #dfe3ec; border-radius: 14px; background: #fff;
+          box-shadow: 0 6px 18px rgba(35,45,90,.06);
+        }
+        .territorial-map-heading {
+          display: flex; align-items: flex-start; justify-content: space-between;
+          gap: 14px; margin-bottom: 11px;
+        }
+        .territorial-map-heading h3 {
+          margin: 0 0 3px; color: #232d5a; font-size: 16px; line-height: 1.2;
+        }
+        .territorial-map-heading p {
+          margin: 0; color: #68728c; font-size: 10.5px; line-height: 1.4;
+        }
+        .territorial-source-badge {
+          flex: 0 0 auto; padding: 5px 9px; border: 1px dashed #e0b20f;
+          border-radius: 7px; color: #806000; background: #fff9d8;
+          font-size: 8.5px; font-weight: 900; text-transform: uppercase;
+        }
+        .territorial-toolbar {
+          display: flex; align-items: center; justify-content: space-between;
+          gap: 12px; margin-bottom: 11px; flex-wrap: wrap;
+        }
+        .territorial-resource-tabs,
+        .territorial-control-group { display: flex; align-items: center; gap: 5px; flex-wrap: wrap; }
+        .territorial-control-group > span {
+          margin-right: 3px; color: #7c8499; font-size: 8px;
+          font-weight: 900; text-transform: uppercase;
+        }
+        .territorial-pills label { margin-right: 4px !important; }
+        .territorial-pills input { position: absolute; opacity: 0; pointer-events: none; }
+        .territorial-pills label {
+          display: inline-flex; align-items: center; min-height: 26px;
+          margin: 0; padding: 5px 10px; border: 1px solid #dfe3ec;
+          border-radius: 999px; color: #59627d; background: #fff;
+          font-size: 8.5px; font-weight: 800; cursor: pointer;
+        }
+        .territorial-pills label:has(input:checked) {
+          color: #fff; border-color: #232d5a; background: #232d5a;
+        }
+        .territorial-pills label:has(input:disabled) {
+          color: #a3a9b9; background: #f5f6f9; cursor: not-allowed;
+        }
+        .territorial-map-grid {
+          display: grid; grid-template-columns: minmax(0, 1.35fr) minmax(300px, .75fr);
+          gap: 12px; align-items: stretch;
+        }
+        .territorial-map-card, .territorial-ranking-card {
+          min-width: 0; overflow: hidden; border: 1px solid #e3e6ef;
+          border-radius: 12px; background: #fff;
+        }
+        .territorial-map-card { padding: 12px 12px 10px; }
+        .territorial-map-title h4 { margin: 0 0 2px; color: #232d5a; font-size: 13px; }
+        .territorial-map-title p { margin: 0; color: #788198; font-size: 8.5px; }
+        .territorial-map-graph { height: 350px; }
+        .territorial-region-summary {
+          display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 7px;
+          margin-top: 3px;
+        }
+        .territorial-region-card {
+          min-width: 0; padding: 7px 8px; border-radius: 7px; background: #f5f4fb;
+        }
+        .territorial-region-card div {
+          display: flex; align-items: center; justify-content: space-between; gap: 5px;
+          color: #59627d; font-size: 8px;
+        }
+        .territorial-region-card strong { color: #232d5a; font-size: 9px; }
+        .territorial-region-track {
+          height: 4px; margin-top: 5px; overflow: hidden; border-radius: 999px; background: #e1dfef;
+        }
+        .territorial-region-track > span { display: block; height: 100%; background: #6c5bb1; }
+        .territorial-ranking-card { padding: 13px 14px; }
+        .territorial-ranking-block + .territorial-ranking-block {
+          margin-top: 14px; padding-top: 12px; border-top: 1px solid #e7e9f0;
+        }
+        .territorial-ranking-heading { display: flex; align-items: center; gap: 7px; margin-bottom: 8px; }
+        .territorial-ranking-icon {
+          display: grid; place-items: center; width: 19px; height: 19px;
+          border-radius: 6px; color: #4f449a; background: #eeebfa;
+          font-size: 9px; font-weight: 900;
+        }
+        .territorial-ranking-block.brechas .territorial-ranking-icon {
+          color: #8c6a00; background: #fff4c2;
+        }
+        .territorial-ranking-heading h4 { margin: 0; color: #232d5a; font-size: 11px; }
+        .territorial-ranking-lista { display: grid; gap: 7px; }
+        .territorial-rank-fila {
+          display: grid; grid-template-columns: 15px minmax(92px, 1fr) minmax(58px, .85fr) 58px;
+          gap: 6px; align-items: center; color: #4f5870; font-size: 8.5px;
+        }
+        .territorial-rank-numero { color: #4f449a; font-weight: 900; text-align: center; }
+        .territorial-ranking-block.brechas .territorial-rank-numero { color: #b78700; }
+        .territorial-rank-provincia { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+        .territorial-rank-barra { height: 5px; overflow: hidden; border-radius: 999px; background: #ebeef4; }
+        .territorial-rank-barra > span { display: block; height: 100%; border-radius: inherit; background: #5d4eaa; }
+        .territorial-ranking-block.brechas .territorial-rank-barra > span { background: #f1b620; }
+        .territorial-rank-fila strong { color: #232d5a; font-size: 8.5px; text-align: right; }
+        .territorial-method-note {
+          margin: 10px 0 0; padding: 7px 8px; border-radius: 6px;
+          color: #707990; background: #f5f6f9; font-size: 7.8px; line-height: 1.4;
+        }
+        .territorial-missing-list { display: grid; gap: 8px; margin: 6px 0 0; }
+        .territorial-missing-item {
+          padding: 9px; border-radius: 8px; color: #59627d; background: #f7f8fb;
+          font-size: 9px; line-height: 1.35;
+        }
+        .territorial-missing-item strong { display: block; color: #232d5a; margin-bottom: 2px; }
+        @media (max-width: 1100px) {
+          .territorial-map-grid { grid-template-columns: minmax(0, 1fr); }
+          .territorial-map-graph { height: 330px; }
+        }
+        @media (max-width: 700px) {
+          .territorial-section { padding: 11px; border-radius: 11px; }
+          .territorial-map-heading { display: block; }
+          .territorial-source-badge { display: inline-block; margin-top: 7px; }
+          .territorial-toolbar { align-items: flex-start; flex-direction: column; }
+          .territorial-map-card { padding: 10px 8px 8px; }
+          .territorial-map-graph { height: 310px; }
+          .territorial-region-summary { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+          .territorial-rank-fila { grid-template-columns: 15px minmax(0, 1fr) 58px; }
+          .territorial-rank-barra { display: none; }
+        }
+
+        /* Corrección final de navegación en escritorio.
+           El intento de convertir el menú completo en una barra horizontal
+           hacía que los viceministerios e indicadores ocuparan varias filas,
+           empujaran el contenido hacia abajo y dejaran un gran espacio vacío.
+           Desde 1401 px se recupera una columna lateral estable; hasta 1400 px
+           se conserva el cajón desplegable ya optimizado para portátil,
+           tableta y celular. */
+        @media (min-width: 1401px) {
+          .module-layout {
+            display: grid !important;
+            grid-template-columns: 310px minmax(0, 1fr) !important;
+            align-items: start !important;
+            min-height: calc(100dvh - 70px) !important;
+          }
+          .module-sidebar {
+            position: sticky !important;
+            top: 0 !important;
+            z-index: 900 !important;
+            width: 310px !important;
+            height: calc(100dvh - 70px) !important;
+            min-height: calc(100dvh - 70px) !important;
+            max-height: calc(100dvh - 70px) !important;
+            overflow-x: hidden !important;
+            overflow-y: auto !important;
+            display: flex !important;
+            flex-direction: column !important;
+            flex-wrap: nowrap !important;
+            align-items: stretch !important;
+            gap: 0 !important;
+            padding: 20px 16px 24px !important;
+            box-sizing: border-box !important;
+            color: #ffffff !important;
+            background: #4f449a !important;
+            border: 0 !important;
+            border-right: 1px solid rgba(255,255,255,.15) !important;
+            box-shadow: 8px 0 24px rgba(35,45,90,.12) !important;
+          }
+          .module-sidebar .sidebar-logo {
+            display: block !important;
+            width: 150px !important;
+            height: auto !important;
+            margin: 0 auto 12px !important;
+            padding: 7px 10px !important;
+            border-radius: 10px !important;
+            background: #ffffff !important;
+          }
+          .module-sidebar .sidebar-kicker {
+            width: 100% !important;
+            margin: 0 0 13px !important;
+            padding: 0 0 12px !important;
+            color: rgba(255,255,255,.82) !important;
+            border: 0 !important;
+            border-bottom: 1px solid rgba(255,255,255,.18) !important;
+            font-size: 10px !important;
+            letter-spacing: .14em !important;
+            text-align: center !important;
+            white-space: normal !important;
+          }
+          .module-sidebar .side-back {
+            width: 100% !important;
+            min-height: 38px !important;
+            margin: 0 0 13px !important;
+            padding: 9px 11px !important;
+            display: flex !important;
+            align-items: center !important;
+            gap: 8px !important;
+            color: #ffffff !important;
+            background: rgba(255,255,255,.09) !important;
+            border: 1px solid rgba(255,255,255,.2) !important;
+            border-radius: 9px !important;
+            text-align: left !important;
+          }
+          .module-sidebar .sidebar-menu {
+            width: 100% !important;
+            min-width: 0 !important;
+            display: block !important;
+            flex: 0 0 auto !important;
+          }
+          .module-sidebar .side-section,
+          .module-sidebar .vice-button,
+          .module-sidebar .indicator-button {
+            width: 100% !important;
+            max-width: 100% !important;
+            min-width: 0 !important;
+            min-height: 38px !important;
+            margin: 0 0 5px !important;
+            padding: 9px 10px !important;
+            display: flex !important;
+            align-items: flex-start !important;
+            gap: 8px !important;
+            color: #ffffff !important;
+            background: transparent !important;
+            border: 1px solid transparent !important;
+            border-radius: 8px !important;
+            box-shadow: none !important;
+            font-size: 11px !important;
+            line-height: 1.3 !important;
+            text-align: left !important;
+            white-space: normal !important;
+            overflow-wrap: anywhere !important;
+          }
+          .module-sidebar .side-section:hover,
+          .module-sidebar .vice-button:hover,
+          .module-sidebar .indicator-button:hover {
+            background: rgba(255,255,255,.1) !important;
+            border-color: rgba(255,255,255,.16) !important;
+          }
+          .module-sidebar .side-section.active {
+            color: #232d5a !important;
+            background: #f1b620 !important;
+            border: 1px solid #f1b620 !important;
+            border-left: 0 !important;
+            border-bottom: 1px solid #f1b620 !important;
+            font-weight: 900 !important;
+          }
+          .module-sidebar .vice-button.selected,
+          .module-sidebar .indicator-button.selected {
+            color: #232d5a !important;
+            background: #ffffff !important;
+            border-color: #ffffff !important;
+            font-weight: 800 !important;
+          }
+          .module-sidebar .indicator-group,
+          .module-sidebar .indicator-group.open {
+            width: 100% !important;
+            max-height: none !important;
+            margin: 0 0 7px !important;
+            padding: 2px 0 2px 13px !important;
+            display: block !important;
+            box-sizing: border-box !important;
+          }
+          .module-sidebar .indicator-group:not(.open) {
+            display: none !important;
+          }
+          .module-sidebar .indicator-group .indicator-button {
+            font-size: 10px !important;
+            padding: 8px 9px !important;
+          }
+          .module-sidebar .indicator-index {
+            flex: 0 0 22px !important;
+            color: #f1b620 !important;
+            font-weight: 900 !important;
+          }
+          .module-sidebar .indicator-button.selected .indicator-index {
+            color: #4f449a !important;
+          }
+          .module-main {
+            width: 100% !important;
+            min-width: 0 !important;
+            margin: 0 !important;
+            padding: 24px 28px 38px !important;
+            box-sizing: border-box !important;
+          }
+
+          /* Portada de Visión Ejecutiva: se baja ligeramente la fila y se
+             aprovecha mejor la altura útil del monitor sin agrandar en exceso
+             los textos ni alterar la composición de cinco columnas. */
+          .vision-landing-menu {
+            margin-top: 30px !important;
+          }
+          .vision-landing-menu .vision-vice-pill {
+            min-height: 300px !important;
+          }
+          .vision-landing-menu .vision-vice-card-top {
+            min-height: 82px !important;
+            padding-top: 17px !important;
+          }
+          .vision-vice-card-cuerpo {
+            padding-top: 16px !important;
+          }
+          .vision-landing-menu .vision-landing-vice-accion {
+            margin-bottom: 14px !important;
+          }
+        }
+
+        /* El mapa y su panel lateral deben conservar proporciones equivalentes
+           y una lectura cómoda en pantallas de escritorio. */
+        @media (min-width: 1101px) {
+          .territorial-map-grid {
+            grid-template-columns: minmax(0, 1.55fr) minmax(340px, .75fr) !important;
+            gap: 16px !important;
+          }
+          .territorial-map-card,
+          .territorial-ranking-card {
+            min-height: 470px !important;
+          }
+          .territorial-map-graph { height: 365px !important; }
+          .territorial-pills label { font-size: 10px !important; }
+          .territorial-ranking-heading h4 { font-size: 13px !important; }
+          .territorial-rank-fila,
+          .territorial-rank-fila strong { font-size: 10px !important; }
+          .territorial-method-note { font-size: 9px !important; }
+        }
+
+        /* Educación Media · distribución fiel a la lámina de referencia.
+           Las tres tarjetas principales conservan la cuadrícula original y
+           cada desglose ocupa una fila completa dentro de su propia tarjeta. */
+        .estudiantes-historicos-card .pres-distribucion,
+        .docentes-historicos-card .pres-distribucion,
+        .nee-card .pres-distribucion,
+        .escolaridad-inconclusa-card .pres-distribucion {
+          width: 100%; margin-top: 8px !important;
+        }
+
+        /* Instituciones: barra primero y sostenimientos en una lista vertical
+           debajo, tal como Fiscal/Fiscomisional/Municipal/Particular en el anexo. */
+        .instituciones-historicas-card .pres-distribucion,
+        .reinsercion-card .pres-distribucion {
+          display: flex; flex-direction: column;
+        }
+        .instituciones-historicas-card .pres-barra-apilada,
+        .reinsercion-card .pres-barra-apilada {
+          order: 1; margin: 2px 0 8px !important;
+        }
+        .instituciones-historicas-card .pres-distribucion-cabecera,
+        .reinsercion-card .pres-distribucion-cabecera { order: 2; }
+        .instituciones-historicas-card .pres-distribucion-etiquetas,
+        .reinsercion-card .pres-distribucion-etiquetas {
+          display: grid !important; grid-template-columns: minmax(0, 1fr) !important;
+          gap: 5px !important;
+        }
+        .instituciones-historicas-card .pres-distribucion-etiquetas > span,
+        .reinsercion-card .pres-distribucion-etiquetas > span {
+          width: 100%; display: grid !important;
+          grid-template-columns: 7px minmax(0, 1fr) auto auto;
+          align-items: center; column-gap: 6px;
+        }
+
+        /* En NEE las categorías quedan debajo de cada barra y en dos columnas,
+           sin convertir Sostenimiento y Régimen en paneles laterales. */
+        .nee-card .pres-distribucion {
+          display: flex; flex-direction: column;
+        }
+        .nee-card .pres-barra-apilada { order: 1; margin: 3px 0 7px !important; }
+        .nee-card .pres-distribucion-cabecera { order: 2; }
+        .nee-card .pres-distribucion-cabecera > strong { margin-bottom: 4px; }
+        .nee-card .pres-distribucion-etiquetas {
+          display: grid !important; grid-template-columns: repeat(2, minmax(0, 1fr));
+          gap: 5px 14px !important;
+        }
+        .nee-card .pres-distribucion-etiquetas > span {
+          width: 100%; display: grid !important;
+          grid-template-columns: 7px minmax(0, 1fr) auto auto;
+          align-items: center; column-gap: 5px;
+        }
+        @media (max-width: 430px) {
+          .nee-card .pres-distribucion-etiquetas {
+            grid-template-columns: minmax(0, 1fr);
+          }
+        }
         </style>
         <script>
         window.MathJax = {
@@ -2841,10 +4357,18 @@ app.index_string = """<!DOCTYPE html>
 
 def barra_superior():
     return html.Header([
-        html.Button("⌂", id="home-button", className="home-button", title="Inicio"),
+        html.Button(
+            html.Img(
+                src=app.get_relative_path("/recurso-portada/logo-minedec.png"),
+                alt="Ecuador · Ministerio de Educación, Deporte y Cultura",
+                className="header-brand-logo",
+            ),
+            id="home-button", className="home-button header-brand-button",
+            title="Ir al inicio", **{"aria-label": "Ir al inicio"},
+        ),
         html.Div([
             html.Strong("PANEL INTEGRADO DE GESTIÓN MINEDEC"),
-            html.Span("Panel institucional"),
+            html.Span("MINEDEC · PANEL INSTITUCIONAL"),
         ], className="header-title"),
         html.Div([
             html.Div([html.Span("Fecha de corte"), html.Strong(datetime.now().strftime("%d/%m/%Y"))],
@@ -2855,13 +4379,28 @@ def barra_superior():
 
 
 def portada():
-    # Iconos lineales, monocromáticos y minimalistas conforme a la guía visual.
+    """Portada institucional con navegación, bloque de bienvenida y accesos."""
+    nombres_portada = {
+        "vision": "Visión Ejecutiva",
+        "indicadores": "Indicadores",
+        "presupuesto": "Ejecución Presupuestaria",
+        "inventario": "Inventario de Información",
+        "documentacion": "Documentación",
+    }
     iconos_portada = {
-        "vision": """<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64' fill='none' stroke='white' stroke-width='2.8' stroke-linecap='round' stroke-linejoin='round'><rect x='8' y='8' width='48' height='39' rx='4'/><path d='M15 39V27h8v12M28 39V20h8v19M41 39V15h8v24M18 55h28M32 47v8'/></svg>""",
-        "indicadores": """<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64' fill='none' stroke='white' stroke-width='2.8' stroke-linecap='round' stroke-linejoin='round'><rect x='10' y='8' width='44' height='48' rx='5'/><path d='M20 21l3 3 6-7M34 21h11M20 35l3 3 6-7M34 35h11M20 49l3 3 6-7M34 49h11'/></svg>""",
-        "presupuesto": """<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64' fill='none' stroke='white' stroke-width='2.8' stroke-linecap='round' stroke-linejoin='round'><path d='M9 53h46M14 48V29M25 48V37M36 48V23M47 48V14'/><path d='M14 21l11-7 11 3 14-9M43 8h7v7'/><circle cx='14' cy='21' r='2.5'/><circle cx='25' cy='14' r='2.5'/><circle cx='36' cy='17' r='2.5'/></svg>""",
-        "inventario": """<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64' fill='none' stroke='white' stroke-width='2.8' stroke-linecap='round' stroke-linejoin='round'><path d='M7 20h20l5 6h25v27H7z'/><path d='M7 20v-8h19l5 6h20v8M17 35h12M17 43h22'/><circle cx='48' cy='43' r='7'/><path d='M53 48l5 5'/></svg>""",
-        "documentacion": """<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64' fill='none' stroke='white' stroke-width='2.8' stroke-linecap='round' stroke-linejoin='round'><path d='M16 7h24l10 10v40H16z'/><path d='M40 7v12h12M24 30h18M24 39h18M24 48h12'/></svg>""",
+        "vision": """<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64' fill='none' stroke='#4F449A' stroke-width='3' stroke-linecap='round' stroke-linejoin='round'><rect x='8' y='8' width='48' height='39' rx='4'/><path d='M15 39V27h8v12M28 39V20h8v19M41 39V15h8v24M18 55h28M32 47v8'/></svg>""",
+        "indicadores": """<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64' fill='none' stroke='#4F449A' stroke-width='3' stroke-linecap='round' stroke-linejoin='round'><rect x='10' y='8' width='44' height='48' rx='5'/><path d='M20 21l3 3 6-7M34 21h11M20 35l3 3 6-7M34 35h11M20 49l3 3 6-7M34 49h11'/></svg>""",
+        "presupuesto": """<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64' fill='none' stroke='#4F449A' stroke-width='3' stroke-linecap='round' stroke-linejoin='round'><path d='M9 53h46M14 48V29M25 48V37M36 48V23M47 48V14'/><path d='M14 21l11-7 11 3 14-9M43 8h7v7'/><circle cx='14' cy='21' r='2.5'/><circle cx='25' cy='14' r='2.5'/><circle cx='36' cy='17' r='2.5'/></svg>""",
+        "inventario": """<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64' fill='none' stroke='#4F449A' stroke-width='3' stroke-linecap='round' stroke-linejoin='round'><path d='M7 20h20l5 6h25v27H7z'/><path d='M7 20v-8h19l5 6h20v8M17 35h12M17 43h22'/><circle cx='48' cy='43' r='7'/><path d='M53 48l5 5'/></svg>""",
+        "documentacion": """<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64' fill='none' stroke='#4F449A' stroke-width='3' stroke-linecap='round' stroke-linejoin='round'><path d='M16 7h24l10 10v40H16z'/><path d='M40 7v12h12M24 30h18M24 39h18M24 48h12'/></svg>""",
+    }
+
+    descripciones = {
+        "vision": "Cifras clave por viceministerio",
+        "indicadores": "Metas, avance y cumplimiento",
+        "presupuesto": "Codificado, devengado y % de ejecución",
+        "inventario": "Fuentes, bases y activos de datos",
+        "documentacion": "Fichas metodológicas y guías",
     }
 
     def icono(codigo):
@@ -2872,15 +4411,25 @@ def portada():
             **{"aria-hidden": "true"},
         )
 
-    def boton(codigo, nombre):
+    def tarjeta(codigo, nombre):
         return html.Button(
             [
                 html.Span(icono(codigo), className="portada-boton-icono"),
                 html.Span(nombre, className="portada-boton-texto"),
-                html.Span("›", className="portada-boton-flecha"),
+                html.Span(descripciones[codigo], className="portada-boton-descripcion"),
+                html.Span(["Abrir", html.B("→")], className="portada-boton-accion"),
             ],
             id={"type": "home-card", "index": codigo},
-            className="portada-boton",
+            className="portada-boton" + (" portada-boton-destacado" if codigo == "vision" else ""),
+            n_clicks=0,
+            type="button",
+        )
+
+    def enlace_superior(codigo, nombre):
+        return html.Button(
+            [html.Span(ICONOS.get(codigo, "◇")), html.Span(nombre)],
+            id={"type": "home-nav-card", "index": codigo},
+            className="portada-nav-enlace",
             n_clicks=0,
             type="button",
         )
@@ -2888,31 +4437,48 @@ def portada():
     return html.Main(
         className="portada-pagina",
         children=[
-            html.Section(
-                className="portada-contenido",
-                children=[
+            html.Nav([
+                html.Div([html.Span("⌂"), html.Span("Inicio")], className="portada-nav-inicio"),
+                *[enlace_superior(codigo, nombres_portada[codigo])
+                  for codigo, _nombre in SECCIONES_PRINCIPALES],
+            ], className="portada-nav", **{"aria-label": "Navegación principal"}),
+            html.Div(className="portada-contenido", children=[
+                html.Section([
+                    html.Div([
+                        html.P("MINISTERIO DE EDUCACIÓN, DEPORTE Y CULTURA", className="portada-hero-kicker"),
+                        html.H1("Información para decidir mejor y a tiempo"),
+                        html.P(
+                            "Indicadores, presupuesto y recursos de información del Ministerio, en un solo lugar.",
+                            className="portada-hero-descripcion",
+                        ),
+                        html.Button(
+                            ["Empezar por Visión Ejecutiva", html.Span("→")],
+                            id={"type": "home-hero-card", "index": "vision"},
+                            className="portada-hero-accion", n_clicks=0, type="button",
+                        ),
+                    ], className="portada-hero-texto"),
                     html.Div(
-                        className="portada-ilustracion-contenedor",
-                        children=html.Img(
-                            src=app.get_asset_url("portada-minedec.png"),
+                        html.Img(
+                            src=app.get_relative_path("/recurso-portada/imagen_minedec.png"),
                             className="portada-ilustracion",
                             alt="Educación, deporte y cultura en el Ecuador",
                         ),
+                        className="portada-ilustracion-contenedor",
                     ),
-                    html.Img(
-                        src=app.get_asset_url("logo-minedec.png"),
-                        className="portada-logo",
-                        alt="Ministerio de Educación, Deporte y Cultura",
+                ], className="portada-hero"),
+                html.Div([
+                    html.H2("¿Qué necesita consultar?"),
+                    html.Span(
+                        f"Datos con corte al {datetime.now().strftime('%d/%m/%Y')}",
+                        className="portada-corte",
                     ),
-                    html.Nav(
-                        [boton(codigo, nombre)
-                         for codigo, nombre in SECCIONES_PRINCIPALES],
-                        className="portada-menu",
-                        **{"aria-label": "Secciones principales"},
-                    ),
-                ],
-            ),
-            html.Div(className="portada-onda-inferior"),
+                ], className="portada-menu-cabecera"),
+                html.Div(
+                    [tarjeta(codigo, nombres_portada[codigo])
+                     for codigo, _nombre in SECCIONES_PRINCIPALES],
+                    className="portada-menu",
+                ),
+            ]),
         ],
     )
 
@@ -3727,25 +5293,59 @@ def contenido_kpi_inst(vice=None, indicador=None):
 # las tarjetas de cobertura con las 4 bases reales, sin montos; el resto de
 # viceministerios no tiene fuente todavía y se muestra "en construcción".
 # ---------------------------------------------------------------------------
+VISION_TABS_ICONO = {
+    "gestion-educativa": "institucion",
+    "educacion-superior": "cupos",
+    "educacion": "bachillerato",
+    "deporte": "deporte",
+    "cultura": "cultura",
+}
+
+VISION_TABS_BULLETS = {
+    "gestion-educativa": ["Infraestructura educativa", "Alimentación escolar",
+                          "Programas y servicios"],
+    "educacion-superior": ["Universidades e institutos", "Acceso y becas",
+                           "Oferta académica"],
+    "educacion": ["Oferta educativa", "Docentes", "Estudiantes"],
+    "deporte": ["Deporte formativo", "Alto rendimiento", "Infraestructura deportiva"],
+    "cultura": ["Patrimonio", "Artes y creatividad", "Gestión cultural"],
+}
+
+
 def vision_tabs_nav(activo):
     """Menú de los 5 viceministerios. En la pantalla de entrada (sin
-    viceministerio elegido) se ve como lista vertical de botones; una vez
-    elegido uno, se compacta en una franja superior tipo pestañas."""
+    viceministerio elegido) se ve como tarjetas numeradas con icono, cifras
+    clave y botón "Explorar"; una vez elegido uno, se compacta en una franja
+    superior tipo pestañas."""
     compacto = activo is not None
 
-    def contenido_boton(nombre):
+    def contenido_boton(numero, codigo, nombre):
         if compacto:
             return nombre
-        return html.Span(nombre, className="vision-landing-vice-nombre")
+        return html.Div([
+            html.Div([
+                icono_tarjeta(VISION_TABS_ICONO.get(codigo, "programa"), ""),
+                html.Span(f"{numero:02d}", className="vision-vice-card-numero"),
+            ], className="vision-vice-card-top"),
+            html.Div([
+                html.Span("VICEMINISTERIO DEL" if "Viceministerio del " in nombre
+                          else "VICEMINISTERIO DE", className="vision-vice-card-kicker"),
+                html.Strong(nombre.replace("Viceministerio de ", "").replace("Viceministerio del ", ""),
+                            className="vision-landing-vice-nombre"),
+                html.Ul([html.Li(bullet) for bullet in VISION_TABS_BULLETS.get(codigo, [])],
+                        className="vision-vice-card-bullets"),
+            ], className="vision-vice-card-cuerpo"),
+            html.Span("Explorar  →", className="vision-landing-vice-accion"),
+        ])
 
     return html.Nav(
         [html.Div(
-            html.Button(contenido_boton(nombre),
+            html.Button(contenido_boton(numero, codigo, nombre),
                         id={"type": "vision-tab", "index": codigo}, n_clicks=0,
                         className="vision-vice-pill active" if codigo == activo else "vision-vice-pill",
                         type="button"),
             className="vision-vice-row",
-        ) for codigo, nombre in VISION_TABS],
+        ) for numero, (codigo, nombre) in enumerate(VISION_TABS, start=1)],
         className="vision-vice-menu vision-vice-menu-compacta" if compacto else "vision-vice-menu",
         **{"aria-label": "Viceministerios de Visión Ejecutiva"},
     )
@@ -4176,6 +5776,7 @@ def tarjetas_institutos_tecnicos_tecnologicos():
 EJE2_BECAS_EDUCACION_SUPERIOR = [
     {
         "titulo": "Becas Fulbright",
+        "categoria": "Becas",
         "beneficiarios": 8,
         "unidad_beneficiarios": "Beneficiarios",
         "inversion": "$677.800,00",
@@ -4186,6 +5787,7 @@ EJE2_BECAS_EDUCACION_SUPERIOR = [
     },
     {
         "titulo": "Becas Nacionales para Fortalecimiento de la Industria de Hidrocarburos",
+        "categoria": "Becas",
         "beneficiarios": 141,
         "unidad_beneficiarios": "Beneficiarios",
         "inversion": "$899.870,10",
@@ -4198,6 +5800,7 @@ EJE2_BECAS_EDUCACION_SUPERIOR = [
     },
     {
         "titulo": "Programa de Educación Continua “Because He Is Nice”",
+        "categoria": "Formación",
         "beneficiarios": 71570,
         "unidad_beneficiarios": "Beneficiarios",
         "inversion": "$1.431.400,00",
@@ -4209,6 +5812,7 @@ EJE2_BECAS_EDUCACION_SUPERIOR = [
     },
     {
         "titulo": "Jóvenes del Nuevo Ecuador",
+        "categoria": "Programa",
         "beneficiarios": 3276,
         "unidad_beneficiarios": "Beneficiarios",
         "inversion": "$2.715.705,00",
@@ -4221,6 +5825,7 @@ EJE2_BECAS_EDUCACION_SUPERIOR = [
     },
     {
         "titulo": "Mujeres que Transforman",
+        "categoria": "Programa",
         "beneficiarios": 2627,
         "unidad_beneficiarios": "Beneficiarias",
         "inversion": "$1.266.214,00",
@@ -4232,6 +5837,7 @@ EJE2_BECAS_EDUCACION_SUPERIOR = [
     },
     {
         "titulo": "Talento Joven",
+        "categoria": "Programa",
         "beneficiarios": 3200,
         "unidad_beneficiarios": "Beneficiarios",
         "inversion": "$1.821.536,00",
@@ -4244,22 +5850,139 @@ EJE2_BECAS_EDUCACION_SUPERIOR = [
 ]
 
 
+def _parse_moneda(texto):
+    """Convierte '$677.800,00' (formato latino) a float 677800.0."""
+    limpio = str(texto).replace("$", "").strip().replace(".", "").replace(",", ".")
+    return float(limpio) if limpio else 0.0
+
+
+def _resumen_becas_educacion_superior():
+    """Totales y rankings usados por las tarjetas resumen y los paneles de
+    concentración de inversión/beneficiarios (ANEXO 4)."""
+    inversiones = [(d["titulo"], _parse_moneda(d["inversion"])) for d in EJE2_BECAS_EDUCACION_SUPERIOR]
+    beneficiarios = [(d["titulo"], d["beneficiarios"]) for d in EJE2_BECAS_EDUCACION_SUPERIOR]
+    total_inversion = sum(v for _, v in inversiones)
+    total_beneficiarios = sum(v for _, v in beneficiarios)
+    return {
+        "total_inversion": total_inversion,
+        "total_beneficiarios": total_beneficiarios,
+        "mayor_inversion": max(inversiones, key=lambda x: x[1]),
+        "mayor_cobertura": max(beneficiarios, key=lambda x: x[1]),
+        "ranking_inversion": sorted(inversiones, key=lambda x: x[1], reverse=True),
+        "ranking_beneficiarios": sorted(beneficiarios, key=lambda x: x[1], reverse=True),
+    }
+
+
+def tarjetas_resumen_becas_educacion_superior():
+    """4 tarjetas KPI: inversión total, beneficiarios, mayor inversión y
+    mayor cobertura, para identificar de un vistazo dónde se concentran."""
+    r = _resumen_becas_educacion_superior()
+    n = len(EJE2_BECAS_EDUCACION_SUPERIOR)
+    pct_inversion = (r["mayor_inversion"][1] / r["total_inversion"] * 100) if r["total_inversion"] else 0
+    pct_beneficiarios = (r["mayor_cobertura"][1] / r["total_beneficiarios"] * 100) if r["total_beneficiarios"] else 0
+    return html.Div([
+        html.Article([
+            html.Span("Inversión total", className="becas-resumen-etiqueta"),
+            html.Strong(_moneda(r["total_inversion"]), className="becas-resumen-valor"),
+            html.Span(f"{n} programas · corte octubre 2026", className="becas-resumen-nota"),
+        ], className="becas-resumen-card destacada"),
+        html.Article([
+            html.Span("Beneficiarios", className="becas-resumen-etiqueta"),
+            html.Strong(formato_valor(r["total_beneficiarios"]), className="becas-resumen-valor"),
+            html.Span("Suma de programas (puede incluir duplicados)", className="becas-resumen-nota"),
+        ], className="becas-resumen-card"),
+        html.Article([
+            html.Span("Mayor inversión", className="becas-resumen-etiqueta"),
+            html.Strong(r["mayor_inversion"][0], className="becas-resumen-valor texto", title=r["mayor_inversion"][0]),
+            html.Span(f"{pct_inversion:.1f}% del total", className="becas-resumen-nota"),
+        ], className="becas-resumen-card"),
+        html.Article([
+            html.Span("Mayor cobertura", className="becas-resumen-etiqueta"),
+            html.Strong(r["mayor_cobertura"][0], className="becas-resumen-valor texto", title=r["mayor_cobertura"][0]),
+            html.Span(f"{pct_beneficiarios:.1f}% de beneficiarios", className="becas-resumen-nota"),
+        ], className="becas-resumen-card"),
+    ], className="becas-resumen-grid")
+
+
+def _panel_ranking_becas(titulo, datos_ordenados, total):
+    colores = ["#16A085", "#D94F86", "#3D79D8", "#F1B620", "#6B5BB5", "#26335F"]
+    es_inversion = "inversión" in titulo.lower()
+    filas = []
+    for i, (nombre, valor) in enumerate(datos_ordenados, start=1):
+        pct = (valor / total * 100) if total else 0
+        filas.append(html.Div([
+            html.Span(f"{i}", className="becas-ranking-indice"),
+            html.Span(nombre, className="becas-ranking-nombre", title=nombre),
+            html.Div(html.Div(className="becas-ranking-barra-relleno",
+                               style={"width": f"{max(pct, 1.2):.1f}%",
+                                      "background": colores[(i - 1) % len(colores)]}),
+                     className="becas-ranking-barra"),
+            html.Span(_moneda(valor) if es_inversion else formato_valor(valor),
+                      className="becas-ranking-valor"),
+            html.Span(f"{pct:.1f}%", className="becas-ranking-porcentaje"),
+        ], className="becas-ranking-fila"))
+    composicion = html.Div([
+        html.Div(
+            html.Span(f"{(valor / total * 100):.1f}%") if total and valor / total >= .075 else None,
+            className="becas-composicion-segmento",
+            style={
+                "width": f"{(valor / total * 100) if total else 0:.2f}%",
+                "background": colores[i % len(colores)],
+            },
+            title=f"{nombre}: {(valor / total * 100) if total else 0:.1f}%",
+        )
+        for i, (nombre, valor) in enumerate(datos_ordenados)
+    ], className="becas-ranking-composicion")
+    if es_inversion:
+        principales = sum(v for _, v in datos_ordenados[:3])
+        nota = f"Los 3 primeros concentran el {(principales / total * 100) if total else 0:.1f}% de la inversión."
+    else:
+        nombre_primero, valor_primero = datos_ordenados[0]
+        nota = (f"{nombre_primero} reúne aproximadamente "
+                f"{round(valor_primero / total * 10) if total else 0} de cada 10 beneficiarios.")
+    return html.Div([
+        html.H3(titulo, className="becas-ranking-titulo"),
+        html.P("Participación del total · ranking de mayor a menor", className="becas-ranking-subtitulo"),
+        composicion,
+        html.Div(filas, className="becas-ranking-lista"),
+        html.P(nota, className="becas-ranking-nota"),
+    ], className="becas-ranking-panel")
+
+
+def paneles_ranking_becas_educacion_superior():
+    r = _resumen_becas_educacion_superior()
+    return html.Div([
+        _panel_ranking_becas("¿Dónde se concentra la inversión?",
+                             r["ranking_inversion"], r["total_inversion"]),
+        _panel_ranking_becas("¿Dónde se concentran los beneficiarios?",
+                             r["ranking_beneficiarios"], r["total_beneficiarios"]),
+    ], className="becas-ranking-grid")
+
+
 def _tarjeta_beca_educacion_superior(dato):
     """Beneficiarios + inversión de un programa de becas, con la nota de
     actualización/corte fija que pidió la Viceministra (no es un período
     histórico seleccionable, como SAFPI/NAP)."""
     ayuda_texto = f"{dato['titulo']}. {dato['descripcion']}"
+    por_beneficiario = (_parse_moneda(dato["inversion"]) / dato["beneficiarios"]) if dato["beneficiarios"] else 0
     return html.Article([
         _ayuda_tarjeta(dato["titulo"], dato["descripcion"]),
+        html.Span(dato.get("categoria", "Programa"), className="becas-categoria-badge"),
         cabecera_tarjeta("becas", dato["titulo"], ayuda_texto),
         html.Div([
             html.Strong(formato_valor(dato["beneficiarios"]), className="vision-card-total"),
             html.Span(dato["unidad_beneficiarios"], className="vision-card-unit"),
         ], className="vision-card-value-row"),
         html.Div([
-            html.Span("Inversión"),
-            html.Strong(dato["inversion"]),
-        ], className="programa-metrica-periodo inversion"),
+            html.Div([
+                html.Span("Inversión"),
+                html.Strong(dato["inversion"]),
+            ], className="programa-metrica-periodo inversion"),
+            html.Div([
+                html.Span("Por beneficiario"),
+                html.Strong(_moneda(por_beneficiario)),
+            ], className="programa-metrica-periodo"),
+        ], className="becas-metricas-fila"),
         html.Div([
             html.Span("Corte: octubre 2026"),
             html.Span("Actualización: conforme a planificación de cada programa"),
@@ -4373,13 +6096,13 @@ PROGRAMAS_CON_DETALLE = {
             ("2026-2027*", "20.669", "752", "$ 9.638.187,88"),
         ],
         "regimenes": {
-            "2023-2024": {"Costa": 9098, "Sierra": 9480},
-            "2024-2025": {"Costa": 10147, "Sierra": 8995},
-            "2025-2026": {"Costa": 10274, "Sierra": 10290},
-            "2026-2027*": {"Costa": 10434, "Sierra": 10235},
+            "2023-2024": {"Costa-Galápagos": 9098, "Sierra-Amazonía": 9480},
+            "2024-2025": {"Costa-Galápagos": 10147, "Sierra-Amazonía": 8995},
+            "2025-2026": {"Costa-Galápagos": 10274, "Sierra-Amazonía": 10290},
+            "2026-2027*": {"Costa-Galápagos": 10434, "Sierra-Amazonía": 10235},
         },
         "actualizacion": "julio y diciembre de cada año",
-        "nota": "*Nota: En el régimen Sierra-Amazonía se sigue levantando información de niños y niñas.",
+        "nota": "*Nota: En el régimen Sierra-Amazonía se continúa levantando información de niños y niñas.",
     },
     "nap": {
         "nombre_descripcion": "Nivelación y Aceleración Pedagógica (NAP).",
@@ -4396,10 +6119,10 @@ PROGRAMAS_CON_DETALLE = {
             ("2026-2027", "8.232", "398", "$ 5.101.062,20"),
         ],
         "regimenes": {
-            "2023-2024": {"Costa": 2831, "Sierra": 3829},
-            "2024-2025": {"Costa": 3463, "Sierra": 4709},
-            "2025-2026": {"Costa": 3313, "Sierra": 4497},
-            "2026-2027": {"Costa": 3492, "Sierra": 4740},
+            "2023-2024": {"Costa-Galápagos": 2831, "Sierra-Amazonía": 3829},
+            "2024-2025": {"Costa-Galápagos": 3463, "Sierra-Amazonía": 4709},
+            "2025-2026": {"Costa-Galápagos": 3313, "Sierra-Amazonía": 4497},
+            "2026-2027": {"Costa-Galápagos": 3492, "Sierra-Amazonía": 4740},
         },
         "actualizacion": "julio y diciembre de cada año",
         "nota": "Fuente: Registros administrativos MINEDEC_DEIB.",
@@ -4566,34 +6289,20 @@ def _metricas_programa_por_anio(clave, anio):
     fila = next((f for f in detalle["filas"] if f[0] == anio), detalle["filas"][-1])
     _, estudiantes, docentes, inversion = fila
     inversion = inversion.replace("$ ", "$")
-    estudiantes_principal = html.Div([
-        html.Strong(estudiantes),
-        html.Span("Estudiantes"),
-    ], className="programa-estudiantes-principal")
-    if clave in {"safpi", "nap"}:
-        regimenes = detalle.get("regimenes", {}).get(anio, {})
-        fila_estudiantes = html.Div([
-            estudiantes_principal,
-            *[
-                html.Div([
-                    html.Span(regimen),
-                    html.Strong(formato_valor(valor)),
-                ], className="programa-regimen-mini")
-                for regimen, valor in regimenes.items()
-            ],
-        ], className="programa-estudiantes-regimen-fila")
-    else:
-        fila_estudiantes = estudiantes_principal
-
+    regimenes = detalle.get("regimenes", {}).get(anio, {})
     contenido = [html.Div([
-        fila_estudiantes,
+        html.Div([
+            html.Strong(estudiantes, className="vision-card-total"),
+            html.Span("Estudiantes", className="vision-card-unit"),
+        ], className="vision-card-value-row"),
+        _fila_distribucion("Régimen", list(regimenes.items())) if regimenes else None,
         html.Div([
             html.Div([html.Span("Docentes"), html.Strong(docentes)],
-                     className="programa-metrica-periodo"),
+                     className="pres-recurso-metrica"),
             html.Div([html.Span("Inversión"), html.Strong(inversion)],
-                     className="programa-metrica-periodo inversion"),
-        ], className="programa-desglose-inferior"),
-    ], className="programa-metricas-priorizadas")]
+                     className="pres-recurso-metrica inversion"),
+        ], className="pres-programa-metricas"),
+    ], className="pres-programa-contenido")]
     nota = detalle.get("nota", "")
     # La advertencia de levantamiento corresponde exclusivamente al último
     # período de SAFPI (2026-2027). Las notas de fuente de otros programas
@@ -4663,16 +6372,10 @@ def _metricas_reinsercion(anio_lectivo):
     datos = REINSERCION_POR_ANIO_LECTIVO[anio_lectivo]
     return [
         html.Div([
-            html.Strong(formato_valor(sum(datos.values()))),
-            html.Span("Estudiantes"),
+            html.Strong(formato_valor(sum(datos.values())), className="vision-card-total"),
+            html.Span("Estudiantes", className="vision-card-unit"),
         ], className="vision-card-value-row programa-card-resultado"),
-        html.Div([
-            html.Div([
-                html.Span(nombre),
-                html.Strong(formato_valor(valor)),
-            ], className="programa-metrica-periodo")
-            for nombre, valor in datos.items()
-        ], className="reinsercion-desglose"),
+        _fila_distribucion("Sostenimiento", list(datos.items())),
         _pie_programa_actualizable("Año lectivo", anio_lectivo),
     ]
 
@@ -4683,23 +6386,23 @@ def _metricas_aulas_hospitalarias(anio):
     datos = AULAS_HOSPITALARIAS_POR_ANIO[anio]
     return [
         html.Div([
-            html.Strong(formato_valor(datos["beneficiarios"])),
-            html.Span("Beneficiarios"),
-        ], className="programa-estudiantes-principal"),
+            html.Strong(formato_valor(datos["beneficiarios"]), className="vision-card-total"),
+            html.Span("Beneficiarios", className="vision-card-unit"),
+        ], className="vision-card-value-row"),
         html.Div([
             html.Div([
                 html.Span("Aulas hospitalarias"),
                 html.Strong(formato_valor(datos["aulas"])),
-            ], className="programa-metrica-periodo"),
+            ], className="pres-recurso-metrica"),
             html.Div([
                 html.Span("Docentes"),
                 html.Strong(formato_valor(datos["docentes"])),
-            ], className="programa-metrica-periodo"),
+            ], className="pres-recurso-metrica"),
             html.Div([
                 html.Span("Inversión"),
                 html.Strong(datos["inversion"]),
-            ], className="programa-metrica-periodo inversion"),
-        ], className="hospital-desglose"),
+            ], className="pres-recurso-metrica inversion"),
+        ], className="pres-aulas-metricas"),
         _pie_programa_actualizable("Año", anio),
     ]
 
@@ -4730,7 +6433,7 @@ def _tarjetas_programas_eje2(datos):
         # Se conserva la corrección de la versión consolidada anterior: DECE
         # representa profesionales contratados, no el tipo genérico de
         # beneficiario registrado en la matriz.
-        unidad = ("Comunidad Educativa" if es_comunidades
+        unidad = ("Acciones ejecutadas" if es_comunidades
                   else "DECEs contratados" if es_dece
                   else str(dato["tipo"]).strip())
         ayuda_reinsercion = (
@@ -4782,7 +6485,9 @@ def _tarjetas_programas_eje2(datos):
             contenido,
             className=(f"vision-exec-card programa-resumen-card "
                        f"programa-{colores[i % len(colores)]}"
-                       f"{' programa-con-ayuda' if tiene_ayuda else ''}"),
+                       f"{' reinsercion-card' if es_reinsercion else ''}"
+                       f"{' programa-con-ayuda' if tiene_ayuda else ''} "
+                       "presidencia-card presidencia-programa-card"),
             tabIndex=0 if tiene_ayuda else None,
         ))
 
@@ -4800,6 +6505,7 @@ def _tarjetas_programas_eje2(datos):
                     id={"type": "programa-complementario-metricas", "index": clave},
                 ),
             ], className=("vision-exec-card programa-resumen-card programa-con-ayuda "
+                          "presidencia-card presidencia-programa-card "
                           f"programa-{colores[(len(tarjetas) + j) % len(colores)]}"),
                tabIndex=0))
 
@@ -4948,10 +6654,20 @@ def pagina_educacion_superior():
             style={"gridTemplateColumns": "repeat(3, minmax(0, 1fr))"},
         ),
         html.H2("Programas y servicios de Educación Superior", className="vision-eje-banner"),
+        html.P("Beneficiarios e inversión por programa · Corte: octubre 2026 · "
+               "Actualización conforme a planificación de cada programa",
+               className="becas-seccion-subtitulo"),
+        tarjetas_resumen_becas_educacion_superior(),
+        paneles_ranking_becas_educacion_superior(),
         html.Div(
             className="vision-exec-grid gestion-educativa-grid programas-servicios-grid",
             children=tarjetas_becas_educacion_superior(),
             style={"gridTemplateColumns": "repeat(3, minmax(0, 1fr))"},
+        ),
+        html.P(
+            "*“Por beneficiario” = inversión ÷ beneficiarios (calculado). El total de beneficiarios "
+            "es una suma simple; una persona podría participar en más de un programa.",
+            className="becas-nota-metodologica",
         ),
     ])
 
@@ -5344,6 +7060,123 @@ def seccion_programas_servicios_cultura():
     ], className="cultura-programas-servicios")
 
 
+def _figura_mapa_sectorial_pendiente(nombre_sector):
+    """Mapa provincial base sin atribuir ubicaciones no presentes en la fuente."""
+    geojson = _cargar_geojson_provincias()
+    figura = go.Figure()
+    if geojson:
+        nombres = [f["properties"]["nombre"] for f in geojson["features"]]
+        figura.add_trace(go.Choropleth(
+            geojson=geojson, locations=nombres, featureidkey="properties.nombre",
+            z=[1] * len(nombres), zmin=0, zmax=1,
+            colorscale=[[0, "#ddd9f2"], [1, "#ddd9f2"]], showscale=False,
+            marker_line_color="#ffffff", marker_line_width=1,
+            text=[f"<b>{nombre.title()}</b><br>Sin desagregación territorial en la fuente"
+                  for nombre in nombres], hoverinfo="text",
+        ))
+        figura.update_geos(fitbounds="locations", visible=False, bgcolor="#ffffff")
+    else:
+        figura.add_annotation(
+            text="No se encontró provincias_ecuador.geojson junto a app.py.",
+            x=.5, y=.5, xref="paper", yref="paper", showarrow=False,
+            font={"size": 12, "color": "#59627d"},
+        )
+    figura.update_layout(
+        height=350, margin=dict(l=4, r=4, t=4, b=4),
+        paper_bgcolor="#ffffff", plot_bgcolor="#ffffff",
+        font={"family": "Arial", "color": "#17245b"},
+    )
+    return figura
+
+
+def seccion_mapa_sectorial(nombre_sector, descripcion, categorias, indicadores):
+    """Replica la composición del Anexo 5 cuando faltan campos geográficos."""
+    return html.Section([
+        html.Div([
+            html.Div([html.H3(f"{nombre_sector} · distribución territorial"),
+                      html.P(descripcion)]),
+            html.Span("Fuente pendiente de georreferenciación",
+                      className="territorial-source-badge"),
+        ], className="territorial-map-heading"),
+        html.Div([
+            dcc.RadioItems(
+                options=[{"label": etiqueta, "value": codigo}
+                         for codigo, etiqueta in categorias],
+                value=categorias[0][0], inline=True,
+                className="territorial-pills territorial-resource-tabs",
+            ),
+            html.Div([
+                html.Span("Nivel"),
+                dcc.RadioItems(
+                    options=[{"label": "Región", "value": "region", "disabled": True},
+                             {"label": "Provincia", "value": "provincia"},
+                             {"label": "Cantón", "value": "canton", "disabled": True}],
+                    value="provincia", inline=True, className="territorial-pills",
+                ),
+            ], className="territorial-control-group"),
+        ], className="territorial-toolbar"),
+        html.Div([
+            html.Div([
+                html.Div([html.H4(f"Distribución provincial de {nombre_sector}"),
+                          html.P("Mapa preparado para incorporar la ubicación de cada registro.")],
+                         className="territorial-map-title"),
+                dcc.Graph(figure=_figura_mapa_sectorial_pendiente(nombre_sector),
+                          config={"displayModeBar": False, "responsive": True},
+                          className="territorial-map-graph"),
+            ], className="territorial-map-card"),
+            html.Div([
+                html.Div([
+                    html.Div([html.Span("i", className="territorial-ranking-icon"),
+                              html.H4("Variables nacionales disponibles")],
+                             className="territorial-ranking-heading"),
+                    html.Div([
+                        html.Div([html.Strong(etiqueta), html.Span(formato_valor(valor))],
+                                 className="territorial-missing-item")
+                        for etiqueta, valor in indicadores
+                    ], className="territorial-missing-list"),
+                ], className="territorial-ranking-block"),
+                html.Div([
+                    html.Div([html.Span("!", className="territorial-ranking-icon"),
+                              html.H4("Información territorial requerida")],
+                             className="territorial-ranking-heading"),
+                    html.Div([
+                        html.Strong("Campos que debe incorporar la matriz"),
+                        html.Span("Provincia, cantón y, de ser posible, latitud y longitud."),
+                    ], className="territorial-missing-item"),
+                    html.P(
+                        "No se asignan provincias ni puntos sin respaldo documental. Al incorporar "
+                        "estos campos, el panel podrá mostrar mayor presencia y brechas prioritarias.",
+                        className="territorial-method-note",
+                    ),
+                ], className="territorial-ranking-block brechas"),
+            ], className="territorial-ranking-card"),
+        ], className="territorial-map-grid"),
+    ], className="territorial-section territorial-sector-section")
+
+
+def seccion_mapa_deporte():
+    return seccion_mapa_sectorial(
+        "Deporte",
+        "Centros, organismos, infraestructura y puntos de atención solicitados en las observaciones.",
+        [("alto", "Alto rendimiento"), ("formativo", "Formativo"),
+         ("organismos", "Organismos deportivos"), ("infraestructura", "Infraestructura"),
+         ("activate", "Actívate"), ("cancha", "Vamos a la Cancha")],
+        [("Centros de alto rendimiento", 6), ("Centros activos", 6),
+         ("Puntos Actívate", 585), ("Puntos Vamos a la Cancha", 480)],
+    )
+
+
+def seccion_mapa_cultura():
+    return seccion_mapa_sectorial(
+        "Cultura",
+        "Organizaciones, empresas y espacios culturales solicitados en las observaciones.",
+        [("organizaciones", "Organizaciones"), ("empresas", "Empresas culturales"),
+         ("espacios", "Espacios e infraestructura")],
+        [("Organizaciones sociales", 252), ("Empresas culturales", 488),
+         ("Museos", 20), ("Archivos y bibliotecas", 5)],
+    )
+
+
 @app.callback(
     Output({"type": "cultura-programa-metricas", "index": MATCH}, "children"),
     Input({"type": "cultura-programa-anio", "index": MATCH}, "value"),
@@ -5387,7 +7220,7 @@ EJES_VICEMINISTERIALES = {
              "descripcion": "Concursos de alcance nacional mediante alianzas estratégicas.",
              "detalle": "1.000 estudiantes"},
             {"icono": "◉", "mes": "Octubre–Noviembre", "titulo": "Fortalecimiento de los DECE",
-             "descripcion": "Avance en la contratación de profesionales para Sierra y Amazonía.",
+             "descripcion": "Avance en la contratación de profesionales para Sierra-Amazonía.",
              "detalle": "Meta: 1.000 profesionales · inversión aprox. USD 3 millones"},
         ],
     },
@@ -5476,6 +7309,11 @@ def pagina_eje_viceministerial(codigo):
             html.P(aviso, className="eje2-source-note") if aviso else None,
         ])
     )
+    mapa_territorial = (
+        seccion_mapa_deporte() if codigo == "deporte"
+        else seccion_mapa_cultura() if codigo == "cultura"
+        else None
+    )
     return html.Section(className="vision-exec-page eje-viceministerial-page", children=[
         html.Div(className="vision-exec-header vision-exec-header-compacta", children=[
             html.Div(className="vision-title-mark"),
@@ -5491,6 +7329,7 @@ def pagina_eje_viceministerial(codigo):
                       ),
                       html.P(eje["introduccion"])])]),
         informacion_general,
+        mapa_territorial,
         programas_y_servicios,
     ])
 
@@ -5515,8 +7354,8 @@ DATOS_GENERALES_GESTION_EDUCATIVA = {
         "Particular": 7688,
     },
     "nee_regimen": {
-        "Costa": 19527,
-        "Sierra": 16055,
+        "Costa-Galápagos": 19527,
+        "Sierra-Amazonía": 16055,
     },
     "escolaridad_inconclusa_total": 242941,
     "escolaridad_inconclusa_sexo": {
@@ -5546,22 +7385,22 @@ INSTITUCIONES_EDUCATIVAS_POR_ANIO = {
 
 # Series históricas tomadas de los totales de la matriz entregada. Las seis
 # categorías son independientes: sexo, área y régimen escolar. No se presenta
-# un cruce Rural/Urbana por Costa/Sierra.
+# un cruce Rural/Urbana por Costa-Galápagos/Sierra-Amazonía.
 ESTUDIANTES_POR_ANIO_LECTIVO = {
     "2023-2024": {
         "Total": 4202798, "Hombres": 2116518, "Mujeres": 2086280,
         "Rural": 997456, "Urbana": 3205342,
-        "Sierra": 1763290, "Costa": 2439508,
+        "Sierra-Amazonía": 1763290, "Costa-Galápagos": 2439508,
     },
     "2024-2025": {
         "Total": 4106819, "Hombres": 2067589, "Mujeres": 2039230,
         "Rural": 941760, "Urbana": 3165059,
-        "Sierra": 1727355, "Costa": 2379464,
+        "Sierra-Amazonía": 1727355, "Costa-Galápagos": 2379464,
     },
     "2025-2026": {
         "Total": 4039650, "Hombres": 2034159, "Mujeres": 2005491,
         "Rural": 929157, "Urbana": 3110493,
-        "Sierra": 1703367, "Costa": 2336283,
+        "Sierra-Amazonía": 1703367, "Costa-Galápagos": 2336283,
     },
 }
 
@@ -5569,17 +7408,17 @@ DOCENTES_POR_ANIO_LECTIVO = {
     "2023-2024": {
         "Total": 213468, "Hombres": 59257, "Mujeres": 154211,
         "Rural": 57356, "Urbana": 156112,
-        "Sierra": 99592, "Costa": 113876,
+        "Sierra-Amazonía": 99592, "Costa-Galápagos": 113876,
     },
     "2024-2025": {
         "Total": 215030, "Hombres": 59439, "Mujeres": 155591,
         "Rural": 55633, "Urbana": 159397,
-        "Sierra": 99979, "Costa": 115051,
+        "Sierra-Amazonía": 99979, "Costa-Galápagos": 115051,
     },
     "2025-2026": {
         "Total": 217693, "Hombres": 60064, "Mujeres": 157629,
         "Rural": 56516, "Urbana": 161177,
-        "Sierra": 101094, "Costa": 116599,
+        "Sierra-Amazonía": 101094, "Costa-Galápagos": 116599,
     },
 }
 
@@ -5595,6 +7434,44 @@ def _pie_actualizacion_educacion_media(anio_lectivo):
     ], className="educacion-media-periodo-pie")
 
 
+COLORES_DISTRIBUCION = ("#243365", "#F1B620", "#80BBBF", "#9A8AC7")
+
+
+def _fila_distribucion(titulo, valores, colores=None):
+    """Fila compacta de etiquetas y barra apilada según la plantilla de Presidencia."""
+    elementos = [(str(nombre), float(valor)) for nombre, valor in valores]
+    total = sum(valor for _, valor in elementos)
+    colores = colores or COLORES_DISTRIBUCION
+    return html.Div([
+        html.Div([
+            html.Strong(titulo) if titulo else None,
+            html.Div([
+                html.Span([
+                    html.I(style={"backgroundColor": colores[i % len(colores)]}),
+                    html.B(nombre),
+                    html.Span(formato_valor(valor)),
+                    html.Small(
+                        f"{(valor / total * 100):.1f}%".replace(".", ",")
+                        if total else "0,0%"
+                    ),
+                ])
+                for i, (nombre, valor) in enumerate(elementos)
+            ], className="pres-distribucion-etiquetas"),
+        ], className="pres-distribucion-cabecera"),
+        html.Div([
+            html.Span(style={
+                "width": f"{(valor / total * 100):.6f}%" if total else "0%",
+                "backgroundColor": colores[i % len(colores)],
+            })
+            for i, (_, valor) in enumerate(elementos)
+        ], className="pres-barra-apilada"),
+    ], className="pres-distribucion")
+
+
+def _insignia_periodo(periodo):
+    return html.Span(str(periodo).replace("-", "–"), className="pres-periodo-badge")
+
+
 def _contenido_instituciones_educativas(anio_lectivo):
     """Total y desglose por sostenimiento para el año lectivo seleccionado."""
     if anio_lectivo not in INSTITUCIONES_EDUCATIVAS_POR_ANIO:
@@ -5604,14 +7481,9 @@ def _contenido_instituciones_educativas(anio_lectivo):
     return [
         html.Div([
             html.Strong(formato_valor(total), className="vision-card-total"),
+            html.Span("Instituciones", className="vision-card-unit"),
         ], className="vision-card-value-row"),
-        html.Div([
-            html.Div([
-                html.Span(nombre),
-                html.Strong(formato_valor(valor)),
-            ], className=("vision-mini-stat secondary" if i % 2 else "vision-mini-stat"))
-            for i, (nombre, valor) in enumerate(sostenimientos.items())
-        ], className="vision-card-details instituciones-sostenimientos"),
+        _fila_distribucion("", list(sostenimientos.items())),
         _pie_actualizacion_educacion_media(anio_lectivo),
     ]
 
@@ -5638,7 +7510,8 @@ def tarjeta_instituciones_educativas():
             _contenido_instituciones_educativas(periodo_reciente),
             id="instituciones-contenido",
         ),
-    ], className="vision-exec-card generales instituciones-historicas-card")
+    ], className=("vision-exec-card generales instituciones-historicas-card "
+                  "presidencia-card presidencia-card-general"))
 
 
 @app.callback(
@@ -5655,19 +7528,19 @@ def _contenido_estudiantes(anio_lectivo):
     if anio_lectivo not in ESTUDIANTES_POR_ANIO_LECTIVO:
         anio_lectivo = list(ESTUDIANTES_POR_ANIO_LECTIVO)[-1]
     datos = ESTUDIANTES_POR_ANIO_LECTIVO[anio_lectivo]
-    categorias = ("Hombres", "Mujeres", "Rural", "Urbana", "Sierra", "Costa")
-
     return [
         html.Div([
             html.Strong(formato_valor(datos["Total"]), className="vision-card-total"),
+            html.Span("Estudiantes matriculados", className="vision-card-unit"),
         ], className="vision-card-value-row"),
-        html.Div([
-            html.Div([
-                html.Span(categoria),
-                html.Strong(formato_valor(datos[categoria])),
-            ], className=("vision-mini-stat secondary" if i % 2 else "vision-mini-stat"))
-            for i, categoria in enumerate(categorias)
-        ], className="vision-card-details desglose-demografico"),
+        _fila_distribucion("Sexo", [("Hombres", datos["Hombres"]),
+                                     ("Mujeres", datos["Mujeres"])]),
+        _fila_distribucion("Área", [("Rural", datos["Rural"]),
+                                     ("Urbana", datos["Urbana"])]),
+        _fila_distribucion("Régimen", [
+            ("Sierra-Amazonía", datos["Sierra-Amazonía"]),
+            ("Costa-Galápagos", datos["Costa-Galápagos"]),
+        ]),
         _pie_actualizacion_educacion_media(anio_lectivo),
     ]
 
@@ -5694,7 +7567,8 @@ def tarjeta_estudiantes():
             _contenido_estudiantes(periodo_reciente),
             id="estudiantes-contenido",
         ),
-    ], className="vision-exec-card generales estudiantes-historicos-card")
+    ], className=("vision-exec-card generales estudiantes-historicos-card "
+                  "presidencia-card presidencia-card-general"))
 
 
 @app.callback(
@@ -5711,18 +7585,21 @@ def _contenido_docentes(anio_lectivo):
     if anio_lectivo not in DOCENTES_POR_ANIO_LECTIVO:
         anio_lectivo = list(DOCENTES_POR_ANIO_LECTIVO)[-1]
     datos = DOCENTES_POR_ANIO_LECTIVO[anio_lectivo]
-    categorias = ("Hombres", "Mujeres", "Rural", "Urbana", "Sierra", "Costa")
     return [
         html.Div([
             html.Strong(formato_valor(datos["Total"]), className="vision-card-total"),
+            html.Span("Docentes", className="vision-card-unit"),
         ], className="vision-card-value-row"),
-        html.Div([
-            html.Div([
-                html.Span(categoria),
-                html.Strong(formato_valor(datos[categoria])),
-            ], className=("vision-mini-stat secondary" if i % 2 else "vision-mini-stat"))
-            for i, categoria in enumerate(categorias)
-        ], className="vision-card-details desglose-demografico"),
+        html.P("Las mujeres son 7 de cada 10 docentes (72,4 %)",
+               className="pres-destacado"),
+        _fila_distribucion("Sexo", [("Hombres", datos["Hombres"]),
+                                     ("Mujeres", datos["Mujeres"])]),
+        _fila_distribucion("Área", [("Rural", datos["Rural"]),
+                                     ("Urbana", datos["Urbana"])]),
+        _fila_distribucion("Régimen", [
+            ("Sierra-Amazonía", datos["Sierra-Amazonía"]),
+            ("Costa-Galápagos", datos["Costa-Galápagos"]),
+        ]),
         _pie_actualizacion_educacion_media(anio_lectivo),
     ]
 
@@ -5749,7 +7626,8 @@ def tarjeta_docentes():
             _contenido_docentes(periodo_reciente),
             id="docentes-contenido",
         ),
-    ], className="vision-exec-card generales docentes-historicos-card")
+    ], className=("vision-exec-card generales docentes-historicos-card "
+                  "presidencia-card presidencia-card-general"))
 
 
 @app.callback(
@@ -5775,14 +7653,8 @@ def tarjetas_datos_generales():
 def tarjeta_escolaridad_inconclusa():
     """Total de estudiantes con escolaridad inconclusa desagregado por sexo."""
     d = DATOS_GENERALES_GESTION_EDUCATIVA
-    detalles = [
-        html.Div([
-            html.Span(nombre),
-            html.Strong(formato_valor(valor)),
-        ], className=("vision-mini-stat secondary" if i % 2 else "vision-mini-stat"))
-        for i, (nombre, valor) in enumerate(d["escolaridad_inconclusa_sexo"].items())
-    ]
     return html.Article([
+        _insignia_periodo(d["anio_lectivo"]),
         cabecera_tarjeta("epja", "Escolaridad Inconclusa"),
         html.Div([
             html.Strong(
@@ -5791,39 +7663,28 @@ def tarjeta_escolaridad_inconclusa():
             ),
             html.Span("Estudiantes", className="vision-card-unit"),
         ], className="vision-card-value-row"),
-        html.Div(detalles, className="vision-card-details"),
+        html.P("Las mujeres son la mayoría: 52,1 %", className="pres-destacado"),
+        _fila_distribucion("Sexo", list(d["escolaridad_inconclusa_sexo"].items())),
         _pie_actualizacion_educacion_media(d["anio_lectivo"]),
-    ], className="vision-exec-card epja escolaridad-inconclusa-card")
+    ], className=("vision-exec-card epja escolaridad-inconclusa-card "
+                  "presidencia-card presidencia-card-secundaria"))
 
 
 def tarjeta_necesidades_educativas_especiales():
     """Estudiantes con NEE por sostenimiento y régimen, en valores absolutos."""
     d = DATOS_GENERALES_GESTION_EDUCATIVA
-    detalles = [html.Span("Sostenimiento", className="nee-grupo-titulo")]
-    detalles.extend(
-        html.Div([
-            html.Span(nombre),
-            html.Strong(formato_valor(valor)),
-        ], className=("vision-mini-stat secondary" if i % 2 else "vision-mini-stat"))
-        for i, (nombre, valor) in enumerate(d["nee_sostenimiento"].items())
-    )
-    detalles.append(html.Span("Régimen", className="nee-grupo-titulo"))
-    detalles.extend(
-        html.Div([
-            html.Span(nombre),
-            html.Strong(formato_valor(valor)),
-        ], className=("vision-mini-stat secondary" if i % 2 else "vision-mini-stat"))
-        for i, (nombre, valor) in enumerate(d["nee_regimen"].items())
-    )
     return html.Article([
+        _insignia_periodo(d["anio_lectivo"]),
         cabecera_tarjeta("generales", "Estudiantes con necesidades educativas especiales"),
         html.Div([
             html.Strong(formato_valor(d["nee_total"]), className="vision-card-total"),
             html.Span("Estudiantes", className="vision-card-unit"),
         ], className="vision-card-value-row"),
-        html.Div(detalles, className="nee-desglose"),
+        _fila_distribucion("Sostenimiento", list(d["nee_sostenimiento"].items())),
+        _fila_distribucion("Régimen", list(d["nee_regimen"].items())),
         _pie_actualizacion_educacion_media(d["anio_lectivo"]),
-    ], className="vision-exec-card generales nee-card")
+    ], className=("vision-exec-card generales nee-card presidencia-card "
+                  "presidencia-card-secundaria"))
 
 
 # ---------------------------------------------------------------------------
@@ -5978,6 +7839,14 @@ def _cargar_geojson_provincias():
             with open(ruta_resuelta, "r", encoding="utf-8-sig") as f:
                 contenido = json.load(f)
             if contenido.get("type") == "FeatureCollection" and contenido.get("features"):
+                # CONALI incorpora un polígono auxiliar denominado "ISLA".
+                # El tablero conserva únicamente las 24 provincias oficiales.
+                contenido["features"] = [
+                    feature for feature in contenido["features"]
+                    if _provincia_homologada(
+                        feature.get("properties", {}).get("nombre", "")
+                    )
+                ]
                 _GEOJSON_PROVINCIAS_CACHE = contenido
                 return _GEOJSON_PROVINCIAS_CACHE
         except (OSError, UnicodeError, json.JSONDecodeError, AttributeError):
@@ -6346,10 +8215,10 @@ RECURSOS_EDUCATIVOS_ACTUALIZADOS = [
         "nacional": {"instituciones": 12493, "estudiantes": 2493993,
                      "inversion": "$190.476.720,79"},
         "regimen": {
-            "Costa": {"instituciones": 7602, "estudiantes": 1436502,
-                      "inversion": "$109.711.691,40"},
-            "Sierra": {"instituciones": 4891, "estudiantes": 1057491,
-                       "inversion": "$80.765.029,39"},
+            "Costa-Galápagos": {"instituciones": 7602, "estudiantes": 1436502,
+                                "inversion": "$109.711.691,40"},
+            "Sierra-Amazonía": {"instituciones": 4891, "estudiantes": 1057491,
+                                "inversion": "$80.765.029,39"},
         },
     },
     {
@@ -6357,10 +8226,10 @@ RECURSOS_EDUCATIVOS_ACTUALIZADOS = [
         "nacional": {"instituciones": 10136, "estudiantes": 1291398,
                      "inversion": "$42.845.083,30"},
         "regimen": {
-            "Costa": {"instituciones": 5608, "estudiantes": 664234,
-                      "inversion": "$21.974.683,86"},
-            "Sierra": {"instituciones": 4528, "estudiantes": 627164,
-                       "inversion": "$20.870.399,44"},
+            "Costa-Galápagos": {"instituciones": 5608, "estudiantes": 664234,
+                                "inversion": "$21.974.683,86"},
+            "Sierra-Amazonía": {"instituciones": 4528, "estudiantes": 627164,
+                                "inversion": "$20.870.399,44"},
         },
     },
     {
@@ -6368,10 +8237,10 @@ RECURSOS_EDUCATIVOS_ACTUALIZADOS = [
         "nacional": {"instituciones": 12603, "estudiantes": 2859894,
                      "inversion": "$35.156.870,66"},
         "regimen": {
-            "Costa": {"instituciones": 6939, "estudiantes": 1599739,
-                      "inversion": "$18.890.301,65"},
-            "Sierra": {"instituciones": 5664, "estudiantes": 1260155,
-                       "inversion": "$16.266.569,01"},
+            "Costa-Galápagos": {"instituciones": 6939, "estudiantes": 1599739,
+                                "inversion": "$18.890.301,65"},
+            "Sierra-Amazonía": {"instituciones": 5664, "estudiantes": 1260155,
+                                "inversion": "$16.266.569,01"},
         },
     },
     {
@@ -6379,10 +8248,10 @@ RECURSOS_EDUCATIVOS_ACTUALIZADOS = [
         "nacional": {"instituciones": 1413, "estudiantes": 307800,
                      "inversion": "$6.991.867,72"},
         "regimen": {
-            "Costa": {"instituciones": 906, "estudiantes": 198640,
-                      "inversion": "$4.831.279,59"},
-            "Sierra": {"instituciones": 507, "estudiantes": 109160,
-                       "inversion": "$2.160.588,13"},
+            "Costa-Galápagos": {"instituciones": 906, "estudiantes": 198640,
+                                "inversion": "$4.831.279,59"},
+            "Sierra-Amazonía": {"instituciones": 507, "estudiantes": 109160,
+                                "inversion": "$2.160.588,13"},
         },
     },
     {
@@ -6390,10 +8259,10 @@ RECURSOS_EDUCATIVOS_ACTUALIZADOS = [
         "nacional": {"instituciones": 167, "estudiantes": 23525,
                      "inversion": "$13.738.150,61"},
         "regimen": {
-            "Costa": {"instituciones": 63, "estudiantes": 9761,
-                      "inversion": "$5.091.583,64"},
-            "Sierra": {"instituciones": 104, "estudiantes": 13764,
-                       "inversion": "$8.646.566,97"},
+            "Costa-Galápagos": {"instituciones": 63, "estudiantes": 9761,
+                                "inversion": "$5.091.583,64"},
+            "Sierra-Amazonía": {"instituciones": 104, "estudiantes": 13764,
+                                "inversion": "$8.646.566,97"},
         },
     },
 ]
@@ -6430,56 +8299,343 @@ DEFINICIONES_RECURSOS_GESTION = {
 
 
 def tarjeta_recurso_educativo(dato):
-    """Resumen nacional y desglose Costa/Sierra de un recurso educativo, en
-    el mismo formato compacto (cuadros Costa/Sierra) que usan SAFPI y NAP:
-    el número principal de Estudiantes con los dos cuadros de régimen al
-    lado, y Instituciones/Inversión nacional debajo."""
+    """Tarjeta de recurso educativo con la estructura visual de Presidencia."""
     codigo = dato["codigo"]
     nacional = dato["nacional"]
     regimen = dato["regimen"]
     ayuda = DEFINICIONES_RECURSOS_GESTION.get(codigo, (None, None))
-
-    estudiantes_principal = html.Div([
-        html.Strong(formato_valor(nacional["estudiantes"])),
-        html.Span("Estudiantes"),
-    ], className="programa-estudiantes-principal")
-
-    fila_estudiantes = html.Div([
-        estudiantes_principal,
-        *[
-            html.Div([
-                html.Span(nombre_regimen),
-                html.Strong(formato_valor(valores["estudiantes"])),
-            ], className="programa-regimen-mini")
-            for nombre_regimen, valores in regimen.items()
-        ],
-    ], className="programa-estudiantes-regimen-fila")
+    inversion_num = float(
+        nacional["inversion"].replace("$", "").replace(".", "").replace(",", ".")
+    )
+    por_estudiante = inversion_num / nacional["estudiantes"] if nacional["estudiantes"] else 0
 
     return html.Article([
         _ayuda_tarjeta(ayuda[0], ayuda[1]) if all(ayuda) else None,
+        _insignia_periodo("2025-2026"),
         cabecera_tarjeta(
             codigo, dato["titulo"],
             f"{ayuda[0]} {ayuda[1]}" if all(ayuda) else None,
         ),
         html.Div([
-            fila_estudiantes,
-            html.Div([
-                html.Div([
-                    html.Span("Instituciones"),
-                    html.Strong(formato_valor(nacional["instituciones"])),
-                ], className="programa-metrica-periodo"),
-                html.Div([
-                    html.Span("Inversión"),
-                    html.Strong(nacional["inversion"]),
-                ], className="programa-metrica-periodo inversion"),
-            ], className="programa-desglose-inferior"),
-        ], className="programa-metricas-priorizadas"),
+            html.Strong(formato_valor(nacional["estudiantes"]), className="vision-card-total"),
+            html.Span("Estudiantes beneficiarios", className="vision-card-unit"),
+        ], className="vision-card-value-row"),
+        _fila_distribucion("Régimen", [
+            (nombre, valores["estudiantes"]) for nombre, valores in regimen.items()
+        ]),
         html.Div([
-            html.Span("Año lectivo 2025–2026"),
+            html.Div([
+                html.Span("Inversión"),
+                html.Strong(nacional["inversion"]),
+            ], className="pres-recurso-metrica inversion"),
+            html.Div([
+                html.Span("Instituciones"),
+                html.Strong(formato_valor(nacional["instituciones"])),
+            ], className="pres-recurso-metrica"),
+            html.Div([
+                html.Span("Por estudiante"),
+                html.Strong(_moneda_corta(por_estudiante)),
+            ], className="pres-recurso-metrica por-estudiante"),
+        ], className="pres-recurso-metricas"),
+        html.Div([
             html.Span("Actualización: diciembre de cada año"),
         ], className="educacion-media-periodo-pie"),
     ], className=(f"vision-exec-card {codigo} programa-con-ayuda "
-                  "recurso-educativo-actualizado"), tabIndex=0)
+                  "recurso-educativo-actualizado presidencia-card "
+                  "presidencia-recurso-card"), tabIndex=0)
+
+
+def resumen_recursos_educativos():
+    """Cuatro indicadores sintéticos de la franja superior del anexo."""
+    def inversion_num(dato):
+        return float(dato["nacional"]["inversion"].replace("$", "")
+                     .replace(".", "").replace(",", "."))
+
+    total_inversion = sum(inversion_num(dato) for dato in RECURSOS_EDUCATIVOS_ACTUALIZADOS)
+    mayor_inversion = max(RECURSOS_EDUCATIVOS_ACTUALIZADOS, key=inversion_num)
+    mayor_cobertura = max(
+        RECURSOS_EDUCATIVOS_ACTUALIZADOS,
+        key=lambda dato: dato["nacional"]["estudiantes"],
+    )
+    mayor_por_estudiante = max(
+        RECURSOS_EDUCATIVOS_ACTUALIZADOS,
+        key=lambda dato: inversion_num(dato) / dato["nacional"]["estudiantes"],
+    )
+    total_millones = "$" + f"{total_inversion / 1_000_000:,.2f}".replace(
+        ",", "X").replace(".", ",").replace("X", ".") + " M"
+    indicadores = [
+        ("Inversión total en recursos", total_millones,
+         "5 recursos · 2025–2026", "destacado"),
+        ("Mayor inversión", mayor_inversion["titulo"],
+         f"{inversion_num(mayor_inversion) / total_inversion * 100:.1f}% del total".replace(".", ","), ""),
+        ("Mayor cobertura", mayor_cobertura["titulo"],
+         f"{formato_valor(mayor_cobertura['nacional']['estudiantes'])} estudiantes", ""),
+        ("Mayor inversión por estudiante", mayor_por_estudiante["titulo"],
+         _moneda_corta(inversion_num(mayor_por_estudiante) /
+                       mayor_por_estudiante["nacional"]["estudiantes"]), ""),
+    ]
+    return html.Div([
+        html.Div([
+            html.Span(etiqueta), html.Strong(valor), html.Small(nota)
+        ], className=f"pres-resumen-recurso {clase}".strip())
+        for etiqueta, valor, nota, clase in indicadores
+    ], className="pres-resumen-recursos")
+
+
+RECURSO_A_FUENTE_GESTION = {
+    "alimentacion": ("Alimentación Escolar", None),
+    "uniformes": ("Uniformes Escolares", None),
+    "textos": ("Textos Escolares", None),
+    "mobiliario": ("Mobiliario y Transporte Escolar", "mobiliario"),
+    "transporte": ("Mobiliario y Transporte Escolar", "transporte"),
+}
+
+
+def _datos_provinciales_recurso(codigo):
+    nombre_fuente, subgrupo = RECURSO_A_FUENTE_GESTION.get(codigo, (None, None))
+    fuente = RESUMEN_GESTION_EDUCATIVA.get(nombre_fuente, {}) if nombre_fuente else {}
+    if subgrupo:
+        fuente = fuente.get("por_recurso", {}).get(subgrupo, {})
+    return fuente.get("por_provincia", {})
+
+
+def _valor_territorial_recurso(metricas, metrica):
+    if metrica == "estudiantes":
+        return float(metricas.get("estudiantes", metricas.get("beneficiarios", 0)) or 0)
+    return float(metricas.get("instituciones", 0) or 0)
+
+
+def _titulo_recurso(codigo):
+    return next(
+        (dato["titulo"] for dato in RECURSOS_EDUCATIVOS_ACTUALIZADOS
+         if dato["codigo"] == codigo),
+        "Recurso educativo",
+    )
+
+
+def _figura_mapa_recursos(codigo="alimentacion", metrica="estudiantes"):
+    """Coropleta provincial basada exclusivamente en las matrices conectadas."""
+    geojson = _cargar_geojson_provincias()
+    datos = _datos_provinciales_recurso(codigo)
+    etiqueta = "Estudiantes" if metrica == "estudiantes" else "Instituciones"
+    figura = go.Figure()
+    if not geojson:
+        figura.add_annotation(
+            text="No se encontró provincias_ecuador.geojson junto a app.py.",
+            x=.5, y=.5, xref="paper", yref="paper", showarrow=False,
+            font={"size": 13, "color": "#59627d"},
+        )
+    else:
+        normalizados = {
+            _sin_tildes(provincia): _valor_territorial_recurso(metricas, metrica)
+            for provincia, metricas in datos.items()
+        }
+        nombres = [f["properties"]["nombre"] for f in geojson["features"]]
+        valores = [normalizados.get(_sin_tildes(nombre), 0) for nombre in nombres]
+        total = sum(valores)
+        textos = []
+        for nombre, valor in zip(nombres, valores):
+            participacion = (valor / total * 100) if total else 0
+            textos.append(
+                f"<b>{nombre.title()}</b><br>{etiqueta}: "
+                f"{formato_valor(valor) if valor else 'Sin dato'}<br>"
+                f"Participación nacional: {participacion:.1f}%"
+            )
+        figura.add_trace(go.Choropleth(
+            geojson=geojson, locations=nombres, featureidkey="properties.nombre",
+            z=valores, zmin=0, zmax=max(valores) if valores and max(valores) else 1,
+            colorscale=[[0, "#f1effa"], [.25, "#d9d4f1"], [.55, "#9b8ed0"],
+                        [.78, "#6655ad"], [1, "#232d5a"]],
+            marker_line_color="#ffffff", marker_line_width=1,
+            colorbar={"title": etiqueta, "thickness": 9, "len": .58,
+                      "tickfont": {"size": 8}},
+            text=textos, hoverinfo="text",
+        ))
+        figura.update_geos(fitbounds="locations", visible=False, bgcolor="#ffffff")
+        if not any(valores):
+            figura.add_annotation(
+                text="La matriz vigente no contiene valores provinciales utilizables.",
+                x=.5, y=.5, xref="paper", yref="paper", showarrow=False,
+                bgcolor="rgba(255,255,255,.94)", bordercolor="#dfe3ec",
+                font={"size": 11, "color": "#59627d"},
+            )
+    figura.update_layout(
+        height=350, margin=dict(l=4, r=4, t=4, b=4),
+        paper_bgcolor="#ffffff", plot_bgcolor="#ffffff",
+        font={"family": "Arial", "color": "#17245b"},
+    )
+    return figura
+
+
+def _resumen_regional_recursos(codigo="alimentacion", metrica="estudiantes"):
+    datos = _datos_provinciales_recurso(codigo)
+    regional = {region: 0.0 for region in ("Costa", "Sierra", "Amazonía", "Insular")}
+    for provincia, metricas in datos.items():
+        region = REGION_POR_PROVINCIA.get(_normalizar_encabezado_presupuesto(provincia).replace("_", " "))
+        if region:
+            regional[region] += _valor_territorial_recurso(metricas, metrica)
+    total = sum(regional.values())
+    return html.Div([
+        html.Div([
+            html.Div([html.Span(region),
+                      html.Strong(f"{(valor / total * 100 if total else 0):.1f}%")]),
+            html.Div(html.Span(style={"width": f"{(valor / total * 100 if total else 0):.1f}%"}),
+                     className="territorial-region-track"),
+        ], className="territorial-region-card")
+        for region, valor in regional.items()
+    ], className="territorial-region-summary")
+
+
+def _bloque_ranking_territorial(titulo, icono, registros, maximo, brecha=False):
+    filas = []
+    for posicion, (provincia, valor) in enumerate(registros, start=1):
+        filas.append(html.Div([
+            html.Span(str(posicion), className="territorial-rank-numero"),
+            html.Span(provincia.title(), className="territorial-rank-provincia", title=provincia.title()),
+            html.Div(html.Span(style={"width": f"{(valor / maximo * 100 if maximo else 0):.1f}%"}),
+                     className="territorial-rank-barra"),
+            html.Strong(formato_valor(valor)),
+        ], className="territorial-rank-fila"))
+    return html.Div([
+        html.Div([html.Span(icono, className="territorial-ranking-icon"), html.H4(titulo)],
+                 className="territorial-ranking-heading"),
+        html.Div(filas, className="territorial-ranking-lista"),
+    ], className="territorial-ranking-block" + (" brechas" if brecha else ""))
+
+
+def _ranking_territorial_recursos(codigo="alimentacion", metrica="estudiantes"):
+    datos = _datos_provinciales_recurso(codigo)
+    positivos = sorted(
+        ((provincia, _valor_territorial_recurso(metricas, metrica))
+         for provincia, metricas in datos.items()
+         if _valor_territorial_recurso(metricas, metrica) > 0),
+        key=lambda item: item[1], reverse=True,
+    )
+    if not positivos:
+        return html.Div([
+            html.Div([html.Span("▲", className="territorial-ranking-icon"),
+                      html.H4("Mayor presencia")], className="territorial-ranking-heading"),
+            html.P("La matriz no contiene valores provinciales utilizables.",
+                   className="territorial-method-note"),
+        ])
+    maximo = positivos[0][1]
+    mayores = positivos[:5]
+    menores = sorted(positivos, key=lambda item: item[1])[:5]
+    return html.Div([
+        _bloque_ranking_territorial("Mayor presencia", "▲", mayores, maximo),
+        _bloque_ranking_territorial("Brechas prioritarias · menor presencia", "!", menores,
+                                    maximo, brecha=True),
+        html.P(
+            "Criterio: las brechas se ordenan por menor volumen registrado. Para medir "
+            "cobertura efectiva se requiere incorporar la matrícula total provincial.",
+            className="territorial-method-note",
+        ),
+    ])
+
+
+def seccion_mapa_recursos_educativos():
+    recursos = [{"label": d["titulo"], "value": d["codigo"]}
+                for d in RECURSOS_EDUCATIVOS_ACTUALIZADOS]
+    return html.Section([
+        html.Div([
+            html.Div([html.H3("Recursos educativos · distribución territorial"),
+                      html.P("Dónde llega cada recurso y dónde registra menor presencia.")]),
+            html.Span("Datos reales de las matrices conectadas",
+                      className="territorial-source-badge"),
+        ], className="territorial-map-heading"),
+        html.Div([
+            dcc.RadioItems(
+                id="resource-territory-resource", options=recursos,
+                value="alimentacion", inline=True,
+                className="territorial-pills territorial-resource-tabs",
+            ),
+            html.Div([
+                html.Div([html.Span("Nivel"), dcc.RadioItems(
+                    options=[{"label": "Región", "value": "region", "disabled": True},
+                             {"label": "Provincia", "value": "provincia"},
+                             {"label": "Cantón", "value": "canton", "disabled": True}],
+                    value="provincia", inline=True, className="territorial-pills",
+                )], className="territorial-control-group"),
+                html.Div([html.Span("Ver"), dcc.RadioItems(
+                    id="resource-territory-metric",
+                    options=[{"label": "Cobertura %", "value": "cobertura", "disabled": True},
+                             {"label": "Estudiantes", "value": "estudiantes"},
+                             {"label": "Instituciones", "value": "instituciones"},
+                             {"label": "Inversión", "value": "inversion", "disabled": True}],
+                    value="estudiantes", inline=True, className="territorial-pills",
+                )], className="territorial-control-group"),
+            ], className="territorial-resource-tabs"),
+        ], className="territorial-toolbar"),
+        html.Div([
+            html.Div([
+                html.Div([html.H4("Distribución de Alimentación Escolar por provincia",
+                                  id="resource-territory-title"),
+                          html.P("Valores registrados en las matrices institucionales.")],
+                         className="territorial-map-title"),
+                dcc.Graph(id="resource-territory-map",
+                          figure=_figura_mapa_recursos("alimentacion", "estudiantes"),
+                          config={"displayModeBar": False, "responsive": True},
+                          className="territorial-map-graph"),
+                html.Div(_resumen_regional_recursos("alimentacion", "estudiantes"),
+                         id="resource-territory-regions"),
+            ], className="territorial-map-card"),
+            html.Div(_ranking_territorial_recursos("alimentacion", "estudiantes"),
+                     id="resource-territory-ranking", className="territorial-ranking-card"),
+        ], className="territorial-map-grid"),
+    ], className="territorial-section recursos-territorial-section")
+
+
+@app.callback(
+    Output("resource-territory-map", "figure"),
+    Output("resource-territory-title", "children"),
+    Output("resource-territory-regions", "children"),
+    Output("resource-territory-ranking", "children"),
+    Input("resource-territory-resource", "value"),
+    Input("resource-territory-metric", "value"),
+)
+def actualizar_mapa_recursos(recurso, metrica):
+    recurso = recurso or "alimentacion"
+    metrica = metrica or "estudiantes"
+    return (
+        _figura_mapa_recursos(recurso, metrica),
+        f"Distribución de {_titulo_recurso(recurso)} por provincia",
+        _resumen_regional_recursos(recurso, metrica),
+        _ranking_territorial_recursos(recurso, metrica),
+    )
+
+
+def observacion_regimenes():
+    """Aclaración institucional solicitada para las desagregaciones.
+
+    La plantilla abrevia los regímenes como Costa y Sierra; en el tablero se
+    muestran sus denominaciones completas para dejar explícita la cobertura
+    territorial de Galápagos y Amazonía.
+    """
+    return html.P([
+        html.Strong("Observación: "),
+        "La categoría Costa corresponde a Costa-Galápagos y la categoría "
+        "Sierra corresponde a Sierra-Amazonía.",
+    ], className="gestion-regimen-aclaracion")
+
+
+def observacion_interculturalidad():
+    """Transparenta la desagregación solicitada que aún no existe en la fuente."""
+    return html.P([
+        html.Strong("Pueblos y nacionalidades: "),
+        "las matrices conectadas todavía no incluyen una variable homologada de "
+        "pueblo o nacionalidad ni un identificador específico de instituciones SEIBE. "
+        "Esta desagregación se habilitará cuando se incorpore en la fuente oficial.",
+    ], className="gestion-regimen-aclaracion")
+
+
+def encabezado_seccion_presidencia(etiqueta, titulo, descripcion, periodo, id_seccion):
+    return html.Div([
+        html.Div([
+            html.Span(etiqueta, className="pres-eje-etiqueta"),
+            html.Div([html.H2(titulo), html.P(descripcion)]),
+        ], className="pres-seccion-titulo"),
+        html.Span(periodo, className="pres-seccion-periodo"),
+    ], id=id_seccion, className="pres-seccion-cabecera")
 
 
 def pagina_gestion_educativa():
@@ -6504,13 +8660,12 @@ def pagina_gestion_educativa():
     tarjetas = [tarjeta_recurso_educativo(dato)
                 for dato in RECURSOS_EDUCATIVOS_ACTUALIZADOS]
 
-    return html.Section(className="vision-exec-page gestion-educativa-page", children=[
+    return html.Section(className="vision-exec-page gestion-educativa-page presidencia-gestion-page", children=[
         html.Div(className="vision-exec-header vision-exec-header-compacta", children=[
             html.Div(className="vision-title-mark"),
             html.Div([
                 html.H1(
-                    "EJE 1 • FORTALECIMIENTO DE LA INFRAESTRUCTURA, "
-                    "EQUIPAMIENTO Y ALIMENTACIÓN ESCOLAR",
+                    "Viceministerio de Gestión Educativa",
                     className="gestion-educativa-titulo-eje",
                     style={
                         "fontSize": "clamp(15px, 1.15vw, 20px)",
@@ -6522,8 +8677,19 @@ def pagina_gestion_educativa():
                 html.P(""),
             ]),
         ]),
-
-        html.H2("Información de Educación Media", className="vision-eje-banner"),
+        html.Nav([
+            html.A("Resumen", href="#gestion-resumen"),
+            html.A("Educación media", href="#gestion-educacion-media"),
+            html.A("Recursos educativos", href="#gestion-recursos"),
+            html.A("Programas y servicios", href="#gestion-programas"),
+        ], className="pres-anclas"),
+        html.Div(id="gestion-resumen"),
+        encabezado_seccion_presidencia(
+            "EJE 1", "Educación media",
+            "Fortalecimiento de la infraestructura, equipamiento y alimentación escolar",
+            "Período: Año lectivo 2025–2026 · Actualización: marzo",
+            "gestion-educacion-media",
+        ),
         html.Div(
                  className="vision-exec-grid gestion-educativa-grid datos-generales-grid "
                            "educacion-media-cifras-grid",
@@ -6535,20 +8701,32 @@ def pagina_gestion_educativa():
             children=tarjetas_media_segunda_fila,
             style={"gridTemplateColumns": "repeat(3, minmax(0, 1fr))", "marginTop": "12px"},
         ),
-
-        html.H2("Programas y servicios de Gestión Educativa", className="vision-eje-banner"),
-        html.P("Cifras consolidadas de los programas y servicios institucionales.",
-               className="eje1-subtitulo"),
-        _tarjetas_programas_eje2(programas_gestion) if programas_gestion else None,
-        html.P(aviso_programas, className="eje2-source-note") if aviso_programas else None,
-
-        html.H2("Recursos educativos y complementarios",
-                className="vision-eje-banner"),
+        observacion_regimenes(),
+        observacion_interculturalidad(),
+        encabezado_seccion_presidencia(
+            "", "Recursos educativos y complementarios",
+            "Cobertura e inversión por recurso entregado a estudiantes e instituciones.",
+            "Período: Año lectivo 2025–2026 · Actualización: diciembre",
+            "gestion-recursos",
+        ),
+        resumen_recursos_educativos(),
         html.Div(
             className="vision-exec-grid gestion-educativa-grid recursos-gestion-grid",
             children=tarjetas,
             style={"gridTemplateColumns": "repeat(3, minmax(0, 1fr))"},
         ),
+        observacion_regimenes(),
+        seccion_mapa_recursos_educativos(),
+        html.Div(id="gestion-programas", children=[
+            encabezado_seccion_presidencia(
+                "", "Programas y servicios de Gestión Educativa",
+                "Cifras consolidadas de los programas y servicios institucionales.",
+                "Último período disponible",
+                "gestion-programas-encabezado",
+            ),
+            _tarjetas_programas_eje2(programas_gestion) if programas_gestion else None,
+            html.P(aviso_programas, className="eje2-source-note") if aviso_programas else None,
+        ]),
     ])
 
 
@@ -6634,7 +8812,7 @@ def contenido_vision(tab=None):
             html.Div([
                 html.P("VISIÓN EJECUTIVA", className="content-kicker"),
                 html.H1(
-                    "MINISTERIO DE EDUCACIÓN, DEPORTE Y CULTURA",
+                    "Ministerio de Educación, Deporte y Cultura",
                     className="vision-landing-title",
                     style={
                         "margin": "0", "color": "#4e3cab",
@@ -6647,8 +8825,33 @@ def contenido_vision(tab=None):
                     "Seleccione un viceministerio para consultar sus cifras, programas y servicios.",
                     className="vision-landing-subtitle",
                 ),
+                html.Div([
+                    html.Div([
+                        html.Span("Educación media"),
+                        html.Strong(DATOS_GENERALES_GESTION_EDUCATIVA["anio_lectivo"]),
+                    ], className="vision-landing-kpi"),
+                    html.Div([
+                        html.Span("Instituciones"),
+                        html.Strong(formato_valor(DATOS_GENERALES_GESTION_EDUCATIVA["instituciones"])),
+                    ], className="vision-landing-kpi"),
+                    html.Div([
+                        html.Span("Estudiantes"),
+                        html.Strong(formato_valor(
+                            DATOS_GENERALES_GESTION_EDUCATIVA["estudiantes_mujeres"]
+                            + DATOS_GENERALES_GESTION_EDUCATIVA["estudiantes_hombres"])),
+                    ], className="vision-landing-kpi"),
+                    html.Div([
+                        html.Span("Docentes"),
+                        html.Strong(formato_valor(DATOS_GENERALES_GESTION_EDUCATIVA["docentes_total"])),
+                    ], className="vision-landing-kpi"),
+                ], className="vision-landing-kpis"),
             ], className="vision-landing-intro institutional-landing-header"),
             html.Div(menu, className="vision-landing-menu"),
+            html.P(
+                "ⓘ Dentro de cada viceministerio puede cambiar a otro desde las pestañas superiores, "
+                "sin volver a esta pantalla.",
+                className="vision-landing-nota",
+            ),
         ], className="vision-landing",
            style={"minHeight": "calc(100vh - 92px)", "padding": "18px 28px 34px",
                   "display": "flex", "flexDirection": "column", "gap": "14px",
@@ -7255,10 +9458,13 @@ app.layout = html.Div([
               Output("selected-indicator", "data", allow_duplicate=True),
               Input("home-button", "n_clicks"),
               Input({"type": "home-card", "index": ALL}, "n_clicks"),
+              Input({"type": "home-nav-card", "index": ALL}, "n_clicks"),
+              Input({"type": "home-hero-card", "index": ALL}, "n_clicks"),
               Input({"type": "indicator-home-card", "index": ALL}, "n_clicks"),
               Input({"type": "side-section", "index": ALL}, "n_clicks"),
               State("active-section", "data"), prevent_initial_call=True)
-def cambiar_seccion(_home, _cards, _indicator_cards, _side, actual):
+def cambiar_seccion(_home, _cards, _nav_cards, _hero_cards,
+                    _indicator_cards, _side, actual):
     disparador = ctx.triggered_id
     if disparador == "home-button":
         return ("home", None, None) if _home else (actual, no_update, no_update)
@@ -7266,6 +9472,10 @@ def cambiar_seccion(_home, _cards, _indicator_cards, _side, actual):
         tipo = disparador.get("type")
         if tipo == "home-card":
             valores = _cards
+        elif tipo == "home-nav-card":
+            valores = _nav_cards
+        elif tipo == "home-hero-card":
+            valores = _hero_cards
         elif tipo == "indicator-home-card":
             valores = _indicator_cards
         else:
