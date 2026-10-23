@@ -4285,6 +4285,61 @@ app.index_string = """<!DOCTYPE html>
           .module-main .vision-exec-page .pres-recurso-metrica strong {
             font-size: clamp(18px, 5.2vw, 22px) !important;
           }
+
+          /* Navegación interna móvil: una sola fila desplazable. Así los
+             botones no se apilan ni reducen el ancho útil de las tarjetas. */
+          .module-main .vision-exec-page .pres-anclas {
+            width: 100% !important;
+            max-width: 100% !important;
+            margin: 3px 0 12px !important;
+            padding: 0 0 6px !important;
+            display: flex !important;
+            flex-wrap: nowrap !important;
+            gap: 7px !important;
+            overflow-x: auto !important;
+            overflow-y: hidden !important;
+            overscroll-behavior-inline: contain;
+            -webkit-overflow-scrolling: touch;
+            scrollbar-width: thin;
+          }
+          .module-main .vision-exec-page .pres-anclas a {
+            flex: 0 0 auto !important;
+            padding: 6px 10px !important;
+            white-space: nowrap !important;
+          }
+
+          /* En móvil el período ocupa una fila propia. Deja de superponerse
+             con títulos como Instituciones educativas o Escolaridad inconclusa. */
+          .module-main .presidencia-card .programa-anio-control {
+            position: static !important;
+            top: auto !important;
+            right: auto !important;
+            width: 132px !important;
+            max-width: 100% !important;
+            margin: 0 0 8px auto !important;
+          }
+          .module-main .presidencia-card .programa-anio-dropdown,
+          .module-main .presidencia-card .programa-anio-dropdown.dash-dropdown {
+            width: 132px !important;
+            min-width: 132px !important;
+            max-width: 100% !important;
+          }
+          .module-main .presidencia-card .vision-card-title-row {
+            width: 100% !important;
+            min-height: 0 !important;
+            margin: 0 0 7px !important;
+          }
+          .module-main .vision-exec-page,
+          .module-main .vision-exec-page > div,
+          .module-main .vision-exec-page .vision-exec-grid,
+          .module-main .vision-exec-page .vision-exec-card {
+            max-width: 100% !important;
+            min-width: 0 !important;
+            box-sizing: border-box !important;
+          }
+          .module-main .vision-exec-page .vision-exec-header h1 {
+            overflow-wrap: anywhere !important;
+          }
         }
         </style>
         <script>
