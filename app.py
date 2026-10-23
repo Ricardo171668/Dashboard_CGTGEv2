@@ -4464,10 +4464,39 @@ app.index_string = """<!DOCTYPE html>
             min-width: 132px !important;
             max-width: 100% !important;
           }
+          /* La insignia de período de las tarjetas de recursos (Alimentación
+             Escolar, Uniformes, Textos, Transporte) usaba position:absolute
+             sin ningún ajuste para celular: quedaba flotando sobre el título
+             o desplazada fuera de la tarjeta. Se convierte en una fila propia,
+             igual que .programa-anio-control, para que nunca se superponga. */
+          .module-main .presidencia-card .pres-periodo-badge {
+            position: static !important;
+            top: auto !important;
+            right: auto !important;
+            display: inline-block !important;
+            margin: 0 0 8px !important;
+          }
           .module-main .presidencia-card .vision-card-title-row {
+            display: flex !important;
+            flex-wrap: nowrap !important;
+            align-items: center !important;
             width: 100% !important;
+            min-width: 0 !important;
             min-height: 0 !important;
             margin: 0 0 7px !important;
+          }
+          /* El símbolo nunca se encoge; la etiqueta sí puede hacerlo. Sin
+             min-width:0 un flex-item largo se niega a encoger por debajo de
+             su contenido y termina forzando el salto letra por letra. */
+          .module-main .presidencia-card .vision-card-title-row > .vision-card-symbol {
+            flex: 0 0 auto !important;
+          }
+          .module-main .presidencia-card .vision-card-title-row > .vision-card-label {
+            flex: 1 1 auto !important;
+            min-width: 0 !important;
+            word-break: normal !important;
+            overflow-wrap: break-word !important;
+            white-space: normal !important;
           }
           .module-main .vision-exec-page,
           .module-main .vision-exec-page > div,
@@ -5147,6 +5176,52 @@ app.index_string = """<!DOCTYPE html>
           });
           window.addEventListener('resize', function () {
             if (window.innerWidth > 1400) cerrarMenu();
+          });
+        })();
+        </script>
+        <script>
+        /* Safari/iOS tiene un error documentado: si una cuadrícula CSS Grid
+           se pintó primero con el ancho virtual de ~980px, al reducirla a
+           flex en el teléfono real a veces conserva el cálculo de ancho
+           anterior y deja una tarjeta reducida a una franja de pocos
+           píxeles (de ahí el texto partido letra por letra). Forzar un
+           "reflow" de esas cuadrículas tras cargar, al rotar la pantalla o
+           cuando Dash reconstruye el módulo corrige ese cálculo obsoleto.
+           Solo actúa en pantallas de celular (<=700px) y no toca nada del
+           diseño de tableta/escritorio. */
+        (function () {
+          var SELECTOR_CUADRICULAS = [
+            '.presidencia-gestion-page .vision-exec-grid',
+            '.presidencia-gestion-page .datos-generales-grid',
+            '.presidencia-gestion-page .educacion-media-cifras-grid',
+            '.presidencia-gestion-page .educacion-media-segunda-fila',
+            '.presidencia-gestion-page .recursos-gestion-grid',
+            '.presidencia-gestion-page .programas-servicios-grid',
+            '.presidencia-gestion-page .programas-complementarios-grid'
+          ].join(',');
+          var pendiente;
+          function forzarReflow() {
+            if (window.innerWidth > 700) return;
+            document.querySelectorAll(SELECTOR_CUADRICULAS).forEach(function (grid) {
+              var anterior = grid.style.display;
+              grid.style.display = 'none';
+              // Leer una propiedad de layout obliga al navegador a recalcular
+              // antes de restaurar el valor original.
+              void grid.offsetHeight;
+              grid.style.display = anterior;
+            });
+          }
+          function programarReflow() {
+            clearTimeout(pendiente);
+            pendiente = setTimeout(forzarReflow, 60);
+          }
+          window.addEventListener('load', programarReflow);
+          window.addEventListener('resize', programarReflow);
+          window.addEventListener('orientationchange', programarReflow);
+          document.addEventListener('DOMContentLoaded', programarReflow);
+          new MutationObserver(programarReflow).observe(document.documentElement, {
+            childList: true,
+            subtree: true
           });
         })();
         </script>
