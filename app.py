@@ -1145,6 +1145,7 @@ def recurso_portada(nombre_archivo):
 app.index_string = """<!DOCTYPE html>
 <html>
     <head>
+        <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
         {%metas%}
         <title>{%title%}</title>
         {%favicon%}
@@ -3992,9 +3993,72 @@ app.index_string = """<!DOCTYPE html>
           font-size: 9px; line-height: 1.35;
         }
         .territorial-missing-item strong { display: block; color: #232d5a; margin-bottom: 2px; }
+
+        /* Respuesta educativa ante el Fenómeno de El Niño */
+        .fenomeno-resumen-grid {
+          display: grid; grid-template-columns: repeat(4, minmax(0, 1fr));
+          gap: 10px; margin: 12px 0;
+        }
+        .fenomeno-resumen-card {
+          min-width: 0; padding: 13px 14px; border: 1px solid #e1e5ee;
+          border-top: 4px solid #4f449a; border-radius: 11px; background: #fff;
+          box-shadow: 0 5px 15px rgba(35,45,90,.05);
+        }
+        .fenomeno-resumen-card:nth-child(2n) { border-top-color: #efb629; }
+        .fenomeno-resumen-card span {
+          display: block; color: #737d95; font-size: 9.5px; font-weight: 800;
+          line-height: 1.3; text-transform: uppercase;
+        }
+        .fenomeno-resumen-card strong {
+          display: block; margin-top: 5px; color: #17245b;
+          font-size: clamp(20px, 2vw, 29px); line-height: 1;
+        }
+        .fenomeno-resumen-card small {
+          display: block; margin-top: 5px; color: #7a8398; font-size: 9px;
+        }
+        .fenomeno-comunidad {
+          display: grid; grid-template-columns: repeat(3, minmax(0, 1fr));
+          gap: 8px; margin: 0 0 12px;
+        }
+        .fenomeno-comunidad > div {
+          display: flex; align-items: center; justify-content: space-between; gap: 8px;
+          padding: 10px 12px; border-radius: 9px; background: #f3f2fa;
+          color: #59627d; font-size: 10px; font-weight: 800;
+        }
+        .fenomeno-comunidad strong { color: #17245b; font-size: 16px; }
+        .fenomeno-zonas-lista { display: grid; gap: 6px; }
+        .fenomeno-zona-fila {
+          display: grid; grid-template-columns: 30px minmax(0, 1fr) 58px 82px;
+          gap: 6px; align-items: center; padding: 7px 8px;
+          border-radius: 7px; background: #f7f8fb; color: #59627d; font-size: 8.5px;
+        }
+        .fenomeno-zona-fila > strong {
+          display: grid; place-items: center; width: 26px; height: 22px;
+          border-radius: 6px; color: #fff; background: #4f449a; font-size: 9px;
+        }
+        .fenomeno-zona-fila span { min-width: 0; line-height: 1.25; }
+        .fenomeno-zona-fila b { color: #17245b; text-align: right; }
+        .fenomeno-zona-fila em {
+          color: #8a6b06; font-style: normal; font-weight: 800; text-align: right;
+        }
+        .fenomeno-continuidad {
+          display: grid; grid-template-columns: repeat(2, minmax(0, 1fr));
+          gap: 8px; margin-top: 12px;
+        }
+        .fenomeno-continuidad > div {
+          padding: 10px 12px; border-left: 4px solid #efb629;
+          border-radius: 8px; background: #fff9df;
+        }
+        .fenomeno-continuidad span {
+          display: block; color: #725c14; font-size: 9px; font-weight: 800;
+        }
+        .fenomeno-continuidad strong {
+          display: block; margin-top: 3px; color: #17245b; font-size: 18px;
+        }
         @media (max-width: 1100px) {
           .territorial-map-grid { grid-template-columns: minmax(0, 1fr); }
           .territorial-map-graph { height: 330px; }
+          .fenomeno-resumen-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
         }
         @media (max-width: 700px) {
           .territorial-section { padding: 11px; border-radius: 11px; }
@@ -4006,6 +4070,13 @@ app.index_string = """<!DOCTYPE html>
           .territorial-region-summary { grid-template-columns: repeat(2, minmax(0, 1fr)); }
           .territorial-rank-fila { grid-template-columns: 15px minmax(0, 1fr) 58px; }
           .territorial-rank-barra { display: none; }
+          .fenomeno-resumen-grid,
+          .fenomeno-comunidad,
+          .fenomeno-continuidad { grid-template-columns: minmax(0, 1fr); }
+          .fenomeno-zona-fila {
+            grid-template-columns: 30px minmax(0, 1fr) 52px;
+          }
+          .fenomeno-zona-fila em { grid-column: 2 / 4; text-align: left; }
         }
 
         /* Corrección final de navegación en escritorio.
@@ -4351,6 +4422,569 @@ app.index_string = """<!DOCTYPE html>
           }
           .module-main .vision-exec-page .vision-exec-header h1 {
             overflow-wrap: anywhere !important;
+          }
+
+          /* Salvaguarda móvil definitiva. Las tarjetas de Gestión Educativa
+             no deben conservar ninguna de las seis columnas auxiliares de la
+             maqueta de escritorio. Se usa flex en lugar de grid para impedir
+             que Safari mantenga posiciones como 2 / span 2 y reduzca una
+             tarjeta a una franja de pocos píxeles. */
+          html,
+          body,
+          #react-entry-point,
+          .app-shell,
+          .module-layout,
+          .module-main {
+            width: 100% !important;
+            max-width: 100% !important;
+            min-width: 0 !important;
+            overflow-x: hidden !important;
+            box-sizing: border-box !important;
+          }
+          .module-main .presidencia-gestion-page .vision-exec-grid,
+          .module-main .presidencia-gestion-page .datos-generales-grid,
+          .module-main .presidencia-gestion-page .educacion-media-cifras-grid,
+          .module-main .presidencia-gestion-page .educacion-media-segunda-fila,
+          .module-main .presidencia-gestion-page .recursos-gestion-grid,
+          .module-main .presidencia-gestion-page .programas-servicios-grid,
+          .module-main .presidencia-gestion-page .programas-complementarios-grid {
+            display: flex !important;
+            flex-direction: column !important;
+            align-items: stretch !important;
+            width: 100% !important;
+            max-width: 100% !important;
+            min-width: 0 !important;
+            gap: 12px !important;
+            margin-left: 0 !important;
+            margin-right: 0 !important;
+            grid-template-columns: none !important;
+          }
+          .module-main .presidencia-gestion-page .vision-exec-grid > *,
+          .module-main .presidencia-gestion-page .datos-generales-grid > *,
+          .module-main .presidencia-gestion-page .recursos-gestion-grid > *,
+          .module-main .presidencia-gestion-page .programas-servicios-grid > *,
+          .module-main .presidencia-gestion-page .programas-complementarios-grid > * {
+            flex: 0 0 auto !important;
+            grid-column: auto !important;
+            width: 100% !important;
+            max-width: 100% !important;
+            min-width: 0 !important;
+            margin-left: 0 !important;
+            margin-right: 0 !important;
+            justify-self: stretch !important;
+            box-sizing: border-box !important;
+          }
+          .module-main .presidencia-gestion-page .presidencia-card,
+          .module-main .presidencia-gestion-page .presidencia-recurso-card,
+          .module-main .presidencia-gestion-page .presidencia-programa-card {
+            width: 100% !important;
+            max-width: 100% !important;
+            min-width: 0 !important;
+          }
+          .module-main .presidencia-gestion-page .vision-card-label,
+          .module-main .presidencia-gestion-page .vision-card-unit,
+          .module-main .presidencia-gestion-page .pres-recurso-metrica span,
+          .module-main .presidencia-gestion-page .pres-recurso-metrica strong {
+            word-break: normal !important;
+            overflow-wrap: break-word !important;
+            white-space: normal !important;
+          }
+        }
+
+        /* Homologación de todos los viceministerios con la tarjeta utilizada
+           en Gestión Educativa. Se neutralizan los tamaños reducidos que aún
+           conservaban Educación Superior, Deporte y Cultura. */
+        .educacion-superior-page .educacion-superior-cifras-grid > .vision-exec-card,
+        .educacion-superior-page .programas-servicios-grid > .vision-exec-card,
+        .deporte-informacion-grid > .vision-exec-card,
+        .deporte-programas-generales-grid > .vision-exec-card,
+        .cultura-resumen-grid > .vision-exec-card,
+        .cultura-programas-grid > .vision-exec-card {
+          width: 100% !important;
+          min-width: 0 !important;
+          max-width: none !important;
+          min-height: 240px !important;
+          padding: 15px 16px 12px !important;
+          border: 1px solid #dfe3ed !important;
+          border-top: 1px solid #dfe3ed !important;
+          border-radius: 12px !important;
+          background: #ffffff !important;
+          box-shadow: 0 3px 9px rgba(35,45,90,.07) !important;
+          box-sizing: border-box !important;
+        }
+        .educacion-superior-page .vision-card-title-row,
+        .deporte-informacion-grid .vision-card-title-row,
+        .deporte-programas-generales-grid .vision-card-title-row,
+        .cultura-resumen-grid .vision-card-title-row,
+        .cultura-programas-grid .vision-card-title-row {
+          min-height: 42px !important;
+          margin: 0 0 7px !important;
+          gap: 9px !important;
+        }
+        .educacion-superior-page .vision-card-symbol,
+        .deporte-informacion-grid .vision-card-symbol,
+        .deporte-programas-generales-grid .vision-card-symbol,
+        .cultura-resumen-grid .vision-card-symbol,
+        .cultura-programas-grid .vision-card-symbol {
+          width: 36px !important;
+          height: 36px !important;
+          border-radius: 10px !important;
+          box-shadow: none !important;
+        }
+        .educacion-superior-page .vision-card-symbol img,
+        .deporte-informacion-grid .vision-card-symbol img,
+        .deporte-programas-generales-grid .vision-card-symbol img,
+        .cultura-resumen-grid .vision-card-symbol img,
+        .cultura-programas-grid .vision-card-symbol img {
+          width: 23px !important;
+          height: 23px !important;
+        }
+        .educacion-superior-page .vision-card-label,
+        .deporte-informacion-grid .vision-card-label,
+        .deporte-programas-generales-grid .vision-card-label,
+        .cultura-resumen-grid .vision-card-label,
+        .cultura-programas-grid .vision-card-label {
+          min-height: 0 !important;
+          color: #17245b !important;
+          font-size: 15px !important;
+          font-weight: 900 !important;
+          line-height: 1.16 !important;
+          overflow-wrap: break-word !important;
+        }
+        .educacion-superior-page .vision-card-total {
+          color: #17245b !important;
+          font-size: clamp(30px, 1.78vw, 34px) !important;
+          font-weight: 900 !important;
+          line-height: 1.02 !important;
+          letter-spacing: -.02em !important;
+        }
+        .educacion-superior-page .vision-card-unit {
+          color: #737c94 !important;
+          font-size: 12px !important;
+          font-weight: 700 !important;
+          text-transform: none !important;
+        }
+        .educacion-superior-page .educacion-media-periodo-pie,
+        .deporte-informacion-grid .educacion-media-periodo-pie,
+        .deporte-programas-generales-grid .educacion-media-periodo-pie,
+        .cultura-resumen-grid .educacion-media-periodo-pie,
+        .cultura-programas-grid .educacion-media-periodo-pie {
+          margin-top: 9px !important;
+          padding-top: 6px !important;
+          border-top: 1px solid #eef0f5 !important;
+          color: #747e96 !important;
+          font-size: 10.5px !important;
+          line-height: 1.3 !important;
+        }
+        .deporte-programa-metrica,
+        .cultura-resumen-item,
+        .cultura-programa-metrica,
+        .educacion-superior-page .programa-metrica-periodo {
+          min-width: 0 !important;
+          min-height: 54px !important;
+          padding: 8px 9px !important;
+          border-radius: 7px !important;
+          background: #f3f4f9 !important;
+          text-align: left !important;
+        }
+        .deporte-programa-metrica span,
+        .cultura-resumen-item span,
+        .cultura-programa-metrica span,
+        .educacion-superior-page .programa-metrica-periodo span {
+          min-height: 0 !important;
+          color: #7c8498 !important;
+          font-size: 11px !important;
+          font-weight: 800 !important;
+          line-height: 1.2 !important;
+          text-transform: uppercase !important;
+        }
+        .deporte-programa-metrica strong,
+        .cultura-resumen-item strong,
+        .cultura-programa-metrica strong,
+        .educacion-superior-page .programa-metrica-periodo strong {
+          margin-top: 3px !important;
+          color: #17245b !important;
+          font-size: clamp(18px, 1.18vw, 22px) !important;
+          font-weight: 900 !important;
+          line-height: 1.05 !important;
+        }
+        @media (max-width: 700px) {
+          .educacion-superior-page .educacion-superior-cifras-grid,
+          .educacion-superior-page .programas-servicios-grid,
+          .deporte-informacion-grid,
+          .deporte-programas-generales-grid,
+          .cultura-resumen-grid,
+          .cultura-programas-grid {
+            display: flex !important;
+            flex-direction: column !important;
+            align-items: stretch !important;
+            width: 100% !important;
+            max-width: 100% !important;
+            min-width: 0 !important;
+            gap: 12px !important;
+            grid-template-columns: none !important;
+          }
+          .educacion-superior-page .educacion-superior-cifras-grid > *,
+          .educacion-superior-page .programas-servicios-grid > *,
+          .deporte-informacion-grid > *,
+          .deporte-programas-generales-grid > *,
+          .cultura-resumen-grid > *,
+          .cultura-programas-grid > * {
+            flex: 0 0 auto !important;
+            grid-column: auto !important;
+            width: 100% !important;
+            max-width: 100% !important;
+            min-width: 0 !important;
+            margin-left: 0 !important;
+            margin-right: 0 !important;
+          }
+        }
+
+        /* Visión Ejecutiva · versión sin menú lateral (Anexo 2).
+           La navegación propia de viceministerios sustituye por completo al
+           sidebar y el contenido aprovecha el ancho total de la ventana. */
+        .vision-module-layout {
+          display: block !important;
+          width: 100% !important;
+          max-width: 100% !important;
+          min-width: 0 !important;
+          min-height: calc(100dvh - 72px) !important;
+          background: #f5f7fa !important;
+          overflow-x: hidden !important;
+        }
+        .vision-module-main {
+          width: 100% !important;
+          max-width: 100% !important;
+          min-width: 0 !important;
+          margin: 0 !important;
+          padding: 24px clamp(18px, 3vw, 54px) 42px !important;
+          box-sizing: border-box !important;
+        }
+        .vision-top-actions {
+          width: 100% !important;
+          padding: 12px clamp(18px, 3vw, 54px) 0 !important;
+          display: flex !important;
+          justify-content: flex-end !important;
+          box-sizing: border-box !important;
+          background: #f5f7fa !important;
+        }
+        .vision-back-button {
+          min-height: 38px !important;
+          padding: 8px 14px !important;
+          display: inline-flex !important;
+          align-items: center !important;
+          justify-content: center !important;
+          gap: 8px !important;
+          border: 1px solid #d7dceb !important;
+          border-radius: 9px !important;
+          color: #ffffff !important;
+          background: #4f449a !important;
+          box-shadow: 0 4px 10px rgba(35,45,90,.12) !important;
+          font-size: 12px !important;
+          font-weight: 900 !important;
+          cursor: pointer !important;
+        }
+        .vision-back-button:hover,
+        .vision-back-button:focus-visible {
+          background: #232d5a !important;
+          outline: 3px solid rgba(241,182,32,.32) !important;
+        }
+
+        /* Módulo de marca cuadrado. El archivo del logotipo conserva su
+           proporción dentro del recuadro, sin estirarse ni sobresalir. */
+        .header-brand-button.home-button {
+          width: 72px !important;
+          height: 72px !important;
+          min-width: 72px !important;
+          flex: 0 0 72px !important;
+          aspect-ratio: 1 / 1 !important;
+          padding: 6px !important;
+          border-radius: 8px !important;
+          overflow: hidden !important;
+          box-sizing: border-box !important;
+        }
+        .header-brand-logo {
+          width: 100% !important;
+          height: 100% !important;
+          object-fit: contain !important;
+          object-position: center !important;
+          /* El PNG institucional trae amplios márgenes blancos internos. La
+             ampliación revela la marca sin deformarla y el contenedor oculta
+             únicamente ese margen sobrante. */
+          transform: scale(1.72) !important;
+          transform-origin: center !important;
+        }
+        .vision-module-main > div,
+        .vision-module-main .vision-exec-page,
+        .vision-module-main .educacion-superior-page {
+          width: 100% !important;
+          max-width: none !important;
+          min-width: 0 !important;
+          box-sizing: border-box !important;
+        }
+
+        /* Pestañas grandes, largas y homogéneas. Funcionan como la única
+           navegación entre viceministerios dentro de Visión Ejecutiva. */
+        .vision-module-main > div > .vision-vice-menu-compacta {
+          display: grid !important;
+          grid-template-columns: repeat(5, minmax(0, 1fr)) !important;
+          align-items: stretch !important;
+          width: 100% !important;
+          max-width: none !important;
+          margin: 0 0 18px !important;
+          padding: 0 !important;
+          gap: 9px !important;
+          overflow: visible !important;
+          border-bottom: 1px solid #dfe4ed !important;
+        }
+        .vision-module-main .vision-vice-menu-compacta .vision-vice-row {
+          width: 100% !important;
+          min-width: 0 !important;
+          padding: 0 !important;
+          border: 0 !important;
+          background: transparent !important;
+          box-shadow: none !important;
+        }
+        .vision-module-main .vision-vice-menu-compacta .vision-vice-pill {
+          display: flex !important;
+          align-items: center !important;
+          justify-content: center !important;
+          width: 100% !important;
+          min-width: 0 !important;
+          min-height: 72px !important;
+          padding: 13px 20px !important;
+          border: 1px solid #dfe3ef !important;
+          border-bottom: 4px solid transparent !important;
+          border-radius: 12px 12px 0 0 !important;
+          color: #303a76 !important;
+          background: #eef0ff !important;
+          font-size: clamp(15px, 1.03vw, 18px) !important;
+          font-weight: 900 !important;
+          line-height: 1.18 !important;
+          text-align: center !important;
+          white-space: normal !important;
+          box-sizing: border-box !important;
+        }
+        .vision-module-main .vision-vice-menu-compacta .vision-vice-pill.active {
+          color: #ffffff !important;
+          background: #232d5a !important;
+          border-color: #232d5a !important;
+          border-bottom-color: #f1b620 !important;
+        }
+
+        /* Las desagregaciones de todos los viceministerios se apoyan en el
+           tramo inferior de la tarjeta, como Sexo/Área/Régimen en Gestión
+           Educativa. Se conserva la misma escala tipográfica y el mismo pie. */
+        .educacion-superior-nivel-card,
+        .instituciones-historicas-card,
+        .estudiantes-historicos-card,
+        .docentes-historicos-card,
+        .nee-card,
+        .escolaridad-inconclusa-card,
+        .deporte-resumen-card,
+        .cultura-resumen-card,
+        .cultura-programa-card {
+          display: flex !important;
+          flex-direction: column !important;
+          align-items: stretch !important;
+        }
+        .instituciones-historicas-card > #instituciones-contenido,
+        .estudiantes-historicos-card > #estudiantes-contenido,
+        .docentes-historicos-card > #docentes-contenido {
+          flex: 1 1 auto !important;
+          min-height: 0 !important;
+          display: flex !important;
+          flex-direction: column !important;
+          align-items: stretch !important;
+        }
+        .instituciones-historicas-card #instituciones-contenido > .pres-distribucion:first-of-type,
+        .estudiantes-historicos-card #estudiantes-contenido > .pres-distribucion:first-of-type,
+        .docentes-historicos-card #docentes-contenido > .pres-distribucion:first-of-type,
+        .nee-card > .pres-distribucion:first-of-type,
+        .escolaridad-inconclusa-card > .pres-distribucion:first-of-type {
+          margin-top: auto !important;
+        }
+        .educacion-superior-nivel-card .vision-card-value-row {
+          margin-bottom: auto !important;
+        }
+
+        /* Educación Superior adopta exactamente el orden visual de la tarjeta
+           Instituciones Educativas: barra apilada primero y, debajo, cada
+           categoría en su propia fila. */
+        .educacion-superior-nivel-card {
+          min-height: 290px !important;
+        }
+        .educacion-superior-nivel-card .pres-distribucion {
+          display: flex !important;
+          flex-direction: column !important;
+          width: 100% !important;
+        }
+        .educacion-superior-nivel-card .pres-barra-apilada {
+          order: 1 !important;
+          margin: 3px 0 8px !important;
+        }
+        .educacion-superior-nivel-card .pres-distribucion-cabecera {
+          order: 2 !important;
+        }
+        .educacion-superior-nivel-card .pres-distribucion-cabecera > strong {
+          display: block !important;
+          margin: 0 0 5px !important;
+        }
+        .educacion-superior-nivel-card .pres-distribucion-etiquetas {
+          display: grid !important;
+          grid-template-columns: minmax(0, 1fr) !important;
+          gap: 5px !important;
+          width: 100% !important;
+        }
+        .educacion-superior-nivel-card .pres-distribucion-etiquetas > span {
+          width: 100% !important;
+          display: grid !important;
+          grid-template-columns: 7px minmax(0, 1fr) auto auto !important;
+          align-items: center !important;
+          column-gap: 6px !important;
+          line-height: 1.25 !important;
+        }
+        .educacion-superior-nivel-card .pres-distribucion:first-of-type,
+        .deporte-resumen-card .deporte-programa-metricas,
+        .cultura-resumen-card .cultura-resumen-desglose,
+        .cultura-programa-card .cultura-programa-contenido {
+          margin-top: auto !important;
+        }
+        .deporte-resumen-card .deporte-programa-metricas,
+        .cultura-resumen-card .cultura-resumen-desglose,
+        .cultura-programa-card .cultura-programa-desglose {
+          width: 100% !important;
+          padding-top: 10px !important;
+          border-top: 1px solid #edf0f5 !important;
+          box-sizing: border-box !important;
+        }
+        .deporte-resumen-card .deporte-programa-metrica,
+        .cultura-resumen-card .cultura-resumen-item,
+        .cultura-programa-card .cultura-programa-metrica {
+          min-height: 58px !important;
+          padding: 9px 10px !important;
+          text-align: left !important;
+          align-items: flex-start !important;
+          justify-content: center !important;
+        }
+
+        @media (max-width: 1100px) {
+          .vision-top-actions {
+            padding: 10px 14px 0 !important;
+          }
+          .vision-module-main {
+            padding: 18px 14px 34px !important;
+          }
+          .vision-module-main > div > .vision-vice-menu-compacta {
+            display: flex !important;
+            flex-wrap: nowrap !important;
+            gap: 8px !important;
+            overflow-x: auto !important;
+            overflow-y: hidden !important;
+            padding-bottom: 5px !important;
+            overscroll-behavior-inline: contain;
+            -webkit-overflow-scrolling: touch;
+          }
+          .vision-module-main .vision-vice-menu-compacta .vision-vice-row {
+            flex: 0 0 clamp(285px, 48vw, 370px) !important;
+            width: auto !important;
+          }
+          .vision-module-main .vision-vice-menu-compacta .vision-vice-pill {
+            min-height: 66px !important;
+            font-size: 15px !important;
+          }
+        }
+        @media (max-width: 700px) {
+          .header-brand-button.home-button {
+            width: 58px !important;
+            height: 58px !important;
+            min-width: 58px !important;
+            flex-basis: 58px !important;
+            padding: 5px !important;
+          }
+          .vision-top-actions {
+            padding: 9px 10px 0 !important;
+          }
+          .vision-back-button {
+            min-height: 36px !important;
+            padding: 7px 11px !important;
+            font-size: 11px !important;
+          }
+          .vision-module-main {
+            padding: 12px 10px 28px !important;
+          }
+          .vision-module-main .vision-vice-menu-compacta .vision-vice-row {
+            flex-basis: min(84vw, 330px) !important;
+          }
+          .vision-module-main .vision-vice-menu-compacta .vision-vice-pill {
+            min-height: 62px !important;
+            padding: 11px 15px !important;
+            font-size: 14px !important;
+          }
+          .deporte-resumen-card .deporte-programa-metricas,
+          .deporte-resumen-card .deporte-programa-metricas.items-3,
+          .cultura-resumen-card .cultura-resumen-desglose,
+          .cultura-resumen-card .cultura-resumen-desglose.items-3,
+          .cultura-programa-card .cultura-programa-desglose,
+          .cultura-programa-card .cultura-programa-desglose.items-4 {
+            grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+          }
+        }
+
+        /* Deporte: tres tarjetas en la primera fila y la cuarta centrada
+           debajo. En tableta se mantienen dos columnas y en móvil una sola. */
+        @media (min-width: 1101px) {
+          .module-main .vision-exec-page .deporte-informacion-grid.vision-exec-grid {
+            grid-template-columns: repeat(6, minmax(0, 1fr)) !important;
+          }
+          .module-main .vision-exec-page .deporte-informacion-grid > .vision-exec-card {
+            grid-column: span 2 !important;
+          }
+          .module-main .vision-exec-page .deporte-informacion-grid > .vision-exec-card:nth-child(4) {
+            grid-column: 3 / span 2 !important;
+          }
+        }
+        @media (min-width: 701px) and (max-width: 1100px) {
+          .module-main .vision-exec-page .deporte-informacion-grid.vision-exec-grid {
+            grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+          }
+          .module-main .vision-exec-page .deporte-informacion-grid > .vision-exec-card:nth-child(4) {
+            grid-column: 1 / -1 !important;
+            width: calc(50% - 6px) !important;
+            justify-self: center !important;
+          }
+        }
+        .deporte-map-toolbar {
+          justify-content: flex-start !important;
+        }
+        .cultura-map-toolbar {
+          justify-content: flex-start !important;
+        }
+        .deporte-map-toolbar > span,
+        .cultura-map-toolbar > span {
+          color: #68728c; font-size: 9px; font-weight: 900;
+          text-transform: uppercase;
+        }
+        .deporte-mapa-filtro,
+        .deporte-mapa-filtro.dash-dropdown,
+        .cultura-mapa-filtro,
+        .cultura-mapa-filtro.dash-dropdown {
+          width: min(310px, 100%) !important;
+          min-width: 230px !important;
+        }
+        @media (max-width: 700px) {
+          .module-main .vision-exec-page .deporte-informacion-grid > .vision-exec-card:nth-child(4) {
+            grid-column: auto !important;
+            width: 100% !important;
+          }
+          .deporte-map-toolbar,
+          .deporte-mapa-filtro,
+          .deporte-mapa-filtro.dash-dropdown,
+          .cultura-map-toolbar,
+          .cultura-mapa-filtro,
+          .cultura-mapa-filtro.dash-dropdown {
+            width: 100% !important;
+            min-width: 0 !important;
           }
         }
         </style>
@@ -5809,16 +6443,30 @@ def _desglose_con_grupos(grupos):
 
 
 def _tarjeta_educacion_superior_nivel(codigo, titulo, total, grupos, pie):
-    """Tarjeta con el mismo formato que las de Educación Media: total
-    principal + desglose(s) en mini-cuadros + pie de período."""
+    """Tarjeta con el mismo formato visual de Gestión Educativa.
+
+    Las desagregaciones se presentan como barras y etiquetas horizontales,
+    igual que Sexo, Área, Régimen y Sostenimiento en Educación Media. De esta
+    forma Educación Superior deja de usar una familia distinta de mini-cuadros.
+    """
+    unidad = {
+        "Instituciones": "Instituciones",
+        "Estudiantes": "Estudiantes",
+        "Docentes": "Docentes",
+    }.get(titulo, "Registros")
     return html.Article([
         cabecera_tarjeta(codigo, titulo),
         html.Div([
             html.Strong(formato_valor(total), className="vision-card-total"),
+            html.Span(unidad, className="vision-card-unit"),
         ], className="vision-card-value-row"),
-        html.Div(_desglose_con_grupos(grupos), className="nee-desglose"),
+        *[
+            _fila_distribucion(titulo_grupo or "Financiamiento", list(datos.items()))
+            for titulo_grupo, datos in grupos
+        ],
         pie,
-    ], className=f"vision-exec-card {codigo} educacion-superior-nivel-card")
+    ], className=(f"vision-exec-card {codigo} educacion-superior-nivel-card "
+                  "presidencia-card presidencia-card-general"))
 
 
 def tarjetas_universidades_politecnicas():
@@ -6103,7 +6751,8 @@ def _tarjeta_beca_educacion_superior(dato):
             html.Span("Corte: octubre 2026"),
             html.Span("Actualización: conforme a planificación de cada programa"),
         ], className="educacion-media-periodo-pie"),
-    ], className="vision-exec-card becas programa-con-ayuda", tabIndex=0)
+    ], className=("vision-exec-card becas programa-con-ayuda "
+                  "presidencia-card presidencia-programa-card"), tabIndex=0)
 
 
 def tarjetas_becas_educacion_superior():
@@ -6894,7 +7543,8 @@ def _tarjeta_resumen_deporte(dato, color):
             for etiqueta, valor in metricas
         ], className=f"deporte-programa-metricas items-{len(metricas)}"),
     ], className=(f"vision-exec-card programa-resumen-card deporte-resumen-card "
-                  f"programa-{color} {dato['codigo']}"))
+                  f"programa-{color} {dato['codigo']} "
+                  "presidencia-card presidencia-programa-card"))
 
 
 def seccion_informacion_general_deporte():
@@ -7114,7 +7764,8 @@ def _tarjeta_resumen_cultura(dato, color):
             className="educacion-media-periodo-pie",
         ),
     ], className=(f"vision-exec-card programa-resumen-card programa-con-ayuda "
-                  f"cultura-resumen-card programa-{color} {dato['codigo']}"),
+                  f"cultura-resumen-card programa-{color} {dato['codigo']} "
+                  "presidencia-card presidencia-programa-card"),
        tabIndex=0)
 
 
@@ -7162,9 +7813,11 @@ def _tarjeta_programa_cultura(dato, color):
         html.Div(
             _metricas_programa_cultura(dato, anio_inicial),
             id={"type": "cultura-programa-metricas", "index": dato["codigo"]},
+            className="cultura-programa-contenido",
         ),
     ], className=(f"vision-exec-card programa-resumen-card programa-con-ayuda "
-                  f"cultura-programa-card programa-{color} {dato['codigo']}"),
+                  f"cultura-programa-card programa-{color} {dato['codigo']} "
+                  "presidencia-card presidencia-programa-card"),
        tabIndex=0)
 
 
@@ -7296,27 +7949,387 @@ def seccion_mapa_sectorial(nombre_sector, descripcion, categorias, indicadores):
     ], className="territorial-section territorial-sector-section")
 
 
-def seccion_mapa_deporte():
-    return seccion_mapa_sectorial(
-        "Deporte",
-        "Centros, organismos, infraestructura y puntos de atención solicitados en las observaciones.",
-        [("alto", "Alto rendimiento"), ("formativo", "Formativo"),
-         ("organismos", "Organismos deportivos"), ("infraestructura", "Infraestructura"),
-         ("activate", "Actívate"), ("cancha", "Vamos a la Cancha")],
-        [("Centros de alto rendimiento", 6), ("Centros activos", 6),
-         ("Puntos Actívate", 585), ("Puntos Vamos a la Cancha", 480)],
+INFRAESTRUCTURA_DEPORTE_MAPA = [
+    {"nombre": "Inmueble Mera", "tipo": "Inmueble", "provincia": "Pastaza",
+     "canton": "Mera", "parroquia": "Mera", "lat": -1.461772, "lon": -78.111629},
+    {"nombre": "Inmueble Pastaza", "tipo": "Inmueble", "provincia": "Pastaza",
+     "canton": "Pastaza", "parroquia": "Puyo", "lat": -1.492881, "lon": -77.999803},
+    {"nombre": "Centro Activo IV", "tipo": "Centro activo", "provincia": "Azuay",
+     "canton": "Cuenca", "parroquia": "Machángara", "lat": -2.887705, "lon": -78.959708},
+    {"nombre": "Centro Activo V Ushimana", "tipo": "Centro activo", "provincia": "Pichincha",
+     "canton": "Distrito Metropolitano de Quito", "parroquia": "Alangasí",
+     "lat": -0.306408, "lon": -78.436344},
+    {"nombre": "Centro Activo VII Angamarca", "tipo": "Centro activo", "provincia": "Pichincha",
+     "canton": "Distrito Metropolitano de Quito", "parroquia": "Alangasí",
+     "lat": -0.298356, "lon": -78.425687},
+    {"nombre": "CEAR Rioverde", "tipo": "Centro de alto rendimiento", "provincia": "Esmeraldas",
+     "canton": "Rioverde", "parroquia": "Rioverde", "lat": 1.071538, "lon": -79.407025},
+    {"nombre": "Complejo Pampas Coloradas", "tipo": "Complejo deportivo", "provincia": "Galápagos",
+     "canton": "Santa Cruz", "parroquia": "Puerto Ayora", "lat": -0.7437, "lon": -90.3130},
+    {"nombre": "Centro Activo IX Petroecuador", "tipo": "Centro activo", "provincia": "Pichincha",
+     "canton": "Rumiñahui", "parroquia": "San Rafael", "lat": -0.309134, "lon": -78.445888},
+    {"nombre": "Centro Activo II Iñaquito", "tipo": "Centro activo", "provincia": "Pichincha",
+     "canton": "Distrito Metropolitano de Quito", "parroquia": "Iñaquito",
+     "lat": -0.181123, "lon": -78.488957},
+    {"nombre": "Cancha Deportiva El Juncal", "tipo": "Cancha deportiva", "provincia": "Imbabura",
+     "canton": "Ibarra", "parroquia": "Ambuquí", "lat": 0.434198, "lon": -77.964207},
+    {"nombre": "Complejo Deportivo San Rafael", "tipo": "Complejo deportivo", "provincia": "Esmeraldas",
+     "canton": "Esmeraldas", "parroquia": "Simón Plata Torres", "lat": 0.908519, "lon": -79.691244},
+    {"nombre": "Piscina Semi Olímpica de Calvas", "tipo": "Piscina", "provincia": "Loja",
+     "canton": "Calvas", "parroquia": "Cariamanga", "lat": -4.321083, "lon": -79.555317},
+    {"nombre": "Coliseo Carcelén", "tipo": "Coliseo", "provincia": "Pichincha",
+     "canton": "Distrito Metropolitano de Quito", "parroquia": "Carcelén",
+     "lat": -0.088488, "lon": -78.471622},
+    {"nombre": "CEAR Durán", "tipo": "Centro de alto rendimiento", "provincia": "Guayas",
+     "canton": "Durán", "parroquia": "Eloy Alfaro", "lat": -2.189851, "lon": -79.840901},
+    {"nombre": "CEAR Cuenca", "tipo": "Centro de alto rendimiento", "provincia": "Azuay",
+     "canton": "Cuenca", "parroquia": "Totoracocha", "lat": -2.890361, "lon": -78.975313},
+    {"nombre": "Coliseo de Deportes Sevilla de Oro", "tipo": "Coliseo", "provincia": "Azuay",
+     "canton": "Sevilla de Oro", "parroquia": "Sevilla de Oro", "lat": -2.800376, "lon": -78.656195},
+    {"nombre": "CEAR Carpuela", "tipo": "Centro de alto rendimiento", "provincia": "Imbabura",
+     "canton": "Ibarra", "parroquia": "Ambuquí", "lat": 0.432765, "lon": -77.990782},
+    {"nombre": "Coliseo de Deportes La Troncal", "tipo": "Coliseo", "provincia": "Cañar",
+     "canton": "La Troncal", "parroquia": "La Troncal", "lat": -2.431621, "lon": -79.322710},
+    {"nombre": "Coliseo 3000", "tipo": "Coliseo", "provincia": "El Oro",
+     "canton": "Machala", "parroquia": "Machala", "lat": -3.255851, "lon": -79.970383},
+    {"nombre": "Polideportivos Tipo B", "tipo": "Polideportivo", "provincia": "El Oro",
+     "canton": "Machala", "parroquia": "Machala", "lat": -3.264718, "lon": -79.964851},
+    {"nombre": "Complejo Leonidas Proaño", "tipo": "Complejo deportivo", "provincia": "Morona Santiago",
+     "canton": "Morona", "parroquia": "General Proaño", "lat": -2.276220, "lon": -78.125704},
+    {"nombre": "Centro Activo I", "tipo": "Centro activo", "provincia": "Pichincha",
+     "canton": "Distrito Metropolitano de Quito", "parroquia": "Iñaquito",
+     "lat": -0.171320, "lon": -78.477654},
+]
+
+
+def _filtrar_infraestructura_deporte(tipo="Todos"):
+    return [d for d in INFRAESTRUCTURA_DEPORTE_MAPA
+            if tipo in (None, "Todos") or d["tipo"] == tipo]
+
+
+def _figura_mapa_infraestructura_deporte(tipo="Todos"):
+    registros = _filtrar_infraestructura_deporte(tipo)
+    figura = go.Figure()
+    geojson = _cargar_geojson_provincias()
+    if geojson:
+        nombres = [f["properties"]["nombre"] for f in geojson["features"]]
+        figura.add_trace(go.Choropleth(
+            geojson=geojson, locations=nombres, featureidkey="properties.nombre",
+            z=[1] * len(nombres), zmin=0, zmax=1,
+            colorscale=[[0, "#f8f8fc"], [1, "#f8f8fc"]], showscale=False,
+            marker_line_color="#b8bfd1", marker_line_width=.8, hoverinfo="skip",
+        ))
+    colores = {
+        "Centro activo": "#4f449a", "Centro de alto rendimiento": "#17245b",
+        "Coliseo": "#efb629", "Complejo deportivo": "#2b8a8a",
+        "Inmueble": "#8d78ca", "Cancha deportiva": "#6a9f58",
+        "Piscina": "#4f91bd", "Polideportivo": "#c8783c",
+    }
+    figura.add_trace(go.Scattergeo(
+        lat=[d["lat"] for d in registros], lon=[d["lon"] for d in registros],
+        mode="markers",
+        marker={"size": 10, "color": [colores.get(d["tipo"], "#4f449a") for d in registros],
+                "line": {"width": 1.4, "color": "#ffffff"}, "opacity": .95},
+        hovertext=[
+            f"<b>{d['nombre']}</b><br>{d['tipo']}<br>{d['provincia']} · {d['canton']}"
+            f"<br>Parroquia: {d['parroquia']}" for d in registros
+        ],
+        hovertemplate="%{hovertext}<extra></extra>", showlegend=False,
+    ))
+    figura.update_geos(
+        scope="south america", lataxis_range=[-5.6, 2.1], lonaxis_range=[-92.0, -74.0],
+        showcountries=False, showland=not bool(geojson), landcolor="#f8f8fc",
+        showocean=True, oceancolor="#ffffff", resolution=50,
+        bgcolor="#ffffff", fitbounds=False,
     )
+    figura.update_layout(
+        height=350, margin=dict(l=8, r=8, t=8, b=8),
+        paper_bgcolor="#ffffff", plot_bgcolor="#ffffff",
+        font={"family": "Arial", "color": "#17245b"}, showlegend=False,
+    )
+    return figura
+
+
+def _resumen_infraestructura_deporte(tipo="Todos"):
+    registros = _filtrar_infraestructura_deporte(tipo)
+    conteos = {}
+    for dato in registros:
+        conteos[dato["provincia"]] = conteos.get(dato["provincia"], 0) + 1
+    orden = sorted(conteos.items(), key=lambda x: (-x[1], x[0]))
+    return html.Div([
+        html.Div([html.Span("●", className="territorial-ranking-icon"),
+                  html.H4("Ubicaciones por provincia")], className="territorial-ranking-heading"),
+        html.Div([
+            html.Div([
+                html.Span(str(i), className="territorial-rank-numero"),
+                html.Span(provincia, className="territorial-rank-provincia"),
+                html.Div(html.Span(style={"width": f"{valor / max(1, orden[0][1]) * 100}%"}),
+                         className="territorial-rank-barra"),
+                html.Strong(formato_valor(valor)),
+            ], className="territorial-rank-fila")
+            for i, (provincia, valor) in enumerate(orden, 1)
+        ], className="territorial-ranking-lista"),
+        html.P(
+            f"{len(registros)} ubicaciones georreferenciadas · "
+            f"{len(conteos)} provincias representadas.",
+            className="territorial-method-note",
+        ),
+    ], className="territorial-ranking-block")
+
+
+def seccion_mapa_deporte():
+    tipos = ["Todos"] + sorted({d["tipo"] for d in INFRAESTRUCTURA_DEPORTE_MAPA})
+    return html.Section([
+        html.Div([
+            html.Div([html.H3("Infraestructura deportiva · distribución territorial"),
+                      html.P("Ubicación de los inmuebles e instalaciones registrados en la matriz institucional.")]),
+            html.Span("Datos georreferenciados", className="territorial-source-badge"),
+        ], className="territorial-map-heading"),
+        html.Div([
+            html.Span("Filtrar por tipo"),
+            dcc.Dropdown(
+                id="deporte-infraestructura-tipo",
+                options=[{"label": t, "value": t} for t in tipos],
+                value="Todos", clearable=False, searchable=False,
+                className="programa-anio-dropdown deporte-mapa-filtro",
+            ),
+        ], className="territorial-toolbar deporte-map-toolbar"),
+        html.Div([
+            html.Div([
+                html.Div([html.H4("Ubicación de la infraestructura deportiva",
+                                  id="deporte-infraestructura-mapa-titulo"),
+                          html.P("Seleccione un punto para consultar nombre, tipo y ubicación.")],
+                         className="territorial-map-title"),
+                dcc.Graph(
+                    id="deporte-infraestructura-mapa",
+                    figure=_figura_mapa_infraestructura_deporte("Todos"),
+                    config={"displayModeBar": False, "responsive": True},
+                    className="territorial-map-graph",
+                ),
+            ], className="territorial-map-card"),
+            html.Div(
+                _resumen_infraestructura_deporte("Todos"),
+                id="deporte-infraestructura-resumen",
+                className="territorial-ranking-card",
+            ),
+        ], className="territorial-map-grid"),
+    ], className="territorial-section deporte-territorial-section")
+
+
+@app.callback(
+    Output("deporte-infraestructura-mapa", "figure"),
+    Output("deporte-infraestructura-mapa-titulo", "children"),
+    Output("deporte-infraestructura-resumen", "children"),
+    Input("deporte-infraestructura-tipo", "value"),
+)
+def actualizar_mapa_infraestructura_deporte(tipo):
+    tipo = tipo if tipo in {"Todos"} | {d["tipo"] for d in INFRAESTRUCTURA_DEPORTE_MAPA} else "Todos"
+    titulo = ("Ubicación de la infraestructura deportiva" if tipo == "Todos"
+              else f"Ubicación de {tipo.lower()}")
+    return (_figura_mapa_infraestructura_deporte(tipo), titulo,
+            _resumen_infraestructura_deporte(tipo))
+
+
+CULTURA_INFRAESTRUCTURA_MAPA = [
+    {"nombre": "Archivo Histórico del Guayas", "tipo": "Archivos", "provincia": "Guayas",
+     "ciudad": "Guayaquil", "lat": -2.1710, "lon": -79.9224},
+    {"nombre": "Archivo Histórico Nacional", "tipo": "Archivos", "provincia": "Pichincha",
+     "ciudad": "Quito", "lat": -0.1807, "lon": -78.4678},
+    {"nombre": "Archivo Histórico y Musicoteca", "tipo": "Archivos", "provincia": "Pichincha",
+     "ciudad": "Quito", "lat": -0.1807, "lon": -78.4678},
+    {"nombre": "Biblioteca de Ciencias Humanas, sede Quito", "tipo": "Bibliotecas",
+     "provincia": "Pichincha", "ciudad": "Quito", "lat": -0.1807, "lon": -78.4678},
+    {"nombre": "Biblioteca Nacional Eugenio Espejo", "tipo": "Bibliotecas",
+     "provincia": "Pichincha", "ciudad": "Quito", "lat": -0.1807, "lon": -78.4678},
+    {"nombre": "Centro Cívico Ciudad Alfaro - Montecristi", "tipo": "Museos y espacios culturales",
+     "provincia": "Manabí", "ciudad": "Montecristi", "lat": -1.0458, "lon": -80.6589},
+    {"nombre": "Centro Cívico Cultural Mariscal Sucre", "tipo": "Museos y espacios culturales",
+     "provincia": "Pichincha", "ciudad": "Quito", "lat": -0.1807, "lon": -78.4678},
+    {"nombre": "Centro Cívico Eloy Alfaro - Guayaquil", "tipo": "Museos y espacios culturales",
+     "provincia": "Guayas", "ciudad": "Guayaquil", "lat": -2.1710, "lon": -79.9224},
+    {"nombre": "Museo y Complejo Cultural Fábrica Textil Imbabura",
+     "tipo": "Museos y espacios culturales", "provincia": "Imbabura",
+     "ciudad": "Atuntaqui", "lat": 0.3327, "lon": -78.2137},
+    {"nombre": "Museo Amantes de Sumpa", "tipo": "Museos y espacios culturales",
+     "provincia": "Santa Elena", "ciudad": "Santa Elena", "lat": -2.2260, "lon": -80.8580},
+    {"nombre": "Museo Antropológico y de Arte Contemporáneo",
+     "tipo": "Museos y espacios culturales", "provincia": "Guayas",
+     "ciudad": "Guayaquil", "lat": -2.1710, "lon": -79.9224},
+    {"nombre": "Museo Bahía de Caráquez", "tipo": "Museos y espacios culturales",
+     "provincia": "Manabí", "ciudad": "Bahía de Caráquez", "lat": -0.6000, "lon": -80.4240},
+    {"nombre": "Museo Camilo Egas", "tipo": "Museos y espacios culturales",
+     "provincia": "Pichincha", "ciudad": "Quito", "lat": -0.1807, "lon": -78.4678},
+    {"nombre": "Museo de Portoviejo y Archivo Histórico", "tipo": "Museos y espacios culturales",
+     "provincia": "Manabí", "ciudad": "Portoviejo", "lat": -1.0546, "lon": -80.4545},
+    {"nombre": "Museo de Sitio y Parque Arqueológico Pumapungo",
+     "tipo": "Museos y espacios culturales", "provincia": "Azuay",
+     "ciudad": "Cuenca", "lat": -2.9001, "lon": -79.0059},
+    {"nombre": "Museo Nacional del Ecuador - MUNA", "tipo": "Museos y espacios culturales",
+     "provincia": "Pichincha", "ciudad": "Quito", "lat": -0.1807, "lon": -78.4678},
+    {"nombre": "Museo Nahim Isaías", "tipo": "Museos y espacios culturales",
+     "provincia": "Guayas", "ciudad": "Guayaquil", "lat": -2.1710, "lon": -79.9224},
+    {"nombre": "Museo Presley Norton", "tipo": "Museos y espacios culturales",
+     "provincia": "Guayas", "ciudad": "Guayaquil", "lat": -2.1710, "lon": -79.9224},
+    {"nombre": "Museo y Centro Cultural Esmeraldas", "tipo": "Museos y espacios culturales",
+     "provincia": "Esmeraldas", "ciudad": "Esmeraldas", "lat": 0.9682, "lon": -79.6517},
+    {"nombre": "Museo y Centro Cultural Ibarra", "tipo": "Museos y espacios culturales",
+     "provincia": "Imbabura", "ciudad": "Ibarra", "lat": 0.3517, "lon": -78.1223},
+    {"nombre": "Museo y Centro Cultural Loja", "tipo": "Museos y espacios culturales",
+     "provincia": "Loja", "ciudad": "Loja", "lat": -3.9931, "lon": -79.2042},
+    {"nombre": "Museo y Centro Cultural Manta", "tipo": "Museos y espacios culturales",
+     "provincia": "Manabí", "ciudad": "Manta", "lat": -0.9677, "lon": -80.7089},
+    {"nombre": "Museo y Centro Cultural Riobamba", "tipo": "Museos y espacios culturales",
+     "provincia": "Chimborazo", "ciudad": "Riobamba", "lat": -1.6635, "lon": -78.6546},
+    {"nombre": "Sitio Arqueológico Ingapirca", "tipo": "Museos y espacios culturales",
+     "provincia": "Cañar", "ciudad": "Cañar", "lat": -2.5589, "lon": -78.9385},
+    {"nombre": "Sitio Arqueológico Jaboncillo", "tipo": "Museos y espacios culturales",
+     "provincia": "Manabí", "ciudad": "Portoviejo", "lat": -1.0546, "lon": -80.4545},
+]
+
+
+def _filtrar_infraestructura_cultura(tipo="Todos"):
+    return [d for d in CULTURA_INFRAESTRUCTURA_MAPA
+            if tipo in (None, "Todos") or d["tipo"] == tipo]
+
+
+def _figura_mapa_infraestructura_cultura(tipo="Todos"):
+    registros = _filtrar_infraestructura_cultura(tipo)
+    figura = go.Figure()
+    geojson = _cargar_geojson_provincias()
+    if geojson:
+        nombres = [f["properties"]["nombre"] for f in geojson["features"]]
+        figura.add_trace(go.Choropleth(
+            geojson=geojson, locations=nombres, featureidkey="properties.nombre",
+            z=[1] * len(nombres), zmin=0, zmax=1,
+            colorscale=[[0, "#f8f8fc"], [1, "#f8f8fc"]], showscale=False,
+            marker_line_color="#b8bfd1", marker_line_width=.8, hoverinfo="skip",
+        ))
+
+    # Varios registros comparten ciudad. Se aplica un desplazamiento visual
+    # mínimo para que cada punto pueda seleccionarse sin atribuirle una
+    # coordenada predial inexistente en la fuente.
+    desplazamientos = [
+        (0, 0), (.025, 0), (-.025, 0), (0, .025), (0, -.025),
+        (.018, .018), (-.018, .018), (.018, -.018), (-.018, -.018),
+    ]
+    usados = {}
+    latitudes, longitudes = [], []
+    for dato in registros:
+        clave = dato["ciudad"]
+        posicion = usados.get(clave, 0)
+        usados[clave] = posicion + 1
+        dy, dx = desplazamientos[posicion % len(desplazamientos)]
+        latitudes.append(dato["lat"] + dy)
+        longitudes.append(dato["lon"] + dx)
+
+    colores = {
+        "Archivos": "#4f449a",
+        "Bibliotecas": "#efb629",
+        "Museos y espacios culturales": "#2b8a8a",
+    }
+    figura.add_trace(go.Scattergeo(
+        lat=latitudes, lon=longitudes, mode="markers",
+        marker={"size": 10, "color": [colores.get(d["tipo"], "#4f449a") for d in registros],
+                "line": {"width": 1.4, "color": "#ffffff"}, "opacity": .95},
+        hovertext=[
+            f"<b>{d['nombre']}</b><br>{d['tipo']}<br>{d['provincia']} · {d['ciudad']}"
+            for d in registros
+        ],
+        hovertemplate="%{hovertext}<extra></extra>", showlegend=False,
+    ))
+    figura.update_geos(
+        scope="south america", lataxis_range=[-5.6, 2.1], lonaxis_range=[-82.3, -74.2],
+        showcountries=False, showland=not bool(geojson), landcolor="#f8f8fc",
+        showocean=True, oceancolor="#ffffff", resolution=50,
+        bgcolor="#ffffff", fitbounds=False,
+    )
+    figura.update_layout(
+        height=350, margin=dict(l=8, r=8, t=8, b=8),
+        paper_bgcolor="#ffffff", plot_bgcolor="#ffffff",
+        font={"family": "Arial", "color": "#17245b"}, showlegend=False,
+    )
+    return figura
+
+
+def _resumen_infraestructura_cultura(tipo="Todos"):
+    registros = _filtrar_infraestructura_cultura(tipo)
+    conteos = {}
+    for dato in registros:
+        conteos[dato["provincia"]] = conteos.get(dato["provincia"], 0) + 1
+    orden = sorted(conteos.items(), key=lambda x: (-x[1], x[0]))
+    return html.Div([
+        html.Div([html.Span("●", className="territorial-ranking-icon"),
+                  html.H4("Ubicaciones por provincia")], className="territorial-ranking-heading"),
+        html.Div([
+            html.Div([
+                html.Span(str(i), className="territorial-rank-numero"),
+                html.Span(provincia, className="territorial-rank-provincia"),
+                html.Div(html.Span(style={"width": f"{valor / max(1, orden[0][1]) * 100}%"}),
+                         className="territorial-rank-barra"),
+                html.Strong(formato_valor(valor)),
+            ], className="territorial-rank-fila")
+            for i, (provincia, valor) in enumerate(orden, 1)
+        ], className="territorial-ranking-lista"),
+        html.P(
+            f"{len(registros)} ubicaciones registradas · {len(conteos)} provincias representadas. "
+            "Los puntos corresponden a una referencia por ciudad.",
+            className="territorial-method-note",
+        ),
+    ], className="territorial-ranking-block")
 
 
 def seccion_mapa_cultura():
-    return seccion_mapa_sectorial(
-        "Cultura",
-        "Organizaciones, empresas y espacios culturales solicitados en las observaciones.",
-        [("organizaciones", "Organizaciones"), ("empresas", "Empresas culturales"),
-         ("espacios", "Espacios e infraestructura")],
-        [("Organizaciones sociales", 252), ("Empresas culturales", 488),
-         ("Museos", 20), ("Archivos y bibliotecas", 5)],
-    )
+    tipos = ["Todos", "Museos y espacios culturales", "Archivos", "Bibliotecas"]
+    return html.Section([
+        html.Div([
+            html.Div([html.H3("Cultura · distribución territorial"),
+                      html.P("Archivos, bibliotecas, museos y espacios culturales de la matriz institucional.")]),
+            html.Span("25 ubicaciones registradas", className="territorial-source-badge"),
+        ], className="territorial-map-heading"),
+        html.Div([
+            html.Span("Filtrar por tipo"),
+            dcc.Dropdown(
+                id="cultura-infraestructura-tipo",
+                options=[{"label": t, "value": t} for t in tipos],
+                value="Todos", clearable=False, searchable=False,
+                className="programa-anio-dropdown cultura-mapa-filtro",
+            ),
+        ], className="territorial-toolbar cultura-map-toolbar"),
+        html.Div([
+            html.Div([
+                html.Div([html.H4("Ubicación de espacios e infraestructura cultural",
+                                  id="cultura-infraestructura-mapa-titulo"),
+                          html.P("Ubicación referencial por ciudad; seleccione un punto para ver el detalle.")],
+                         className="territorial-map-title"),
+                dcc.Graph(
+                    id="cultura-infraestructura-mapa",
+                    figure=_figura_mapa_infraestructura_cultura("Todos"),
+                    config={"displayModeBar": False, "responsive": True},
+                    className="territorial-map-graph",
+                ),
+            ], className="territorial-map-card"),
+            html.Div(
+                _resumen_infraestructura_cultura("Todos"),
+                id="cultura-infraestructura-resumen",
+                className="territorial-ranking-card",
+            ),
+        ], className="territorial-map-grid"),
+    ], className="territorial-section cultura-territorial-section")
+
+
+@app.callback(
+    Output("cultura-infraestructura-mapa", "figure"),
+    Output("cultura-infraestructura-mapa-titulo", "children"),
+    Output("cultura-infraestructura-resumen", "children"),
+    Input("cultura-infraestructura-tipo", "value"),
+)
+def actualizar_mapa_infraestructura_cultura(tipo):
+    tipos_validos = {"Todos", "Museos y espacios culturales", "Archivos", "Bibliotecas"}
+    tipo = tipo if tipo in tipos_validos else "Todos"
+    titulo = ("Ubicación de espacios e infraestructura cultural" if tipo == "Todos"
+              else f"Ubicación de {tipo.lower()}")
+    return (_figura_mapa_infraestructura_cultura(tipo), titulo,
+            _resumen_infraestructura_cultura(tipo))
 
 
 @app.callback(
@@ -8757,6 +9770,172 @@ def actualizar_mapa_recursos(recurso, metrica):
     )
 
 
+# La fuente del Fenómeno de El Niño reporta zonas administrativas. En Z8 el
+# alcance corresponde específicamente a Guayaquil, Durán y Samborondón; por
+# eso el mapa utiliza puntos zonales y no colorea toda la provincia del Guayas.
+FENOMENO_NINO_ZONAS = [
+    {"zona": "Z1", "territorio": "Esmeraldas e Imbabura", "eventos": 28,
+     "alcanzados": 6783, "lat": 0.45, "lon": -78.80},
+    {"zona": "Z2", "territorio": "Napo, Orellana y Pichincha", "eventos": 8,
+     "alcanzados": 1365, "lat": -0.45, "lon": -77.55},
+    {"zona": "Z3", "territorio": "Chimborazo y Cotopaxi", "eventos": 15,
+     "alcanzados": "Monitoreo preventivo", "lat": -1.35, "lon": -78.65},
+    {"zona": "Z4", "territorio": "Manabí y Santo Domingo", "eventos": 50,
+     "alcanzados": 15402, "lat": -0.75, "lon": -79.70},
+    {"zona": "Z5", "territorio": "Guayas, Los Ríos, Bolívar y Santa Elena", "eventos": 487,
+     "alcanzados": 222185, "lat": -1.75, "lon": -79.65},
+    {"zona": "Z6", "territorio": "Azuay, Cañar y Morona Santiago", "eventos": 16,
+     "alcanzados": 1158, "lat": -2.65, "lon": -78.65},
+    {"zona": "Z7", "territorio": "El Oro y Loja", "eventos": 43,
+     "alcanzados": 10773, "lat": -3.55, "lon": -79.60, "nota": "*"},
+    {"zona": "Z8", "territorio": "Guayaquil, Durán y Samborondón", "eventos": 666,
+     "alcanzados": 468422, "lat": -2.15, "lon": -79.85, "nota": "*"},
+    {"zona": "Z9", "territorio": "Distrito Metropolitano de Quito", "eventos": 1,
+     "alcanzados": "No reportado", "lat": -0.18, "lon": -78.47},
+]
+
+
+def _figura_fenomeno_nino():
+    """Mapa nacional con puntos proporcionales a los eventos de cada zona."""
+    figura = go.Figure()
+    geojson = _cargar_geojson_provincias()
+    if geojson:
+        nombres = [f["properties"]["nombre"] for f in geojson["features"]]
+        figura.add_trace(go.Choropleth(
+            geojson=geojson, locations=nombres, featureidkey="properties.nombre",
+            z=[1] * len(nombres), zmin=0, zmax=1,
+            colorscale=[[0, "#f8f8fc"], [1, "#f8f8fc"]], showscale=False,
+            marker_line_color="#b8bfd1", marker_line_width=.8,
+            hoverinfo="skip",
+        ))
+
+    hover = []
+    for dato in FENOMENO_NINO_ZONAS:
+        alcanzados = (formato_valor(dato["alcanzados"])
+                      if isinstance(dato["alcanzados"], (int, float))
+                      else dato["alcanzados"])
+        hover.append(
+            f"<b>{dato['zona']} · {dato['territorio']}</b>"
+            f"<br>Eventos: {formato_valor(dato['eventos'])}"
+            f"<br>Personas alcanzadas: {alcanzados}{dato.get('nota', '')}"
+        )
+    figura.add_trace(go.Scattergeo(
+        lat=[d["lat"] for d in FENOMENO_NINO_ZONAS],
+        lon=[d["lon"] for d in FENOMENO_NINO_ZONAS],
+        mode="markers+text",
+        text=[d["zona"] for d in FENOMENO_NINO_ZONAS],
+        textposition="top center",
+        textfont={"size": 10, "color": "#17245b", "family": "Arial Black"},
+        marker={
+            "size": [max(12, min(42, 10 + (d["eventos"] ** .5) * 1.25))
+                     for d in FENOMENO_NINO_ZONAS],
+            "color": ["#4f449a" if i % 2 == 0 else "#efb629"
+                      for i in range(len(FENOMENO_NINO_ZONAS))],
+            "line": {"width": 1.5, "color": "#ffffff"},
+            "opacity": .9,
+        },
+        hovertext=hover, hovertemplate="%{hovertext}<extra></extra>", showlegend=False,
+    ))
+    figura.update_geos(
+        scope="south america", lataxis_range=[-5.6, 2.0], lonaxis_range=[-82.3, -74.2],
+        showcountries=False, showland=not bool(geojson), landcolor="#f8f8fc",
+        showocean=True, oceancolor="#ffffff", resolution=50,
+        bgcolor="#ffffff", fitbounds=False,
+    )
+    figura.update_layout(
+        height=350, margin=dict(l=10, r=10, t=8, b=8),
+        paper_bgcolor="#ffffff", plot_bgcolor="#ffffff",
+        font={"family": "Arial", "color": "#17245b"}, showlegend=False,
+    )
+    return figura
+
+
+def _tarjeta_resumen_fenomeno(etiqueta, valor, nota=""):
+    return html.Div([
+        html.Span(etiqueta), html.Strong(formato_valor(valor)),
+        html.Small(nota) if nota else None,
+    ], className="fenomeno-resumen-card")
+
+
+def seccion_respuesta_fenomeno_nino():
+    """Síntesis nacional y territorial de la respuesta educativa reportada."""
+    return html.Div(id="gestion-fenomeno-nino", children=[
+        encabezado_seccion_presidencia(
+            "", "Respuesta educativa ante el Fenómeno de El Niño",
+            "Impacto registrado, comunidad alcanzada y acciones para la continuidad educativa.",
+            "Último período disponible",
+            "gestion-fenomeno-nino-encabezado",
+        ),
+        html.Div([
+            _tarjeta_resumen_fenomeno(
+                "Eventos adversos de origen natural", 1314, "Asociados a la época lluviosa"
+            ),
+            _tarjeta_resumen_fenomeno("Instituciones educativas alcanzadas", 1115),
+            _tarjeta_resumen_fenomeno("Provincias alcanzadas", 18),
+            _tarjeta_resumen_fenomeno("Cantones alcanzados", 76),
+        ], className="fenomeno-resumen-grid"),
+        html.Div([
+            html.Div([html.Span("Estudiantes"), html.Strong(formato_valor(691888))]),
+            html.Div([html.Span("Docentes"), html.Strong(formato_valor(34029))]),
+            html.Div([html.Span("Personal administrativo"), html.Strong(formato_valor(1579))]),
+        ], className="fenomeno-comunidad"),
+        html.Section([
+            html.Div([
+                html.Div([html.H3("Fenómeno de El Niño · información por zona"),
+                          html.P("Eventos registrados y personas alcanzadas según la fuente institucional.")]),
+                html.Span("Datos zonales", className="territorial-source-badge"),
+            ], className="territorial-map-heading"),
+            html.Div([
+                html.Div([
+                    html.Div([html.H4("Distribución territorial de los eventos"),
+                              html.P("El tamaño de cada punto representa el número de eventos.")],
+                             className="territorial-map-title"),
+                    dcc.Graph(
+                        figure=_figura_fenomeno_nino(),
+                        config={"displayModeBar": False, "responsive": True},
+                        className="territorial-map-graph",
+                    ),
+                ], className="territorial-map-card"),
+                html.Div([
+                    html.Div([
+                        html.Div([html.Span("#", className="territorial-ranking-icon"),
+                                  html.H4("Detalle por zona")],
+                                 className="territorial-ranking-heading"),
+                        html.Div([
+                            html.Div([
+                                html.Strong(dato["zona"]),
+                                html.Span(dato["territorio"]),
+                                html.B(formato_valor(dato["eventos"])),
+                                html.Em(
+                                    (formato_valor(dato["alcanzados"])
+                                     if isinstance(dato["alcanzados"], (int, float))
+                                     else dato["alcanzados"]) + dato.get("nota", "")
+                                ),
+                            ], className="fenomeno-zona-fila")
+                            for dato in FENOMENO_NINO_ZONAS
+                        ], className="fenomeno-zonas-lista"),
+                        html.P(
+                            "Columnas: eventos y personas alcanzadas. *Z7 y Z8 registran "
+                            "alojamientos temporales activos; Z8 concentra el mayor impacto numérico.",
+                            className="territorial-method-note",
+                        ),
+                    ], className="territorial-ranking-block"),
+                ], className="territorial-ranking-card"),
+            ], className="territorial-map-grid"),
+        ], className="territorial-section fenomeno-territorial-section"),
+        html.Div([
+            _tarjeta_resumen_fenomeno("Problemas en el servicio educativo", 1080),
+            _tarjeta_resumen_fenomeno("Daños directos en infraestructura", 35),
+        ], className="fenomeno-resumen-grid"),
+        html.Div([
+            html.Div([html.Span("Planes de continuidad educativa (PCE)"),
+                      html.Strong(formato_valor(1032))]),
+            html.Div([html.Span("Instituciones que retornaron a modalidad presencial"),
+                      html.Strong(formato_valor(852))]),
+        ], className="fenomeno-continuidad"),
+    ])
+
+
 def observacion_regimenes():
     """Aclaración institucional solicitada para las desagregaciones.
 
@@ -8835,6 +10014,7 @@ def pagina_gestion_educativa():
             html.A("Educación media", href="#gestion-educacion-media"),
             html.A("Recursos educativos", href="#gestion-recursos"),
             html.A("Programas y servicios", href="#gestion-programas"),
+            html.A("Fenómeno de El Niño", href="#gestion-fenomeno-nino"),
         ], className="pres-anclas"),
         html.Div(id="gestion-resumen"),
         encabezado_seccion_presidencia(
@@ -8880,6 +10060,7 @@ def pagina_gestion_educativa():
             _tarjetas_programas_eje2(programas_gestion) if programas_gestion else None,
             html.P(aviso_programas, className="eje2-source-note") if aviso_programas else None,
         ]),
+        seccion_respuesta_fenomeno_nino(),
     ])
 
 
@@ -9576,6 +10757,31 @@ def contenido_seccion(seccion, vice=None, indicador=None):
 
 
 def modulo_seccion(seccion, vice=None, indicador=None):
+    # Visión Ejecutiva ya dispone de su propia navegación horizontal de cinco
+    # viceministerios. Mantener además el menú lateral duplicaba la navegación,
+    # reducía el ancho útil de las tarjetas y contradecía el Anexo 2. Por eso
+    # esta sección se presenta a todo el ancho; los demás módulos conservan su
+    # menú lateral y el botón móvil.
+    if seccion == "vision":
+        return html.Div([
+            html.Div(
+                html.Button(
+                    [html.Span("←", **{"aria-hidden": "true"}),
+                     html.Span("Volver al panel principal")],
+                    id="vision-back-button",
+                    className="vision-back-button",
+                    n_clicks=0,
+                    type="button",
+                    title="Volver al panel principal",
+                ),
+                className="vision-top-actions",
+            ),
+            html.Main(
+                contenido_seccion(seccion, vice, indicador),
+                id="module-detail",
+                className="module-main vision-module-main",
+            )
+        ], className="module-layout vision-module-layout")
     return html.Div([
                      html.Button([
                          html.Span("☰", className="mobile-menu-icon", **{"aria-hidden": "true"}),
@@ -9655,6 +10861,13 @@ def volver_desde_indicadores(n_clicks):
 @app.callback(Output("active-section", "data", allow_duplicate=True),
               Input("side-back", "n_clicks"), prevent_initial_call=True)
 def volver_al_panel(n_clicks):
+    return "home" if n_clicks else no_update
+
+
+@app.callback(Output("active-section", "data", allow_duplicate=True),
+              Input("vision-back-button", "n_clicks"), prevent_initial_call=True)
+def volver_desde_vision(n_clicks):
+    """Reemplaza el botón de regreso que antes estaba en el menú lateral."""
     return "home" if n_clicks else no_update
 
 
