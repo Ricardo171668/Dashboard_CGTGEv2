@@ -8532,6 +8532,12 @@ RECURSO_A_FUENTE_GESTION = {
     "transporte": ("Mobiliario y Transporte Escolar", "transporte"),
 }
 
+# Solo estas matrices tienen una desagregación provincial utilizable. Las
+# tarjetas de Equipamiento y Mobiliario y Transporte Escolar se mantienen en
+# el resumen ejecutivo, pero no se ofrecen como filtros del mapa porque su
+# fuente vigente únicamente permite presentar los totales consolidados.
+RECURSOS_CON_MAPA_TERRITORIAL = {"alimentacion", "uniformes", "textos"}
+
 
 def _datos_provinciales_recurso(codigo):
     nombre_fuente, subgrupo = RECURSO_A_FUENTE_GESTION.get(codigo, (None, None))
@@ -8677,7 +8683,8 @@ def _ranking_territorial_recursos(codigo="alimentacion", metrica="estudiantes"):
 
 def seccion_mapa_recursos_educativos():
     recursos = [{"label": d["titulo"], "value": d["codigo"]}
-                for d in RECURSOS_EDUCATIVOS_ACTUALIZADOS]
+                for d in RECURSOS_EDUCATIVOS_ACTUALIZADOS
+                if d["codigo"] in RECURSOS_CON_MAPA_TERRITORIAL]
     return html.Section([
         html.Div([
             html.Div([html.H3("Recursos educativos · distribución territorial"),
@@ -8692,18 +8699,10 @@ def seccion_mapa_recursos_educativos():
                 className="territorial-pills territorial-resource-tabs",
             ),
             html.Div([
-                html.Div([html.Span("Nivel"), dcc.RadioItems(
-                    options=[{"label": "Región", "value": "region", "disabled": True},
-                             {"label": "Provincia", "value": "provincia"},
-                             {"label": "Cantón", "value": "canton", "disabled": True}],
-                    value="provincia", inline=True, className="territorial-pills",
-                )], className="territorial-control-group"),
                 html.Div([html.Span("Ver"), dcc.RadioItems(
                     id="resource-territory-metric",
-                    options=[{"label": "Cobertura %", "value": "cobertura", "disabled": True},
-                             {"label": "Estudiantes", "value": "estudiantes"},
-                             {"label": "Instituciones", "value": "instituciones"},
-                             {"label": "Inversión", "value": "inversion", "disabled": True}],
+                    options=[{"label": "Estudiantes", "value": "estudiantes"},
+                             {"label": "Instituciones", "value": "instituciones"}],
                     value="estudiantes", inline=True, className="territorial-pills",
                 )], className="territorial-control-group"),
             ], className="territorial-resource-tabs"),
@@ -8736,8 +8735,8 @@ def seccion_mapa_recursos_educativos():
     Input("resource-territory-metric", "value"),
 )
 def actualizar_mapa_recursos(recurso, metrica):
-    recurso = recurso or "alimentacion"
-    metrica = metrica or "estudiantes"
+    recurso = recurso if recurso in RECURSOS_CON_MAPA_TERRITORIAL else "alimentacion"
+    metrica = metrica if metrica in {"estudiantes", "instituciones"} else "estudiantes"
     return (
         _figura_mapa_recursos(recurso, metrica),
         f"Distribución de {_titulo_recurso(recurso)} por provincia",
