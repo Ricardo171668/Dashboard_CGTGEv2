@@ -4071,18 +4071,29 @@ app.index_string = """<!DOCTYPE html>
           font-size: clamp(20px, 2vw, 29px); line-height: 1;
         }
         .fenomeno-resumen-card small {
-          display: block; margin-top: 5px; color: #7a8398; font-size: 9px;
+          display: block; margin-top: 5px; color: #7a8398; font-size: 9.5px;
         }
-        .fenomeno-comunidad {
-          display: grid; grid-template-columns: repeat(3, minmax(0, 1fr));
-          gap: 8px; margin: 0 0 12px;
+        /* Desagregación interna del cuadro (ver captura de Excel: cada llave
+           amarilla es el detalle que vive DENTRO de su propio cuadro, no
+           cuadros aparte). Fila compacta etiqueta/valor bajo la cifra
+           principal, separada por una línea delgada. Mismo tamaño de letra
+           en las cuatro tarjetas, tengan uno o tres renglones de detalle. */
+        .fenomeno-resumen-desglose {
+          display: grid; gap: 6px; margin-top: 10px;
+          padding-top: 9px; border-top: 1px dashed #e1e5ee;
         }
-        .fenomeno-comunidad > div {
-          display: flex; align-items: center; justify-content: space-between; gap: 8px;
-          padding: 10px 12px; border-radius: 9px; background: #f3f2fa;
-          color: #59627d; font-size: 10px; font-weight: 800;
+        .fenomeno-resumen-desglose-fila {
+          display: flex; align-items: baseline; justify-content: space-between;
+          gap: 8px;
         }
-        .fenomeno-comunidad strong { color: #17245b; font-size: 16px; }
+        .fenomeno-resumen-desglose-fila span {
+          display: block; color: #737d95; font-size: 9.5px; font-weight: 800;
+          line-height: 1.3; text-transform: uppercase;
+        }
+        .fenomeno-resumen-desglose-fila strong {
+          display: block; margin: 0; color: #17245b; font-size: 13px;
+          font-weight: 900; white-space: nowrap;
+        }
         .fenomeno-zonas-lista { display: grid; gap: 6px; }
         .fenomeno-zona-fila {
           display: grid; grid-template-columns: 30px minmax(0, 1fr) 58px 82px;
@@ -4097,20 +4108,6 @@ app.index_string = """<!DOCTYPE html>
         .fenomeno-zona-fila b { color: #17245b; text-align: right; }
         .fenomeno-zona-fila em {
           color: #8a6b06; font-style: normal; font-weight: 800; text-align: right;
-        }
-        .fenomeno-continuidad {
-          display: grid; grid-template-columns: repeat(2, minmax(0, 1fr));
-          gap: 8px; margin-top: 12px;
-        }
-        .fenomeno-continuidad > div {
-          padding: 10px 12px; border-left: 4px solid #efb629;
-          border-radius: 8px; background: #fff9df;
-        }
-        .fenomeno-continuidad span {
-          display: block; color: #725c14; font-size: 9px; font-weight: 800;
-        }
-        .fenomeno-continuidad strong {
-          display: block; margin-top: 3px; color: #17245b; font-size: 18px;
         }
         @media (max-width: 1100px) {
           .territorial-map-grid { grid-template-columns: minmax(0, 1fr); }
@@ -4127,9 +4124,7 @@ app.index_string = """<!DOCTYPE html>
           .territorial-region-summary { grid-template-columns: repeat(2, minmax(0, 1fr)); }
           .territorial-rank-fila { grid-template-columns: 15px minmax(0, 1fr) 58px; }
           .territorial-rank-barra { display: none; }
-          .fenomeno-resumen-grid,
-          .fenomeno-comunidad,
-          .fenomeno-continuidad { grid-template-columns: minmax(0, 1fr); }
+          .fenomeno-resumen-grid { grid-template-columns: minmax(0, 1fr); }
           .fenomeno-zona-fila {
             grid-template-columns: 30px minmax(0, 1fr) 52px;
           }
@@ -10013,10 +10008,20 @@ def _figura_fenomeno_nino():
     return figura
 
 
-def _tarjeta_resumen_fenomeno(etiqueta, valor, nota=""):
+def _tarjeta_resumen_fenomeno(etiqueta, valor, nota="", desglose=None):
+    """Cuadro individual con su propia desagregación (ver captura de Excel:
+    cada llave amarilla es el detalle interno de un único cuadro, no cuadros
+    separados). ``desglose`` recibe una lista de pares (etiqueta, valor)."""
     return html.Div([
         html.Span(etiqueta), html.Strong(formato_valor(valor)),
         html.Small(nota) if nota else None,
+        html.Div([
+            html.Div([
+                html.Span(sub_etiqueta),
+                html.Strong(formato_valor(sub_valor)),
+            ], className="fenomeno-resumen-desglose-fila")
+            for sub_etiqueta, sub_valor in desglose
+        ], className="fenomeno-resumen-desglose") if desglose else None,
     ], className="fenomeno-resumen-card")
 
 
@@ -10031,17 +10036,32 @@ def seccion_respuesta_fenomeno_nino():
         ),
         html.Div([
             _tarjeta_resumen_fenomeno(
-                "Eventos adversos de origen natural", 1314, "Asociados a la época lluviosa"
+                "Eventos adversos de origen natural", 1314, "Asociados a la época lluviosa",
+                desglose=[
+                    ("Instituciones educativas", 1115),
+                    ("Provincias afectadas", 18),
+                    ("Cantones afectados", 76),
+                ],
             ),
-            _tarjeta_resumen_fenomeno("Instituciones educativas alcanzadas", 1115),
-            _tarjeta_resumen_fenomeno("Provincias alcanzadas", 18),
-            _tarjeta_resumen_fenomeno("Cantones alcanzados", 76),
+            _tarjeta_resumen_fenomeno(
+                "Comunidad afectada", 1115, "Instituciones educativas afectadas",
+                desglose=[
+                    ("Estudiantes", 691888),
+                    ("Docentes", 34029),
+                    ("Administrativos", 1579),
+                ],
+            ),
+            _tarjeta_resumen_fenomeno(
+                "Tipo de afectación", 1080, "Instituciones con problemas en el servicio educativo",
+                desglose=[("Daños directos en infraestructura", 35)],
+            ),
+            _tarjeta_resumen_fenomeno(
+                "Continuidad y retorno", 1032, "Planes de continuidad educativa (PCE)",
+                desglose=[("Instituciones que retornaron a modalidad presencial", 852)],
+            ),
         ], className="fenomeno-resumen-grid"),
-        html.Div([
-            html.Div([html.Span("Estudiantes"), html.Strong(formato_valor(691888))]),
-            html.Div([html.Span("Docentes"), html.Strong(formato_valor(34029))]),
-            html.Div([html.Span("Personal administrativo"), html.Strong(formato_valor(1579))]),
-        ], className="fenomeno-comunidad"),
+        # El mapa territorial va al final de la sección: resume el detalle por
+        # zona después de los totales nacionales, en vez de interrumpirlos.
         html.Section([
             html.Div([
                 html.Div([html.H3("Fenómeno de El Niño · información por zona"),
@@ -10086,16 +10106,6 @@ def seccion_respuesta_fenomeno_nino():
                 ], className="territorial-ranking-card"),
             ], className="territorial-map-grid"),
         ], className="territorial-section fenomeno-territorial-section"),
-        html.Div([
-            _tarjeta_resumen_fenomeno("Problemas en el servicio educativo", 1080),
-            _tarjeta_resumen_fenomeno("Daños directos en infraestructura", 35),
-        ], className="fenomeno-resumen-grid"),
-        html.Div([
-            html.Div([html.Span("Planes de continuidad educativa (PCE)"),
-                      html.Strong(formato_valor(1032))]),
-            html.Div([html.Span("Instituciones que retornaron a modalidad presencial"),
-                      html.Strong(formato_valor(852))]),
-        ], className="fenomeno-continuidad"),
     ])
 
 
