@@ -1077,8 +1077,20 @@ def obtener_datos(seccion):
     return pd.DataFrame(), None
 
 
-app = Dash(__name__, title="Panel Integrado de Gestión MINEDEC", update_title=None,
-           suppress_callback_exceptions=True)
+app = Dash(
+    __name__,
+    title="Panel Integrado de Gestión MINEDEC",
+    update_title=None,
+    suppress_callback_exceptions=True,
+    # Sin esta etiqueta Safari usa un lienzo virtual cercano a 980 px y luego
+    # reduce toda la página. Eso activa las cuadrículas de tableta/escritorio
+    # en un teléfono y termina comprimiendo las tarjetas hasta mostrar una
+    # letra por línea. El ancho CSS pasa a ser el ancho real del dispositivo.
+    meta_tags=[{
+        "name": "viewport",
+        "content": "width=device-width, initial-scale=1, viewport-fit=cover",
+    }],
+)
 server = app.server
 
 
