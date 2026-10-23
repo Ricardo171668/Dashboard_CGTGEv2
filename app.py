@@ -3381,7 +3381,7 @@ app.index_string = """<!DOCTYPE html>
         .presidencia-gestion-page .presidencia-recurso-card { min-height: 228px !important; }
         .presidencia-gestion-page .presidencia-programa-card { min-height: 228px !important; }
         .presidencia-card .vision-card-title-row {
-          min-height: 42px; margin: 0 108px 7px 0 !important; gap: 9px !important;
+          min-height: 42px; margin: 0 138px 7px 0 !important; gap: 9px !important;
         }
         .presidencia-card .vision-card-symbol {
           width: 36px !important; height: 36px !important; border-radius: 10px !important;
@@ -3395,12 +3395,12 @@ app.index_string = """<!DOCTYPE html>
         }
         .presidencia-card .programa-anio-control {
           position: absolute; z-index: 5; top: 13px; right: 13px;
-          width: 92px !important; margin: 0 !important; display: block !important;
+          width: 122px !important; margin: 0 !important; display: block !important;
         }
         .presidencia-card .programa-anio-control > span { display: none !important; }
         .presidencia-card .programa-anio-dropdown,
         .presidencia-card .programa-anio-dropdown.dash-dropdown {
-          width: 92px !important; min-width: 92px !important;
+          width: 122px !important; min-width: 122px !important;
           height: 22px !important; min-height: 22px !important;
           border: 0 !important; background: #f1eefb !important;
         }
@@ -3529,6 +3529,7 @@ app.index_string = """<!DOCTYPE html>
         .presidencia-gestion-page #gestion-programas {
           margin-top: 18px; scroll-margin-top: 95px;
         }
+        .vision-anchor-target { scroll-margin-top: 95px; }
         @media (min-width: 701px) and (max-width: 1450px) {
           .presidencia-gestion-page .educacion-media-cifras-grid,
           .presidencia-gestion-page .educacion-media-segunda-fila,
@@ -6669,6 +6670,19 @@ def _cartera_futura_eje2(proyectos):
                className="eje2-source-note")], className="eje2-future-section")
 
 
+def navegacion_secciones_vision(opciones):
+    """Navegación interna homogénea para todos los viceministerios.
+
+    ``opciones`` contiene pares ``(etiqueta, id_destino)``. Los enlaces se
+    mantienen compactos en escritorio y pueden envolver en pantallas pequeñas.
+    """
+    return html.Nav(
+        [html.A(etiqueta, href=f"#{destino}") for etiqueta, destino in opciones],
+        className="pres-anclas",
+        **{"aria-label": "Secciones del viceministerio"},
+    )
+
+
 def pagina_educacion_superior():
     return html.Section(className="vision-exec-page educacion-superior-page", children=[
         html.Div(className="vision-exec-header vision-exec-header-compacta", children=[
@@ -6685,38 +6699,51 @@ def pagina_educacion_superior():
                       ),
                       html.P("Programas vigentes para ampliar el acceso, reconocer trayectorias "
                              "académicas y fortalecer la formación técnica, tecnológica y universitaria.")])]),
-        html.H2("Información de Universidades y Escuelas Politécnicas",
-                className="vision-eje-banner"),
-        html.Div(
-            className="vision-exec-grid gestion-educativa-grid datos-generales-grid "
-                      "educacion-superior-cifras-grid universidades-politecnicas-grid",
-            children=tarjetas_universidades_politecnicas(),
-            style={"gridTemplateColumns": "repeat(3, minmax(0, 1fr))"},
-        ),
-        html.H2("Información de Institutos Superiores Técnicos Tecnológicos",
-                className="vision-eje-banner"),
-        html.Div(
-            className="vision-exec-grid gestion-educativa-grid datos-generales-grid "
-                      "educacion-superior-cifras-grid institutos-tecnicos-grid",
-            children=tarjetas_institutos_tecnicos_tecnologicos(),
-            style={"gridTemplateColumns": "repeat(3, minmax(0, 1fr))"},
-        ),
-        html.H2("Programas y servicios de Educación Superior", className="vision-eje-banner"),
-        html.P("Beneficiarios e inversión por programa · Corte: octubre 2026 · "
-               "Actualización conforme a planificación de cada programa",
-               className="becas-seccion-subtitulo"),
-        tarjetas_resumen_becas_educacion_superior(),
-        paneles_ranking_becas_educacion_superior(),
-        html.Div(
-            className="vision-exec-grid gestion-educativa-grid programas-servicios-grid",
-            children=tarjetas_becas_educacion_superior(),
-            style={"gridTemplateColumns": "repeat(3, minmax(0, 1fr))"},
-        ),
-        html.P(
-            "*“Por beneficiario” = inversión ÷ beneficiarios (calculado). El total de beneficiarios "
-            "es una suma simple; una persona podría participar en más de un programa.",
-            className="becas-nota-metodologica",
-        ),
+        navegacion_secciones_vision([
+            ("Resumen", "superior-resumen"),
+            ("Universidades y escuelas politécnicas", "superior-universidades"),
+            ("Institutos técnicos y tecnológicos", "superior-institutos"),
+            ("Programas y servicios", "superior-programas"),
+        ]),
+        html.Div(id="superior-resumen", className="vision-anchor-target"),
+        html.Div([
+            html.H2("Información de Universidades y Escuelas Politécnicas",
+                    className="vision-eje-banner"),
+            html.Div(
+                className="vision-exec-grid gestion-educativa-grid datos-generales-grid "
+                          "educacion-superior-cifras-grid universidades-politecnicas-grid",
+                children=tarjetas_universidades_politecnicas(),
+                style={"gridTemplateColumns": "repeat(3, minmax(0, 1fr))"},
+            ),
+        ], id="superior-universidades", className="vision-anchor-target"),
+        html.Div([
+            html.H2("Información de Institutos Superiores Técnicos Tecnológicos",
+                    className="vision-eje-banner"),
+            html.Div(
+                className="vision-exec-grid gestion-educativa-grid datos-generales-grid "
+                          "educacion-superior-cifras-grid institutos-tecnicos-grid",
+                children=tarjetas_institutos_tecnicos_tecnologicos(),
+                style={"gridTemplateColumns": "repeat(3, minmax(0, 1fr))"},
+            ),
+        ], id="superior-institutos", className="vision-anchor-target"),
+        html.Div([
+            html.H2("Programas y servicios de Educación Superior", className="vision-eje-banner"),
+            html.P("Beneficiarios e inversión por programa · Corte: octubre 2026 · "
+                   "Actualización conforme a planificación de cada programa",
+                   className="becas-seccion-subtitulo"),
+            tarjetas_resumen_becas_educacion_superior(),
+            paneles_ranking_becas_educacion_superior(),
+            html.Div(
+                className="vision-exec-grid gestion-educativa-grid programas-servicios-grid",
+                children=tarjetas_becas_educacion_superior(),
+                style={"gridTemplateColumns": "repeat(3, minmax(0, 1fr))"},
+            ),
+            html.P(
+                "*“Por beneficiario” = inversión ÷ beneficiarios (calculado). El total de beneficiarios "
+                "es una suma simple; una persona podría participar en más de un programa.",
+                className="becas-nota-metodologica",
+            ),
+        ], id="superior-programas", className="vision-anchor-target"),
     ])
 
 
@@ -7362,6 +7389,13 @@ def pagina_eje_viceministerial(codigo):
         else seccion_mapa_cultura() if codigo == "cultura"
         else None
     )
+    opciones_navegacion = [("Resumen", f"{codigo}-resumen")]
+    if informacion_general is not None:
+        opciones_navegacion.append(("Información general", f"{codigo}-informacion-general"))
+    if mapa_territorial is not None:
+        opciones_navegacion.append(("Distribución territorial", f"{codigo}-mapa"))
+    opciones_navegacion.append(("Programas y servicios", f"{codigo}-programas"))
+
     return html.Section(className="vision-exec-page eje-viceministerial-page", children=[
         html.Div(className="vision-exec-header vision-exec-header-compacta", children=[
             html.Div(className="vision-title-mark"),
@@ -7376,9 +7410,14 @@ def pagina_eje_viceministerial(codigo):
                           },
                       ),
                       html.P(eje["introduccion"])])]),
-        informacion_general,
-        mapa_territorial,
-        programas_y_servicios,
+        navegacion_secciones_vision(opciones_navegacion),
+        html.Div(id=f"{codigo}-resumen", className="vision-anchor-target"),
+        html.Div(informacion_general, id=f"{codigo}-informacion-general",
+                 className="vision-anchor-target") if informacion_general is not None else None,
+        html.Div(mapa_territorial, id=f"{codigo}-mapa",
+                 className="vision-anchor-target") if mapa_territorial is not None else None,
+        html.Div(programas_y_servicios, id=f"{codigo}-programas",
+                 className="vision-anchor-target"),
     ])
 
 
