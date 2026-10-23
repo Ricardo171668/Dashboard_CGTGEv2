@@ -1136,6 +1136,9 @@ app = Dash(
     title="Panel Integrado de Gestión MINEDEC",
     update_title=None,
     suppress_callback_exceptions=True,
+    # Permite que una URL con ancla inicialice los mismos Stores que también
+    # actualizan los botones de navegación.
+    prevent_initial_callbacks="initial_duplicate",
     # Sin esta etiqueta Safari usa un lienzo virtual cercano a 980 px y luego
     # reduce toda la página. Eso activa las cuadrículas de tableta/escritorio
     # en un teléfono y termina comprimiendo las tarjetas hasta mostrar una
@@ -10884,6 +10887,7 @@ def modulo_seccion(seccion, vice=None, indicador=None):
 
 
 app.layout = html.Div([
+    dcc.Location(id="url-location", refresh=False),
     dcc.Store(id="active-section", data="home"), dcc.Store(id="selected-vice"),
     dcc.Store(id="selected-indicator"),
     dcc.Store(id="data-version", data={"pnd": VERSION_PND, "kpi-estrategicos": VERSION_KPI,
@@ -10898,6 +10902,27 @@ app.layout = html.Div([
     html.Div(id="main-content", children=portada()),
     html.Div(id="mathjax-trigger", style={"display": "none"}),
 ], className="app-shell")
+
+
+@app.callback(
+    Output("active-section", "data", allow_duplicate=True),
+    Output("selected-vice", "data", allow_duplicate=True),
+    Output("selected-indicator", "data", allow_duplicate=True),
+    Input("url-location", "hash"),
+)
+def abrir_seccion_desde_ancla(ancla):
+    """Convierte las anclas compartidas en navegación real de Dash.
+
+    Sin esta traducción, abrir ``#superior-programas`` desde un marcador o
+    recargar la página conservaba el texto en la URL, pero Dash volvía a la
+    portada porque el elemento de destino todavía no existía en el DOM.
+    """
+    ancla = (ancla or "").strip().lower()
+    if ancla.startswith("#superior-"):
+        return "vision", "educacion-superior", None
+    if ancla.startswith("#gestion-"):
+        return "vision", "gestion-educativa", None
+    return no_update, no_update, no_update
 
 
 @app.callback(Output("active-section", "data"), Output("selected-vice", "data", allow_duplicate=True),
@@ -11194,6 +11219,14 @@ app.clientside_callback("function(n){if(n)window.print();return window.dash_clie
 app.clientside_callback(
     """
     function(children) {
+        function irAlAnclaVisible() {
+            var ancla = (window.location.hash || '').replace(/^#/, '');
+            if (!ancla) return;
+            var destino = document.getElementById(ancla);
+            if (destino) {
+                destino.scrollIntoView({behavior: 'auto', block: 'start'});
+            }
+        }
         function ampliarEcuaciones() {
             document.querySelectorAll(
                 '.formula-equation mjx-container, ' +
@@ -11209,8 +11242,11 @@ app.clientside_callback(
                 window.MathJax.typesetPromise().then(function () {
                     ampliarEcuaciones();
                     setTimeout(ampliarEcuaciones, 120);
+                    setTimeout(irAlAnclaVisible, 160);
                 });
             }, 60);
+        } else {
+            setTimeout(irAlAnclaVisible, 160);
         }
         return window.dash_clientside.no_update;
     }
