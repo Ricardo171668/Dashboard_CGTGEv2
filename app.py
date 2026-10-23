@@ -114,11 +114,11 @@ BASES_GESTION_EDUCATIVA = [
     # espacios ni corrige variantes). Se usa una sola palabra distintiva en
     # vez del nombre completo para no fallar por una tilde o un plural que
     # cambie en una próxima actualización del archivo:
-    #   Alimentación Escolar.xlsx
+    #   Alimentación Escolar - Año 2025.xlsx
     #   Uniformes Ecolares.xlsx        (tal como llega, sin la "s" de "Escolares")
     #   Textos Escolares.xlsx
     #   INVERSION MOBILIARIO Y TRANSPORTE.xlsx  (empieza con "Inversión", no con "Mobiliario")
-    ("alimentacion", "Alimentación Escolar"),
+    ("Alimentación Escolar - Año 2025", "Alimentación Escolar"),
     ("uniformes", "Uniformes Escolares"),
     ("textos escolares", "Textos Escolares"),
     ("inversion mobiliario", "Mobiliario y Transporte Escolar"),
@@ -751,11 +751,24 @@ def _resumen_base_gestion_educativa(archivo, nombre_legible):
 
 
 def _obtener_origen_gestion_educativa(prefijo, nombre_legible):
-    """Da preferencia al vínculo de OneDrive (la fuente que sí se sigue
-    actualizando); si no hay uno configurado para esta base, cae de vuelta a
-    buscar el Excel junto a app.py. Devuelve (origen_para_pandas,
+    """Obtiene la fuente vigente de cada recurso educativo.
+
+    Alimentación Escolar se lee exclusivamente desde
+    ``Alimentación Escolar - Año 2025.xlsx``, ubicado junto a ``app.py`` o en
+    alguna subcarpeta del proyecto. Las demás bases conservan OneDrive como
+    fuente principal y el archivo local como respaldo. Devuelve (origen_para_pandas,
     descripcion_para_mensajes, version_para_detectar_cambios) o levanta
     una excepción con el motivo exacto si no se pudo obtener ninguno."""
+    if nombre_legible == "Alimentación Escolar":
+        archivo = buscar_archivo("Alimentación Escolar - Año 2025")
+        if not archivo:
+            raise FileNotFoundError(
+                "no se encontró 'Alimentación Escolar - Año 2025.xlsx' "
+                "junto a app.py ni dentro del proyecto publicado; "
+                f"Excel visibles: {diagnostico_excel()}"
+            )
+        return archivo, archivo.name, str(archivo.stat().st_mtime_ns)
+
     url = GESTION_EDUCATIVA_DOWNLOAD_URLS.get(nombre_legible, "")
     if url:
         origen, version, _fecha = _descargar_excel_onedrive(url, f"{nombre_legible}.xlsx")
@@ -858,16 +871,11 @@ ESIGEF_DOWNLOAD_URL = os.getenv(
     "?e=0KSa78&download=1",
 ).strip()
 
-# Vínculos "Copiar vínculo" de OneDrive para las 4 bases de Gestión Educativa
-# (mismo mecanismo que ESIGEF_actual.xlsx: deben terminar en "&download=1").
-# Mientras no se defina un vínculo para una base, se sigue buscando su Excel
-# junto a app.py (BASES_GESTION_EDUCATIVA), igual que antes.
+# Vínculos "Copiar vínculo" de OneDrive para las bases de Gestión Educativa
+# que continúan siendo remotas. Alimentación Escolar no consta aquí porque su
+# fuente oficial para esta versión es el archivo local
+# "Alimentación Escolar - Año 2025.xlsx" incluido junto a app.py.
 GESTION_EDUCATIVA_DOWNLOAD_URLS = {
-    "Alimentación Escolar": os.getenv(
-        "ALIMENTACION_ESCOLAR_DOWNLOAD_URL",
-        "https://educacionec-my.sharepoint.com/:x:/g/personal/daei_educacion_gob_ec/"
-        "IQBrz0MHostwQIW5R61Mz3tnATQK3DrSUL7YqpgcgXcYvpY?e=2YwCXT&download=1",
-    ).strip(),
     "Uniformes Escolares": os.getenv(
         "UNIFORMES_ESCOLARES_DOWNLOAD_URL",
         "https://educacionec-my.sharepoint.com/:x:/g/personal/daei_educacion_gob_ec/"
@@ -4235,6 +4243,46 @@ app.index_string = """<!DOCTYPE html>
         @media (max-width: 430px) {
           .nee-card .pres-distribucion-etiquetas {
             grid-template-columns: minmax(0, 1fr);
+          }
+        }
+
+        /* Armonización tipográfica de cifras en Visión Ejecutiva.
+           Todos los viceministerios comparten una misma escala para el dato
+           principal y otra para las desagregaciones. Se eliminan así los
+           saltos visuales entre Educación Media, Superior, Deporte y Cultura. */
+        .module-main .vision-exec-page .vision-card-total {
+          font-size: clamp(30px, 1.78vw, 34px) !important;
+          font-weight: 900 !important;
+          line-height: 1.02 !important;
+          letter-spacing: -.02em !important;
+          white-space: nowrap !important;
+        }
+        .module-main .vision-exec-page .programa-metrica-periodo strong,
+        .module-main .vision-exec-page .deporte-programa-metrica strong,
+        .module-main .vision-exec-page .cultura-resumen-item strong,
+        .module-main .vision-exec-page .cultura-programa-metrica strong,
+        .module-main .vision-exec-page .pres-recurso-metrica strong {
+          font-size: clamp(18px, 1.18vw, 22px) !important;
+          font-weight: 900 !important;
+          line-height: 1.05 !important;
+          letter-spacing: -.01em !important;
+        }
+        /* Los montos extensos conservan la misma jerarquía, con un ajuste
+           mínimo para evitar que se corten en portátiles y tabletas. */
+        .module-main .vision-exec-page .programa-metrica-periodo.inversion strong,
+        .module-main .vision-exec-page .pres-recurso-metrica.inversion strong {
+          font-size: clamp(17px, 1.08vw, 20px) !important;
+        }
+        @media (max-width: 700px) {
+          .module-main .vision-exec-page .vision-card-total {
+            font-size: clamp(30px, 7.6vw, 34px) !important;
+          }
+          .module-main .vision-exec-page .programa-metrica-periodo strong,
+          .module-main .vision-exec-page .deporte-programa-metrica strong,
+          .module-main .vision-exec-page .cultura-resumen-item strong,
+          .module-main .vision-exec-page .cultura-programa-metrica strong,
+          .module-main .vision-exec-page .pres-recurso-metrica strong {
+            font-size: clamp(18px, 5.2vw, 22px) !important;
           }
         }
         </style>
