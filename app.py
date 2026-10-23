@@ -1,6 +1,7 @@
 """Panel Integrado de Gestión MINEDEC - aplicación Dash."""
 from __future__ import annotations
 
+from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime, timedelta
 from email.utils import parsedate_to_datetime
 from io import BytesIO
@@ -47,6 +48,7 @@ KPI_INSTITUCIONALES_DOWNLOAD_URL = (
     "?e=xsKWf6&download=1"
 )
 VERSIONES_INDICADORES_REMOTOS = {}
+_RUTAS_EXCEL_CACHE = {}
 
 
 def directorios_entregables():
@@ -169,6 +171,16 @@ def buscar_archivo(prefijo):
 
     prefijo_normalizado = sin_tildes(prefijo)
 
+    # La ruta encontrada se reutiliza, pero el archivo se vuelve a leer cada
+    # vez. Así una actualización del contenido sigue siendo visible sin
+    # recorrer repetidamente todo el proyecto en cada navegación.
+    ruta_cache = _RUTAS_EXCEL_CACHE.get(prefijo_normalizado)
+    if ruta_cache:
+        archivo_cache = Path(ruta_cache)
+        if archivo_cache.is_file():
+            return archivo_cache
+        _RUTAS_EXCEL_CACHE.pop(prefijo_normalizado, None)
+
     # Plotly Cloud puede iniciar el proceso desde una carpeta diferente a la
     # que contiene app.py. Primero se prueban ubicaciones directas y luego se
     # recorren únicamente carpetas razonables del paquete publicado. El filtro
@@ -204,8 +216,12 @@ def buscar_archivo(prefijo):
     # a la matriz que el usuario está actualizando.
     exactos = [p for p in candidatos if sin_tildes(p.stem) == prefijo_normalizado]
     if exactos:
-        return max(exactos, key=lambda p: p.stat().st_mtime)
-    return max(candidatos, key=lambda p: p.stat().st_mtime) if candidatos else None
+        elegido = max(exactos, key=lambda p: p.stat().st_mtime)
+    else:
+        elegido = max(candidatos, key=lambda p: p.stat().st_mtime) if candidatos else None
+    if elegido is not None:
+        _RUTAS_EXCEL_CACHE[prefijo_normalizado] = str(elegido.resolve())
+    return elegido
 
 
 def diagnostico_excel():
@@ -792,18 +808,37 @@ def cargar_resumen_gestion_educativa():
     junto a app.py si no); cada una que falte o no se pueda interpretar se
     reporta por separado, sin bloquear a las demás (igual que el resto del
     panel: se muestra lo que sí hay disponible)."""
-    resumen = {}
-    pendientes = []
-    for prefijo, nombre_legible in BASES_GESTION_EDUCATIVA:
+    def cargar_una_base(prefijo, nombre_legible):
         try:
             origen, descripcion, _version = _obtener_origen_gestion_educativa(prefijo, nombre_legible)
         except Exception as exc:
-            pendientes.append(f"{nombre_legible} ({exc})")
-            continue
+            return nombre_legible, None, f"{nombre_legible} ({exc})"
         try:
-            resumen[nombre_legible] = _resumen_base_gestion_educativa(origen, nombre_legible)
+            dato = _resumen_base_gestion_educativa(origen, nombre_legible)
+            return nombre_legible, dato, None
         except Exception as exc:
-            pendientes.append(f"{nombre_legible} (se leyó '{descripcion}' pero no se pudo interpretar: {exc})")
+            return (
+                nombre_legible,
+                None,
+                f"{nombre_legible} (se leyó '{descripcion}' pero no se pudo interpretar: {exc})",
+            )
+
+    # Las cuatro fuentes son independientes. En Posit Cloud descargarlas en
+    # serie multiplicaba el tiempo de arranque y dejaba el servidor ocupado.
+    resumen = {}
+    pendientes = []
+    with ThreadPoolExecutor(max_workers=len(BASES_GESTION_EDUCATIVA)) as ejecutor:
+        tareas = [
+            ejecutor.submit(cargar_una_base, prefijo, nombre_legible)
+            for prefijo, nombre_legible in BASES_GESTION_EDUCATIVA
+        ]
+        resultados = [tarea.result() for tarea in tareas]
+
+    for nombre_legible, dato, error in resultados:
+        if error:
+            pendientes.append(error)
+        elif dato is not None:
+            resumen[nombre_legible] = dato
     return resumen, pendientes
 
 
@@ -1035,14 +1070,33 @@ def version_presupuesto():
     return PRESUPUESTO_META.get("version", "")
 
 
-DATA_PND, ERROR_PND = cargar_base_pnd()
-DATA_KPI, ERROR_KPI = cargar_base_kpi()
-DATA_KPI_INST, ERROR_KPI_INST = cargar_base_kpi_inst()
-RESUMEN_GESTION_EDUCATIVA, PENDIENTES_GESTION_EDUCATIVA = cargar_resumen_gestion_educativa()
+def _cargar_datos_iniciales():
+    """Carga las fuentes independientes en paralelo durante el arranque."""
+    cargadores = {
+        "pnd": cargar_base_pnd,
+        "kpi": cargar_base_kpi,
+        "kpi_inst": cargar_base_kpi_inst,
+        "gestion": cargar_resumen_gestion_educativa,
+        "presupuesto": cargar_base_presupuesto,
+    }
+    with ThreadPoolExecutor(max_workers=len(cargadores)) as ejecutor:
+        tareas = {
+            nombre: ejecutor.submit(cargador)
+            for nombre, cargador in cargadores.items()
+        }
+        return {nombre: tarea.result() for nombre, tarea in tareas.items()}
+
+
+_DATOS_INICIALES = _cargar_datos_iniciales()
+DATA_PND, ERROR_PND = _DATOS_INICIALES["pnd"]
+DATA_KPI, ERROR_KPI = _DATOS_INICIALES["kpi"]
+DATA_KPI_INST, ERROR_KPI_INST = _DATOS_INICIALES["kpi_inst"]
+RESUMEN_GESTION_EDUCATIVA, PENDIENTES_GESTION_EDUCATIVA = _DATOS_INICIALES["gestion"]
 # Visión Ejecutiva ahora es una infografía institucional estática y ya no
 # depende del archivo vision_ejecutiva.xlsx.
 DATA_VISION, ERROR_VISION = pd.DataFrame(), None
-DATA_PRESUPUESTO, ERROR_PRESUPUESTO = cargar_base_presupuesto()
+DATA_PRESUPUESTO, ERROR_PRESUPUESTO = _DATOS_INICIALES["presupuesto"]
+del _DATOS_INICIALES
 VERSION_PND = version_pnd()
 VERSION_KPI = version_kpi()
 VERSION_KPI_INST = version_kpi_inst()
@@ -10837,7 +10891,9 @@ app.layout = html.Div([
                                         "gestion-educativa": VERSION_GESTION_EDUCATIVA,
                                         "vision": VERSION_VISION,
                                         "presupuesto": VERSION_PRESUPUESTO}),
-    dcc.Interval(id="excel-watcher", interval=15000, n_intervals=0),
+    # Una comprobación por minuto evita despertar al servidor cada 15 segundos.
+    # Las fuentes remotas se actualizan en el intervalo 15 (cada 15 minutos).
+    dcc.Interval(id="excel-watcher", interval=60000, n_intervals=0),
     barra_superior(),
     html.Div(id="main-content", children=portada()),
     html.Div(id="mathjax-trigger", style={"display": "none"}),
@@ -11072,10 +11128,21 @@ def actualizar_excel(_intervalo, version_actual):
     version_actual = dict(version_actual or {})
     cambio = False
 
-    # Descarga nuevamente las tres matrices cada cinco minutos y compara sus
-    # hashes. Si cambia alguna, el Store provoca la reconstrucción del gráfico.
-    if _intervalo % 20 == 0:
-        nueva_data, nuevo_error = cargar_base_pnd()
+    # Las fuentes remotas se comprueban cada 15 minutos. Sus descargas son
+    # independientes y se ejecutan en paralelo para no sumar las esperas de
+    # OneDrive/SharePoint ni inmovilizar el servidor durante varios minutos.
+    if _intervalo % 15 == 0:
+        with ThreadPoolExecutor(max_workers=5) as ejecutor:
+            tareas = {
+                "pnd": ejecutor.submit(cargar_base_pnd),
+                "kpi": ejecutor.submit(cargar_base_kpi),
+                "kpi_inst": ejecutor.submit(cargar_base_kpi_inst),
+                "gestion": ejecutor.submit(cargar_resumen_gestion_educativa),
+                "presupuesto": ejecutor.submit(cargar_base_presupuesto),
+            }
+            resultados = {nombre: tarea.result() for nombre, tarea in tareas.items()}
+
+        nueva_data, nuevo_error = resultados["pnd"]
         nueva_version_pnd = version_pnd()
         if (not nuevo_error and not nueva_data.empty
                 and nueva_version_pnd != version_actual.get("pnd")):
@@ -11083,7 +11150,7 @@ def actualizar_excel(_intervalo, version_actual):
             version_actual["pnd"] = nueva_version_pnd
             cambio = True
 
-        nueva_data, nuevo_error = cargar_base_kpi()
+        nueva_data, nuevo_error = resultados["kpi"]
         nueva_version_kpi = version_kpi()
         if (not nuevo_error and not nueva_data.empty
                 and nueva_version_kpi != version_actual.get("kpi-estrategicos")):
@@ -11091,7 +11158,7 @@ def actualizar_excel(_intervalo, version_actual):
             version_actual["kpi-estrategicos"] = nueva_version_kpi
             cambio = True
 
-        nueva_data, nuevo_error = cargar_base_kpi_inst()
+        nueva_data, nuevo_error = resultados["kpi_inst"]
         nueva_version_kpi_inst = version_kpi_inst()
         if (not nuevo_error and not nueva_data.empty
                 and nueva_version_kpi_inst != version_actual.get("kpi-institucionales")):
@@ -11099,11 +11166,7 @@ def actualizar_excel(_intervalo, version_actual):
             version_actual["kpi-institucionales"] = nueva_version_kpi_inst
             cambio = True
 
-    # Las bases de Gestión Educativa (algunas en OneDrive) se vuelven a leer
-    # cada 15 minutos, igual que el presupuesto: no hay forma barata de saber
-    # si cambiaron sin descargarlas, así que se relee y se compara después.
-    if _intervalo % 20 == 0:
-        nuevo_resumen, nuevos_pendientes = cargar_resumen_gestion_educativa()
+        nuevo_resumen, nuevos_pendientes = resultados["gestion"]
         nueva_version_gestion_educ = version_gestion_educativa(nuevo_resumen, nuevos_pendientes)
         if nueva_version_gestion_educ != version_actual.get("gestion-educativa"):
             RESUMEN_GESTION_EDUCATIVA, PENDIENTES_GESTION_EDUCATIVA = nuevo_resumen, nuevos_pendientes
@@ -11111,9 +11174,7 @@ def actualizar_excel(_intervalo, version_actual):
             version_actual["gestion-educativa"] = nueva_version_gestion_educ
             cambio = True
 
-    # SharePoint se consulta cada 15 minutos para evitar solicitudes innecesarias.
-    if _intervalo % 20 == 0:
-        nueva_data, nuevo_error = cargar_base_presupuesto()
+        nueva_data, nuevo_error = resultados["presupuesto"]
         nueva_version = version_presupuesto()
         if (not nuevo_error and not nueva_data.empty
                 and nueva_version != version_actual.get("presupuesto")):
