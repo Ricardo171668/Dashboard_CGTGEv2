@@ -9706,6 +9706,35 @@ def _ranking_territorial_recursos(codigo="alimentacion", metrica="estudiantes"):
     ])
 
 
+def _contenido_mapa_recurso(codigo, metrica):
+    """Panel completo precalculado para una métrica territorial.
+
+    Estudiantes e Instituciones permanecen montados simultáneamente. El
+    selector solo alterna su visibilidad en el navegador, evitando que una
+    respuesta lenta del servidor deje seleccionada una métrica pero muestre
+    todavía las cifras de la otra.
+    """
+    etiqueta = "Estudiantes" if metrica == "estudiantes" else "Instituciones"
+    return html.Div([
+        html.Div([
+            html.Div([html.H4(
+                f"Distribución de {_titulo_recurso(codigo)} por provincia · {etiqueta}"
+            ), html.P("Valores registrados en las matrices institucionales.")],
+                     className="territorial-map-title"),
+            dcc.Graph(
+                figure=_figura_mapa_recursos(codigo, metrica),
+                config={"displayModeBar": False, "responsive": True},
+                className="territorial-map-graph",
+            ),
+            _resumen_regional_recursos(codigo, metrica),
+        ], className="territorial-map-card"),
+        html.Div(
+            _ranking_territorial_recursos(codigo, metrica),
+            className="territorial-ranking-card",
+        ),
+    ], className="territorial-map-grid")
+
+
 def seccion_mapa_recursos_educativos():
     recursos = [{"label": d["titulo"], "value": d["codigo"]}
                 for d in RECURSOS_EDUCATIVOS_ACTUALIZADOS
@@ -9732,42 +9761,44 @@ def seccion_mapa_recursos_educativos():
                 )], className="territorial-control-group"),
             ], className="territorial-resource-tabs"),
         ], className="territorial-toolbar"),
-        html.Div([
-            html.Div([
-                html.Div([html.H4("Distribución de Alimentación Escolar por provincia",
-                                  id="resource-territory-title"),
-                          html.P("Valores registrados en las matrices institucionales.")],
-                         className="territorial-map-title"),
-                dcc.Graph(id="resource-territory-map",
-                          figure=_figura_mapa_recursos("alimentacion", "estudiantes"),
-                          config={"displayModeBar": False, "responsive": True},
-                          className="territorial-map-graph"),
-                html.Div(_resumen_regional_recursos("alimentacion", "estudiantes"),
-                         id="resource-territory-regions"),
-            ], className="territorial-map-card"),
-            html.Div(_ranking_territorial_recursos("alimentacion", "estudiantes"),
-                     id="resource-territory-ranking", className="territorial-ranking-card"),
-        ], className="territorial-map-grid"),
+        html.Div(
+            _contenido_mapa_recurso("alimentacion", "estudiantes"),
+            id="resource-territory-estudiantes-panel",
+            style={"display": "block"},
+        ),
+        html.Div(
+            _contenido_mapa_recurso("alimentacion", "instituciones"),
+            id="resource-territory-instituciones-panel",
+            style={"display": "none"},
+        ),
     ], className="territorial-section recursos-territorial-section")
 
 
 @app.callback(
-    Output("resource-territory-map", "figure"),
-    Output("resource-territory-title", "children"),
-    Output("resource-territory-regions", "children"),
-    Output("resource-territory-ranking", "children"),
+    Output("resource-territory-estudiantes-panel", "children"),
+    Output("resource-territory-instituciones-panel", "children"),
     Input("resource-territory-resource", "value"),
+)
+def actualizar_mapa_recursos(recurso):
+    recurso = recurso if recurso in RECURSOS_CON_MAPA_TERRITORIAL else "alimentacion"
+    return (
+        _contenido_mapa_recurso(recurso, "estudiantes"),
+        _contenido_mapa_recurso(recurso, "instituciones"),
+    )
+
+
+app.clientside_callback(
+    """
+    function(metrica) {
+        const estudiantes = {display: metrica === 'instituciones' ? 'none' : 'block'};
+        const instituciones = {display: metrica === 'instituciones' ? 'block' : 'none'};
+        return [estudiantes, instituciones];
+    }
+    """,
+    Output("resource-territory-estudiantes-panel", "style"),
+    Output("resource-territory-instituciones-panel", "style"),
     Input("resource-territory-metric", "value"),
 )
-def actualizar_mapa_recursos(recurso, metrica):
-    recurso = recurso if recurso in RECURSOS_CON_MAPA_TERRITORIAL else "alimentacion"
-    metrica = metrica if metrica in {"estudiantes", "instituciones"} else "estudiantes"
-    return (
-        _figura_mapa_recursos(recurso, metrica),
-        f"Distribución de {_titulo_recurso(recurso)} por provincia",
-        _resumen_regional_recursos(recurso, metrica),
-        _ranking_territorial_recursos(recurso, metrica),
-    )
 
 
 # La fuente del Fenómeno de El Niño reporta zonas administrativas. En Z8 el
