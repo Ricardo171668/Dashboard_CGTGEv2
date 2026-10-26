@@ -5121,6 +5121,44 @@ app.index_string = """<!DOCTYPE html>
             grid-template-columns: minmax(0, 1fr) !important;
           }
         }
+
+        /* Programas de Gestión Educativa: cuatro tarjetas regulares en 2 x 2.
+           Deporte y Cultura aprovechan el espacio interno sin empujar todas
+           las métricas al borde inferior de tarjetas altas. */
+        .module-main .presidencia-gestion-page
+        .programas-gestion-2x2.programas-servicios-grid {
+          display: grid !important;
+          grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+          gap: 12px !important;
+          width: 100% !important;
+          max-width: 100% !important;
+          margin: 0 !important;
+        }
+        .deporte-informacion-grid > .deporte-resumen-card,
+        .cultura-resumen-grid > .cultura-resumen-card {
+          min-height: 190px !important;
+        }
+        .deporte-resumen-card .deporte-programa-metricas,
+        .cultura-resumen-card .cultura-resumen-desglose {
+          flex: 1 1 auto !important;
+          margin-top: 0 !important;
+          align-content: center !important;
+        }
+        @media (max-width: 700px) {
+          .module-main .presidencia-gestion-page
+          .programas-gestion-2x2.programas-servicios-grid {
+            grid-template-columns: minmax(0, 1fr) !important;
+          }
+          .deporte-informacion-grid > .deporte-resumen-card,
+          .cultura-resumen-grid > .cultura-resumen-card {
+            min-height: 0 !important;
+          }
+          .deporte-resumen-card .deporte-programa-metricas,
+          .cultura-resumen-card .cultura-resumen-desglose {
+            flex: 0 0 auto !important;
+            align-content: start !important;
+          }
+        }
         </style>
         <script>
         window.MathJax = {
@@ -6896,9 +6934,9 @@ def _panel_ranking_becas(titulo, datos_ordenados, total):
 def paneles_ranking_becas_educacion_superior():
     r = _resumen_becas_educacion_superior()
     return html.Div([
-        _panel_ranking_becas("¿Dónde se concentra la inversión?",
+        _panel_ranking_becas("Concentración de la inversión",
                              r["ranking_inversion"], r["total_inversion"]),
-        _panel_ranking_becas("¿Dónde se concentran los beneficiarios?",
+        _panel_ranking_becas("Concentración de beneficiarios",
                              r["ranking_beneficiarios"], r["total_beneficiarios"]),
     ], className="becas-ranking-grid")
 
@@ -7463,15 +7501,11 @@ def _tarjetas_programas_eje2(datos):
     )
     if not tarjetas_complementarias:
         return fila_principal
-    return html.Div([
-        fila_principal,
-        html.Div(
-            tarjetas_complementarias,
-            className=("vision-exec-grid gestion-educativa-grid programas-servicios-grid "
-                       "programas-complementarios-grid"),
-            style={"marginTop": "12px"},
-        ),
-    ], className="programas-gestion-consolidados")
+    return html.Div(
+        tarjetas + tarjetas_complementarias,
+        className=("vision-exec-grid gestion-educativa-grid programas-servicios-grid "
+                   "programas-gestion-2x2"),
+    )
 
 
 @app.callback(
