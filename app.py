@@ -5159,6 +5159,223 @@ app.index_string = """<!DOCTYPE html>
             align-content: start !important;
           }
         }
+
+        /* Eje 1 · misma jerarquía y tema visual que los demás ejes.
+           Se neutralizan las escalas antiguas exclusivas de Gestión Educativa. */
+        .module-main .presidencia-gestion-page .vision-exec-header {
+          margin: 0 0 8px !important;
+          padding: 0 2px !important;
+        }
+        .module-main .presidencia-gestion-page .vision-exec-header > div:last-child {
+          width: 100% !important;
+          min-width: 0 !important;
+        }
+        .module-main .presidencia-gestion-page .vision-exec-header h1 {
+          width: 100% !important;
+          max-width: none !important;
+          margin: 0 !important;
+          font-size: clamp(15px, 1.15vw, 20px) !important;
+          line-height: 1.2 !important;
+          letter-spacing: 0 !important;
+        }
+        .module-main .presidencia-gestion-page .vision-exec-header p {
+          margin: 4px 0 0 !important;
+          color: #6f7890 !important;
+          font-size: 12px !important;
+          line-height: 1.35 !important;
+        }
+        .module-main .presidencia-gestion-page .pres-seccion-cabecera {
+          align-items: center !important;
+          margin: 20px 0 9px !important;
+        }
+        .module-main .presidencia-gestion-page .pres-seccion-titulo,
+        .module-main .presidencia-gestion-page .pres-seccion-titulo > div {
+          width: 100% !important;
+          min-width: 0 !important;
+        }
+        .module-main .presidencia-gestion-page
+        .pres-seccion-titulo .vision-eje-banner {
+          width: fit-content !important;
+          max-width: 100% !important;
+          min-height: 0 !important;
+          margin: 0 0 5px !important;
+          padding: 8px 16px 8px 38px !important;
+          border-radius: 999px !important;
+          color: #fff !important;
+          background: #232d5a !important;
+          border-color: #232d5a !important;
+          font-size: 14px !important;
+          font-weight: 900 !important;
+          line-height: 1.2 !important;
+          letter-spacing: .01em !important;
+          text-transform: uppercase !important;
+          box-shadow: 0 7px 16px rgba(35, 45, 90, .13) !important;
+        }
+        .module-main .presidencia-gestion-page
+        .pres-seccion-titulo .vision-eje-banner::before {
+          width: 19px !important;
+          height: 19px !important;
+          left: 9px !important;
+          top: 50% !important;
+          border-radius: 50% !important;
+          background: #f1b620 !important;
+          transform: translateY(-50%) !important;
+        }
+        .module-main .presidencia-gestion-page .pres-seccion-titulo p {
+          margin: 0 !important;
+          font-size: 12px !important;
+          line-height: 1.35 !important;
+        }
+        .module-main .presidencia-gestion-page .presidencia-card-general,
+        .module-main .presidencia-gestion-page .presidencia-card-secundaria,
+        .module-main .presidencia-gestion-page .presidencia-recurso-card,
+        .module-main .presidencia-gestion-page .presidencia-programa-card {
+          min-height: 228px !important;
+        }
+        @media (min-width: 701px) and (max-width: 1450px) {
+          .module-main .presidencia-gestion-page .vision-exec-header h1 {
+            font-size: clamp(15px, 1.35vw, 18px) !important;
+          }
+        }
+        @media (max-width: 700px) {
+          .module-main .presidencia-gestion-page .vision-exec-header h1 {
+            font-size: 17px !important;
+            line-height: 1.22 !important;
+          }
+          .module-main .presidencia-gestion-page .vision-exec-header p {
+            font-size: 11.5px !important;
+          }
+          .module-main .presidencia-gestion-page .pres-seccion-cabecera {
+            align-items: flex-start !important;
+            margin-top: 16px !important;
+          }
+          .module-main .presidencia-gestion-page
+          .pres-seccion-titulo .vision-eje-banner {
+            width: 100% !important;
+            padding: 8px 12px 8px 38px !important;
+            border-radius: 11px !important;
+            font-size: 12.5px !important;
+            box-sizing: border-box !important;
+          }
+          .module-main .presidencia-gestion-page .presidencia-card-general,
+          .module-main .presidencia-gestion-page .presidencia-card-secundaria,
+          .module-main .presidencia-gestion-page .presidencia-recurso-card,
+          .module-main .presidencia-gestion-page .presidencia-programa-card {
+            min-height: 0 !important;
+          }
+        }
+
+        /* Educación · desarrollo profesional docente. */
+        .educacion-desarrollo-profesional {
+          width: 100%; margin: 18px 0 0;
+        }
+        .educacion-desarrollo-titulo {
+          margin: 0 0 10px !important;
+          color: #232d5a !important;
+          font-size: 15px !important;
+          font-weight: 900 !important;
+          text-transform: uppercase;
+        }
+        .module-main .vision-exec-page .educacion-desarrollo-grid {
+          display: grid !important;
+          grid-template-columns: repeat(3, minmax(0, 1fr)) !important;
+          gap: 12px !important;
+          width: 100% !important;
+          max-width: none !important;
+          margin: 0 !important;
+        }
+        .module-main .vision-exec-page .educacion-desarrollo-card {
+          width: 100% !important;
+          max-width: none !important;
+          min-width: 0 !important;
+          min-height: 178px !important;
+          padding: 15px 16px 12px !important;
+          border: 1px solid #dfe3ed !important;
+          border-radius: 12px !important;
+          background: #fff !important;
+          box-shadow: 0 3px 9px rgba(35,45,90,.07) !important;
+          box-sizing: border-box !important;
+        }
+        .educacion-desarrollo-card .vision-card-title-row {
+          min-height: 42px !important;
+          margin: 0 0 9px !important;
+        }
+        .educacion-desarrollo-card .vision-card-label {
+          color: #17245b !important;
+          font-size: 15px !important;
+          font-weight: 900 !important;
+          line-height: 1.16 !important;
+        }
+        .educacion-desarrollo-metricas {
+          display: grid;
+          grid-template-columns: repeat(2, minmax(0, 1fr));
+          gap: 8px;
+        }
+        .educacion-desarrollo-metricas.items-1 {
+          grid-template-columns: minmax(0, 1fr);
+        }
+        .educacion-desarrollo-metrica {
+          min-width: 0; padding: 9px 10px; border-radius: 8px;
+          background: #f3f4f9;
+        }
+        .educacion-desarrollo-metrica span,
+        .educacion-desarrollo-metrica small {
+          display: block; color: #747e96; font-size: 10.5px;
+          font-weight: 800; line-height: 1.25; text-transform: uppercase;
+        }
+        .educacion-desarrollo-metrica strong {
+          display: block; margin: 3px 0 2px; color: #17245b;
+          font-size: clamp(24px, 1.55vw, 30px); font-weight: 900;
+          line-height: 1; white-space: nowrap;
+        }
+
+        /* Deporte · los dos servicios ocupan el mismo ancho que las dos
+           tarjetas de la primera fila de Información general. */
+        .module-main .vision-exec-page
+        .deporte-servicios-grid.deporte-programas-generales-grid {
+          display: grid !important;
+          grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+          gap: 12px !important;
+          width: 100% !important;
+          max-width: none !important;
+          margin: 0 !important;
+        }
+        .module-main .vision-exec-page
+        .deporte-servicios-grid.deporte-programas-generales-grid > .vision-exec-card {
+          grid-column: auto !important;
+          width: 100% !important;
+          max-width: none !important;
+          justify-self: stretch !important;
+        }
+        @media (max-width: 1100px) {
+          .module-main .vision-exec-page .educacion-desarrollo-grid {
+            grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+          }
+          .module-main .vision-exec-page
+          .educacion-desarrollo-grid > .educacion-desarrollo-card:last-child {
+            grid-column: 1 / -1 !important;
+          }
+        }
+        @media (max-width: 700px) {
+          .module-main .vision-exec-page .educacion-desarrollo-grid,
+          .module-main .vision-exec-page
+          .deporte-servicios-grid.deporte-programas-generales-grid {
+            grid-template-columns: minmax(0, 1fr) !important;
+          }
+          .module-main .vision-exec-page
+          .educacion-desarrollo-grid > .educacion-desarrollo-card:last-child {
+            grid-column: 1 !important;
+          }
+          .module-main .vision-exec-page .educacion-desarrollo-card {
+            min-height: 0 !important;
+          }
+          .educacion-desarrollo-metricas {
+            grid-template-columns: minmax(0, 1fr);
+          }
+          .educacion-desarrollo-metrica strong {
+            font-size: 28px;
+          }
+        }
         </style>
         <script>
         window.MathJax = {
@@ -7677,6 +7894,66 @@ def pagina_educacion_superior():
     ])
 
 
+# Desarrollo profesional docente incorporado a Programas y servicios del
+# Viceministerio de Educación, de acuerdo con la actualización institucional.
+DATOS_DESARROLLO_PROFESIONAL_EDUCACION = [
+    {
+        "codigo": "carrera-docente",
+        "titulo": "Carrera Docente",
+        "items": [
+            ("Ingreso por méritos y oposición", 1292, "Docentes incorporados"),
+        ],
+    },
+    {
+        "codigo": "educa-empleo",
+        "titulo": "Programa Educa Empleo",
+        "items": [
+            ("Vinculación laboral activa", 8109, "Docentes vinculados"),
+        ],
+    },
+    {
+        "codigo": "movilidad-ascenso",
+        "titulo": "Movilidad y Ascenso",
+        "items": [
+            ("Sectorización docente", 2033, "Profesionales beneficiados"),
+            ("Equiparación y homologación salarial", 1835, "Docentes beneficiados"),
+        ],
+    },
+]
+
+
+def _tarjeta_desarrollo_profesional_educacion(dato, color):
+    return html.Article([
+        cabecera_tarjeta(dato["codigo"], dato["titulo"]),
+        html.Div([
+            html.Div([
+                html.Span(etiqueta),
+                html.Strong(formato_valor(valor)),
+                html.Small(unidad),
+            ], className="educacion-desarrollo-metrica")
+            for etiqueta, valor, unidad in dato["items"]
+        ], className=f"educacion-desarrollo-metricas items-{len(dato['items'])}"),
+    ], className=(f"vision-exec-card programa-resumen-card "
+                  f"educacion-desarrollo-card programa-{color} "
+                  "presidencia-card presidencia-programa-card"))
+
+
+def seccion_desarrollo_profesional_educacion():
+    return html.Section([
+        html.H3("Desarrollo Profesional Educativo",
+                className="deporte-subseccion-titulo educacion-desarrollo-titulo"),
+        html.Div(
+            [_tarjeta_desarrollo_profesional_educacion(dato, color)
+             for dato, color in zip(
+                 DATOS_DESARROLLO_PROFESIONAL_EDUCACION,
+                 ["azul", "verde", "morado"],
+             )],
+            className=("vision-exec-grid gestion-educativa-grid "
+                       "educacion-desarrollo-grid"),
+        ),
+    ], className="educacion-desarrollo-profesional")
+
+
 # Información institucional actualizada del Viceministerio del Deporte.
 DATOS_GENERALES_DEPORTE = [
     {
@@ -8683,6 +8960,8 @@ def pagina_eje_viceministerial(codigo):
                            if codigo == "educacion"
                            else "eje-programas-fila-unica"),
             ) if programas else None,
+            seccion_desarrollo_profesional_educacion()
+            if codigo == "educacion" else None,
             html.P(aviso, className="eje2-source-note") if aviso else None,
         ])
     )
@@ -10221,7 +10500,10 @@ def encabezado_seccion_presidencia(etiqueta, titulo, descripcion, periodo, id_se
     return html.Div([
         html.Div([
             html.Span(etiqueta, className="pres-eje-etiqueta"),
-            html.Div([html.H2(titulo), html.P(descripcion)]),
+            html.Div([
+                html.H2(titulo, className="vision-eje-banner"),
+                html.P(descripcion),
+            ]),
         ], className="pres-seccion-titulo"),
         html.Span(periodo, className="pres-seccion-periodo"),
     ], id=id_seccion, className="pres-seccion-cabecera")
@@ -10263,7 +10545,10 @@ def pagina_gestion_educativa():
                         "maxWidth": "1240px",
                     },
                 ),
-                html.P(""),
+                html.P(
+                    "Información consolidada de Educación Media, recursos educativos "
+                    "y programas institucionales."
+                ),
             ]),
         ]),
         html.Nav([
