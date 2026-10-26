@@ -4095,6 +4095,14 @@ app.index_string = """<!DOCTYPE html>
           font-weight: 900; white-space: nowrap;
         }
         .fenomeno-zonas-lista { display: grid; gap: 6px; }
+        .fenomeno-zona-encabezado {
+          display: grid; grid-template-columns: 30px minmax(0, 1fr) 58px 82px;
+          gap: 6px; align-items: end; padding: 0 8px 3px;
+          color: #59627d; font-size: 8px; font-weight: 900;
+          line-height: 1.15; text-transform: uppercase;
+        }
+        .fenomeno-zona-encabezado span:nth-child(3),
+        .fenomeno-zona-encabezado span:nth-child(4) { text-align: right; }
         .fenomeno-zona-fila {
           display: grid; grid-template-columns: 30px minmax(0, 1fr) 58px 82px;
           gap: 6px; align-items: center; padding: 7px 8px;
@@ -4129,6 +4137,12 @@ app.index_string = """<!DOCTYPE html>
             grid-template-columns: 30px minmax(0, 1fr) 52px;
           }
           .fenomeno-zona-fila em { grid-column: 2 / 4; text-align: left; }
+          .fenomeno-zona-encabezado {
+            grid-template-columns: 30px minmax(0, 1fr) 52px;
+          }
+          .fenomeno-zona-encabezado span:nth-child(4) {
+            grid-column: 2 / 4; text-align: left;
+          }
         }
 
         /* Corrección final de navegación en escritorio.
@@ -5066,6 +5080,45 @@ app.index_string = """<!DOCTYPE html>
           .cultura-mapa-filtro.dash-dropdown {
             width: 100% !important;
             min-width: 0 !important;
+          }
+        }
+
+        /* Ajuste final solicitado: Educación y Deporte usan una cuadrícula
+           regular de dos por dos; Cultura reserva una fila para el selector
+           de año y evita que este cubra el título de la tarjeta. */
+        .educacion-programas-2x2 .programas-servicios-grid,
+        .module-main .vision-exec-page .deporte-informacion-grid.vision-exec-grid {
+          display: grid !important;
+          grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+          gap: 12px !important;
+          width: 100% !important;
+          max-width: 100% !important;
+        }
+        .module-main .vision-exec-page .deporte-informacion-grid > .vision-exec-card,
+        .module-main .vision-exec-page .deporte-informacion-grid > .vision-exec-card:nth-child(4) {
+          grid-column: auto !important;
+          width: 100% !important;
+          max-width: 100% !important;
+          justify-self: stretch !important;
+        }
+        .cultura-programa-card .programa-anio-control {
+          position: static !important;
+          top: auto !important;
+          right: auto !important;
+          display: block !important;
+          width: 122px !important;
+          max-width: 100% !important;
+          margin: 0 0 8px auto !important;
+        }
+        .cultura-programa-card .vision-card-title-row {
+          width: 100% !important;
+          padding-right: 0 !important;
+          box-sizing: border-box !important;
+        }
+        @media (max-width: 700px) {
+          .educacion-programas-2x2 .programas-servicios-grid,
+          .module-main .vision-exec-page .deporte-informacion-grid.vision-exec-grid {
+            grid-template-columns: minmax(0, 1fr) !important;
           }
         }
         </style>
@@ -8573,6 +8626,12 @@ def pagina_eje_viceministerial(codigo):
     eje = EJES_VICEMINISTERIALES[codigo]
     programas, aviso = (([], None) if codigo in {"deporte", "cultura"}
                         else cargar_programas_viceministerio(eje["vice_excel"]))
+    if codigo == "educacion":
+        programas = [
+            programa for programa in programas
+            if "equiparacion salarial" not in
+            _sin_tildes(programa.get("programa", ""))
+        ]
     informacion_general = (
         seccion_informacion_general_deporte() if codigo == "deporte"
         else seccion_informacion_general_cultura() if codigo == "cultura"
@@ -8586,7 +8645,9 @@ def pagina_eje_viceministerial(codigo):
                     className="vision-eje-banner"),
             html.Div(
                 _tarjetas_programas_eje2(programas),
-                className="eje-programas-fila-unica",
+                className=("eje-programas-fila-unica educacion-programas-2x2"
+                           if codigo == "educacion"
+                           else "eje-programas-fila-unica"),
             ) if programas else None,
             html.P(aviso, className="eje2-source-note") if aviso else None,
         ])
@@ -8745,8 +8806,8 @@ def _fila_distribucion(titulo, valores, colores=None):
                     html.B(nombre),
                     html.Span(formato_valor(valor)),
                     html.Small(
-                        f"{(valor / total * 100):.1f}%".replace(".", ",")
-                        if total else "0,0%"
+                        f" - {(valor / total * 100):.1f} %".replace(".", ",")
+                        if total else " - 0,0 %"
                     ),
                 ])
                 for i, (nombre, valor) in enumerate(elementos)
@@ -8884,8 +8945,6 @@ def _contenido_docentes(anio_lectivo):
             html.Strong(formato_valor(datos["Total"]), className="vision-card-total"),
             html.Span("Docentes", className="vision-card-unit"),
         ], className="vision-card-value-row"),
-        html.P("Las mujeres son 7 de cada 10 docentes (72,4 %)",
-               className="pres-destacado"),
         _fila_distribucion("Sexo", [("Hombres", datos["Hombres"]),
                                      ("Mujeres", datos["Mujeres"])]),
         _fila_distribucion("Área", [("Rural", datos["Rural"]),
@@ -8957,7 +9016,6 @@ def tarjeta_escolaridad_inconclusa():
             ),
             html.Span("Estudiantes", className="vision-card-unit"),
         ], className="vision-card-value-row"),
-        html.P("Las mujeres son la mayoría: 52,1 %", className="pres-destacado"),
         _fila_distribucion("Sexo", list(d["escolaridad_inconclusa_sexo"].items())),
         _pie_actualizacion_educacion_media(d["anio_lectivo"]),
     ], className=("vision-exec-card epja escolaridad-inconclusa-card "
@@ -10085,6 +10143,12 @@ def seccion_respuesta_fenomeno_nino():
                                   html.H4("Detalle por zona")],
                                  className="territorial-ranking-heading"),
                         html.Div([
+                            html.Span("Zona"),
+                            html.Span("Territorio"),
+                            html.Span("Eventos"),
+                            html.Span("Personas alcanzadas"),
+                        ], className="fenomeno-zona-encabezado"),
+                        html.Div([
                             html.Div([
                                 html.Strong(dato["zona"]),
                                 html.Span(dato["territorio"]),
@@ -10098,8 +10162,8 @@ def seccion_respuesta_fenomeno_nino():
                             for dato in FENOMENO_NINO_ZONAS
                         ], className="fenomeno-zonas-lista"),
                         html.P(
-                            "Columnas: eventos y personas alcanzadas. *Z7 y Z8 registran "
-                            "alojamientos temporales activos; Z8 concentra el mayor impacto numérico.",
+                            "*Z7 y Z8 registran alojamientos temporales activos; Z8 concentra "
+                            "el mayor impacto numérico.",
                             className="territorial-method-note",
                         ),
                     ], className="territorial-ranking-block"),
@@ -10107,20 +10171,6 @@ def seccion_respuesta_fenomeno_nino():
             ], className="territorial-map-grid"),
         ], className="territorial-section fenomeno-territorial-section"),
     ])
-
-
-def observacion_regimenes():
-    """Aclaración institucional solicitada para las desagregaciones.
-
-    La plantilla abrevia los regímenes como Costa y Sierra; en el tablero se
-    muestran sus denominaciones completas para dejar explícita la cobertura
-    territorial de Galápagos y Amazonía.
-    """
-    return html.P([
-        html.Strong("Observación: "),
-        "La categoría Costa corresponde a Costa-Galápagos y la categoría "
-        "Sierra corresponde a Sierra-Amazonía.",
-    ], className="gestion-regimen-aclaracion")
 
 
 def observacion_interculturalidad():
@@ -10170,7 +10220,7 @@ def pagina_gestion_educativa():
             html.Div(className="vision-title-mark"),
             html.Div([
                 html.H1(
-                    "Viceministerio de Gestión Educativa",
+                    "EJE 1 • FORTALECIMIENTO DE LA INFRAESTRUCTURA, EQUIPAMIENTO Y ALIMENTACIÓN ESCOLAR",
                     className="gestion-educativa-titulo-eje",
                     style={
                         "fontSize": "clamp(15px, 1.15vw, 20px)",
@@ -10191,7 +10241,7 @@ def pagina_gestion_educativa():
         ], className="pres-anclas"),
         html.Div(id="gestion-resumen"),
         encabezado_seccion_presidencia(
-            "EJE 1", "Educación media",
+            "", "Educación media",
             "Fortalecimiento de la infraestructura, equipamiento y alimentación escolar",
             "Período: Año lectivo 2025–2026 · Actualización: marzo",
             "gestion-educacion-media",
@@ -10207,7 +10257,6 @@ def pagina_gestion_educativa():
             children=tarjetas_media_segunda_fila,
             style={"gridTemplateColumns": "repeat(3, minmax(0, 1fr))", "marginTop": "12px"},
         ),
-        observacion_regimenes(),
         observacion_interculturalidad(),
         encabezado_seccion_presidencia(
             "", "Recursos educativos y complementarios",
@@ -10221,7 +10270,6 @@ def pagina_gestion_educativa():
             children=tarjetas,
             style={"gridTemplateColumns": "repeat(3, minmax(0, 1fr))"},
         ),
-        observacion_regimenes(),
         seccion_mapa_recursos_educativos(),
         html.Div(id="gestion-programas", children=[
             encabezado_seccion_presidencia(
