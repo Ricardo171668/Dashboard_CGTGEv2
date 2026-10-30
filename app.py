@@ -84,6 +84,8 @@ SECCIONES = [
     ("kpi-institucionales", "KPI´s Institucionales"),
     ("presupuesto", "Ejecución Presupuestaria - Inversión"),
     ("inventario", "Inventario y Recurso de Información"),
+    ("obras", "Ejecución de Obras"),
+    ("fuentes", "Fuentes y Referencias"),
     ("documentacion", "Documentación"),
 ]
 
@@ -131,6 +133,8 @@ SECCIONES_PRINCIPALES = [
     ("indicadores", "Indicadores"),
     ("presupuesto", "Ejecución Presupuestaria - Inversión"),
     ("inventario", "Inventario y Recurso de Información"),
+    ("obras", "Ejecución de Obras"),
+    ("fuentes", "Fuentes y Referencias"),
     ("documentacion", "Documentación"),
 ]
 
@@ -142,6 +146,8 @@ ICONOS = {
     "kpi-institucionales": "◫",
     "presupuesto": "▥",
     "inventario": "▤",
+    "obras": "▦",
+    "fuentes": "≡",
     "documentacion": "▧",
 }
 
@@ -580,15 +586,28 @@ def _provincia_homologada(valor):
     """Homologa variantes de escritura y descarta valores que no sean una de
     las 24 provincias oficiales del Ecuador."""
     clave = _normalizar_encabezado_presupuesto(valor)
-    clave = re.sub(r"^(PROVINCIA_DE_|PROVINCIA_)", "", clave).replace("_", " ").strip()
+    clave = re.sub(r"^(PROVINCIA_DE_|PROVINCIA_)", "", clave)
+    clave = re.sub(r"^\d{1,2}[_\-. ]+", "", clave).replace("_", " ").strip()
     equivalencias = {
         "SANTO DOMINGO": "SANTO DOMINGO DE LOS TSACHILAS",
+        "STO DOMINGO": "SANTO DOMINGO DE LOS TSACHILAS",
+        "STO DOMINGO DE LOS TSACHILAS": "SANTO DOMINGO DE LOS TSACHILAS",
+        "SANTO DOMINGO TSACHILAS": "SANTO DOMINGO DE LOS TSACHILAS",
         "SANTO DOMINGO DE LOS TSACHILAS": "SANTO DOMINGO DE LOS TSACHILAS",
         "GALAPAGO": "GALAPAGOS",
+        "REGION INSULAR GALAPAGOS": "GALAPAGOS",
+        "FRANCISCO DE ORELLANA": "ORELLANA",
+        "ORELLANA FRANCISCO DE ORELLANA": "ORELLANA",
         "CANAR": "CANAR",
     }
     clave = equivalencias.get(clave, clave)
-    return clave if clave in PROVINCIAS_ECUADOR else None
+    if clave in PROVINCIAS_ECUADOR:
+        return clave
+    # Algunas matrices agregan códigos, zonas o aclaraciones al nombre. Se
+    # recupera la provincia solo cuando la coincidencia es inequívoca.
+    coincidencias = [provincia for provincia in PROVINCIAS_ECUADOR
+                     if provincia in clave or clave in provincia]
+    return max(coincidencias, key=len) if len(coincidencias) == 1 else None
 
 
 def _columna_por_claves(mapa, claves):
@@ -906,6 +925,14 @@ ESIGEF_DOWNLOAD_URL = os.getenv(
     "?e=0KSa78&download=1",
 ).strip()
 
+OBRAS_DOWNLOAD_URL = os.getenv(
+    "OBRAS_DOWNLOAD_URL",
+    "https://educacionec-my.sharepoint.com/:x:/g/personal/"
+    "ricardo_castellanos_educacion_gob_ec/"
+    "cQrJ_zE_7mp0TbQ-6qVX9qEQEgUCM7w29_ZtRQEH4oPEfVAq2A?download=1",
+).strip()
+OBRAS_META = {"archivo": "Ejecucion_de_Obras.xlsx", "fecha": "", "origen": "OneDrive", "version": ""}
+
 # Vínculos "Copiar vínculo" de OneDrive para las bases de Gestión Educativa
 # que continúan siendo remotas. Alimentación Escolar no consta aquí porque su
 # fuente oficial para esta versión es el archivo local
@@ -982,6 +1009,119 @@ def _normalizar_encabezado_presupuesto(valor):
     texto = "".join(c for c in texto if not unicodedata.combining(c))
     texto = re.sub(r"[^A-Za-z0-9]+", "_", texto.upper()).strip("_")
     return texto
+
+
+def _numero_obras(valor):
+    """Convierte cifras de obras escritas con separadores locales o porcentaje."""
+    if pd.isna(valor) or str(valor).strip() == "":
+        return float("nan")
+    if isinstance(valor, (int, float)):
+        return float(valor)
+    texto = str(valor).strip().replace("$", "").replace("%", "").replace(" ", "")
+    if "," in texto and "." in texto:
+        texto = texto.replace(".", "").replace(",", ".")
+    elif "," in texto:
+        texto = texto.replace(",", ".")
+    return pd.to_numeric(texto, errors="coerce")
+
+
+def _leer_excel_obras(origen):
+    """Encuentra la hoja y la fila de encabezados más informativa del libro de obras."""
+    if hasattr(origen, "seek"):
+        origen.seek(0)
+    libro = pd.ExcelFile(origen, engine="openpyxl")
+    mejor = None
+    claves = {
+        "PROVINCIA", "CANTON", "ESTADO", "AVANCE_FISICO", "NOMBRE_OBRA",
+        "NOMBRE_INTERVENCION", "NOMBRE_COMPROMISO", "ENTIDAD_RESPONSABLE",
+        "FECHA_INAUGURACION", "CODIGO_OBRA", "CUP", "CUCP",
+    }
+    for hoja in libro.sheet_names:
+        vista = pd.read_excel(libro, sheet_name=hoja, header=None, nrows=60, engine="openpyxl")
+        for fila_num, fila in vista.iterrows():
+            etiquetas = {_normalizar_encabezado_presupuesto(x) for x in fila.dropna() if str(x).strip()}
+            puntaje = sum(1 for clave in claves if any(clave in etiqueta for etiqueta in etiquetas))
+            if mejor is None or puntaje > mejor[0]:
+                mejor = (puntaje, hoja, int(fila_num))
+    if not mejor or mejor[0] < 2:
+        raise ValueError("No se identificó una tabla de obras con provincia, estado, avance o intervención.")
+    return pd.read_excel(libro, sheet_name=mejor[1], header=mejor[2], engine="openpyxl")
+
+
+def _columna_obras(mapa, *claves):
+    """Localiza una columna tolerando variantes de escritura institucionales."""
+    for clave in claves:
+        if clave in mapa:
+            return mapa[clave]
+    for clave in claves:
+        coincidencia = next((original for normal, original in mapa.items()
+                             if clave in normal or normal in clave), None)
+        if coincidencia:
+            return coincidencia
+    return None
+
+
+def cargar_base_obras():
+    """Descarga y homologa la matriz de Ejecución de Obras publicada en OneDrive."""
+    global OBRAS_META
+    try:
+        try:
+            origen, version, fecha = _descargar_excel_onedrive(
+                OBRAS_DOWNLOAD_URL, "Ejecucion_de_Obras.xlsx"
+            )
+            meta = {"archivo": "Ejecucion_de_Obras.xlsx", "fecha": fecha,
+                    "origen": "OneDrive", "version": version}
+        except Exception as error_remoto:
+            locales = [p for p in BASE_DIR.rglob("*.xlsx")
+                       if "obra" in _normalizar_encabezado_presupuesto(p.stem).lower()]
+            if not locales:
+                raise ValueError(f"No se pudo descargar la matriz de OneDrive: {error_remoto}")
+            archivo = max(locales, key=lambda p: p.stat().st_mtime_ns)
+            origen = archivo
+            meta = {"archivo": archivo.name,
+                    "fecha": datetime.fromtimestamp(archivo.stat().st_mtime).strftime("%d/%m/%Y"),
+                    "origen": "Copia local", "version": str(archivo.stat().st_mtime_ns)}
+
+        bruto = _leer_excel_obras(origen)
+        bruto.columns = [" ".join(str(c).replace("\n", " ").strip().split()) for c in bruto.columns]
+        bruto = bruto.loc[:, ~bruto.columns.astype(str).str.startswith("Unnamed")].copy()
+        mapa = {_normalizar_encabezado_presupuesto(c): c for c in bruto.columns}
+        aliases = {
+            "Categoría de intervención": ("CATEGORIA_INTERVENCION", "CATEGORIA", "TIPO_INTERVENCION"),
+            "Entidad responsable": ("ENTIDAD_RESPONSABLE", "ENTIDAD", "RESPONSABLE"),
+            "Intervención": ("NOMBRE_INTERVENCION", "INTERVENCION", "NOMBRE_OBRA", "OBRA"),
+            "Compromiso": ("NOMBRE_COMPROMISO", "COMPROMISO", "COMPROMISO_PRESIDENCIAL"),
+            "Provincia": ("PROVINCIA",),
+            "Cantón": ("CANTON",),
+            "Estado": ("ESTADO_OBRA", "ESTADO_INTERVENCION", "ESTADO"),
+            "Avance físico": ("AVANCE_FISICO", "PORCENTAJE_AVANCE_FISICO", "AVANCE"),
+            "Fecha inauguración": ("FECHA_INAUGURACION", "POSIBLE_FECHA_INAUGURACION", "FECHA_FIN"),
+            "Tipo de obra": ("TIPO_OBRA", "TIPO_INTERVENCION", "CATEGORIA_INTERVENCION"),
+            "Código de obra": ("CODIGO_OBRA", "ID_UNICO", "CUP", "CUCP"),
+            "Alerta": ("ALERTA", "OBSERVACION_SGG", "OBSERVACION", "RIESGO"),
+            "Monto obra": ("MONTO_OBRA_MM", "MONTO_OBRA", "MONTO"),
+        }
+        salida = pd.DataFrame(index=bruto.index)
+        for destino, claves in aliases.items():
+            original = _columna_obras(mapa, *claves)
+            salida[destino] = bruto[original] if original else pd.NA
+        for col in ["Categoría de intervención", "Entidad responsable", "Intervención", "Compromiso",
+                    "Provincia", "Cantón", "Estado", "Tipo de obra", "Código de obra", "Alerta"]:
+            salida[col] = salida[col].fillna("").astype(str).str.strip()
+        salida["Avance físico"] = salida["Avance físico"].map(_numero_obras)
+        fracciones = salida["Avance físico"].notna() & salida["Avance físico"].between(0, 1)
+        salida.loc[fracciones, "Avance físico"] *= 100
+        salida["Monto obra"] = salida["Monto obra"].map(_numero_obras)
+        salida["Fecha inauguración"] = pd.to_datetime(salida["Fecha inauguración"], errors="coerce", dayfirst=True)
+        salida = salida.loc[(salida["Intervención"] != "") | (salida["Compromiso"] != "")].copy()
+        OBRAS_META = meta
+        return salida, None
+    except Exception as exc:
+        return pd.DataFrame(), f"No fue posible cargar la matriz de Ejecución de Obras: {exc}"
+
+
+def version_obras():
+    return OBRAS_META.get("version", "")
 
 
 def _leer_excel_presupuesto(origen):
@@ -1078,6 +1218,7 @@ def _cargar_datos_iniciales():
         "kpi_inst": cargar_base_kpi_inst,
         "gestion": cargar_resumen_gestion_educativa,
         "presupuesto": cargar_base_presupuesto,
+        "obras": cargar_base_obras,
     }
     with ThreadPoolExecutor(max_workers=len(cargadores)) as ejecutor:
         tareas = {
@@ -1096,6 +1237,7 @@ RESUMEN_GESTION_EDUCATIVA, PENDIENTES_GESTION_EDUCATIVA = _DATOS_INICIALES["gest
 # depende del archivo vision_ejecutiva.xlsx.
 DATA_VISION, ERROR_VISION = pd.DataFrame(), None
 DATA_PRESUPUESTO, ERROR_PRESUPUESTO = _DATOS_INICIALES["presupuesto"]
+DATA_OBRAS, ERROR_OBRAS = _DATOS_INICIALES["obras"]
 del _DATOS_INICIALES
 VERSION_PND = version_pnd()
 VERSION_KPI = version_kpi()
@@ -1103,6 +1245,7 @@ VERSION_KPI_INST = version_kpi_inst()
 VERSION_GESTION_EDUCATIVA = version_gestion_educativa()
 VERSION_VISION = "infografia-minedec-2026"
 VERSION_PRESUPUESTO = version_presupuesto()
+VERSION_OBRAS = version_obras()
 
 # Metadatos de las secciones que sí tienen datos tabulares (menú lateral con acordeón).
 SECCIONES_CON_DATOS = {
@@ -3238,20 +3381,23 @@ app.index_string = """<!DOCTYPE html>
         .portada-menu {
           width: 100% !important; margin: 0 !important;
           display: grid !important;
-          grid-template-columns: repeat(5, minmax(0, 1fr)) !important;
+          grid-template-columns: repeat(8, minmax(0, 1fr)) !important;
           gap: 14px !important;
         }
+        .portada-menu > .portada-boton { grid-column: span 2; }
+        .portada-menu > .portada-boton:nth-child(5) { grid-column: 2 / span 2; }
         .portada-pagina .portada-boton {
-          min-width: 0; min-height: 176px !important; padding: 16px !important;
+          min-width: 0; min-height: 138px !important; padding: 13px 14px !important;
           display: grid !important;
-          grid-template-columns: 44px minmax(0, 1fr) !important;
+          grid-template-columns: minmax(0, 1fr) !important;
           grid-template-rows: auto auto 1fr auto !important;
-          align-content: start; align-items: center; gap: 8px 10px !important;
+          align-content: center; align-items: center; justify-items: center;
+          gap: 6px !important;
           border: 1px solid #DDE2EB !important;
           border-radius: 16px !important; color: #232D5A !important;
           background: #FFFFFF !important;
           box-shadow: 0 6px 17px rgba(35,45,90,.08) !important;
-          text-align: left; cursor: pointer;
+          text-align: center; cursor: pointer;
         }
         .portada-pagina .portada-boton:hover,
         .portada-pagina .portada-boton:focus-visible {
@@ -3261,25 +3407,25 @@ app.index_string = """<!DOCTYPE html>
           outline: 3px solid rgba(79,68,154,.15) !important;
         }
         .portada-pagina .portada-boton-icono {
-          grid-column: 1; grid-row: 1; width: 42px !important; height: 42px !important;
+          grid-column: 1; grid-row: 1; width: 38px !important; height: 38px !important;
           border: 1px solid #DED8F1 !important; border-radius: 11px !important;
           color: #4F449A !important; background: #F1EEFA !important;
         }
         .portada-pagina .portada-boton-icono-svg {
-          width: 24px !important; height: 24px !important;
+          width: 22px !important; height: 22px !important;
         }
         .portada-pagina .portada-boton-texto {
-          grid-column: 1 / -1; grid-row: 2; margin-top: 3px;
+          grid-column: 1; grid-row: 2; margin-top: 1px; width: 100%;
           color: inherit; font-size: clamp(12px, 1vw, 15px) !important;
           font-weight: 900; line-height: 1.2;
         }
         .portada-boton-descripcion {
-          grid-column: 1 / -1; grid-row: 3; color: #748099;
-          font-size: 10px; line-height: 1.35;
+          grid-column: 1; grid-row: 3; width: 100%; color: #748099;
+          font-size: 10px; line-height: 1.3; text-align: center;
         }
         .portada-boton-accion {
-          grid-column: 1 / -1; grid-row: 4; display: inline-flex;
-          align-items: center; gap: 6px; color: #5A45B1;
+          grid-column: 1; grid-row: 4; display: inline-flex;
+          align-items: center; justify-content: center; gap: 6px; color: #5A45B1;
           font-size: 10px; font-weight: 900;
         }
         .portada-boton-accion b { font-size: 14px; }
@@ -3298,6 +3444,48 @@ app.index_string = """<!DOCTYPE html>
           color: #F1B620;
         }
 
+        /* Ejecución de Obras y Fuentes y Referencias */
+        .works-module-main { width: 100% !important; max-width: none !important; }
+        .works-page, .sources-page {
+          width: min(1560px, 100%); margin: 0 auto; padding: 24px clamp(16px, 3vw, 42px) 42px;
+          box-sizing: border-box;
+        }
+        .works-source { display: inline-block; margin-top: 8px; color: #69758E; font-size: 11px; }
+        .works-filters {
+          margin: 16px 0 20px; padding: 16px; display: grid;
+          grid-template-columns: repeat(3, minmax(220px, 1fr)); gap: 14px;
+          border: 1px solid #DFE3EC; border-radius: 16px; background: #FFFFFF;
+          box-shadow: 0 6px 18px rgba(35,45,90,.06);
+        }
+        .works-filters > div { min-width: 0; }
+        .works-filters label { display: block; margin: 0 0 7px; color: #44506C; font-size: 13px; font-weight: 800; }
+        .works-tabs { margin-top: 10px; }
+        .works-tabs .tab { padding: 14px 18px !important; color: #536079; font: 800 15px/1.25 Arial, sans-serif !important; }
+        .works-tabs .tab--selected { color: #392A83 !important; border-top-color: #F1B620 !important; }
+        .works-kpi-grid {
+          margin: 18px 0 14px; display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 12px;
+        }
+        .works-kpi-card {
+          min-width: 0; min-height: 128px; padding: 18px; display: flex; flex-direction: column;
+          justify-content: center; border: 1px solid #DFE3EC; border-top: 5px solid #4F449A;
+          border-radius: 15px; background: #FFFFFF; box-shadow: 0 6px 18px rgba(35,45,90,.07);
+        }
+        .works-kpi-card span { color: #66718A; font-size: 12px; font-weight: 800; text-transform: uppercase; }
+        .works-kpi-card strong { margin-top: 8px; color: #232D5A; font-size: clamp(25px, 2.4vw, 38px); line-height: 1; }
+        .works-kpi-card p { margin: 8px 0 0; color: #7A849A; font-size: 12px; line-height: 1.4; }
+        .works-visual-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px; }
+        .works-visual-grid .works-panel:first-child { grid-column: 1 / -1; }
+        .works-panel, .works-table-card, .source-section {
+          min-width: 0; padding: 12px; border: 1px solid #DFE3EC; border-radius: 16px;
+          background: #FFFFFF; box-shadow: 0 6px 18px rgba(35,45,90,.07);
+        }
+        .works-table-card { margin-top: 18px; padding: 18px; }
+        .works-table-heading { margin-bottom: 12px; display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+        .works-table-heading h2, .source-section h2 { margin: 0; color: #232D5A; font-size: 18px; }
+        .works-table-heading span { color: #69758E; font-size: 12px; font-weight: 800; }
+        .source-section { margin-top: 18px; padding: 20px; }
+        .source-section h2 { margin-bottom: 15px; }
+
         @media (max-width: 1100px) {
           .portada-hero {
             height: clamp(300px, 31vw, 350px);
@@ -3306,7 +3494,11 @@ app.index_string = """<!DOCTYPE html>
           .portada-menu {
             grid-template-columns: repeat(3, minmax(0, 1fr)) !important;
           }
-          .portada-pagina .portada-boton { min-height: 154px !important; }
+          .portada-menu > .portada-boton,
+          .portada-menu > .portada-boton:nth-child(5) { grid-column: auto; }
+          .portada-pagina .portada-boton { min-height: 138px !important; }
+          .works-filters { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+          .works-kpi-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
         }
         @media (max-width: 760px) {
           .header-bar { min-height: 62px !important; padding: 6px 9px !important; }
@@ -3331,9 +3523,14 @@ app.index_string = """<!DOCTYPE html>
             grid-column: 1; grid-row: 2; height: 220px;
           }
           .portada-menu { grid-template-columns: repeat(2, minmax(0, 1fr)) !important; }
-          .portada-pagina .portada-boton { min-height: 160px !important; }
+          .portada-pagina .portada-boton { min-height: 142px !important; }
           .portada-menu-cabecera { align-items: flex-start; }
           .portada-corte { max-width: 115px; text-align: right; }
+          .works-page, .sources-page { padding: 14px 10px 30px; }
+          .works-filters { grid-template-columns: 1fr; padding: 12px; }
+          .works-kpi-grid, .works-visual-grid { grid-template-columns: 1fr; }
+          .works-visual-grid .works-panel:first-child { grid-column: auto; }
+          .works-tabs .tab { padding: 11px 8px !important; font-size: 11px !important; }
         }
         @media (max-width: 430px) {
           .portada-nav { display: none; }
@@ -3344,13 +3541,13 @@ app.index_string = """<!DOCTYPE html>
           .portada-menu { grid-template-columns: 1fr !important; }
           .portada-pagina .portada-boton {
             min-height: 128px !important;
-            grid-template-columns: 42px minmax(0, 1fr) !important;
-            grid-template-rows: auto auto auto !important;
+            grid-template-columns: minmax(0, 1fr) !important;
+            grid-template-rows: auto auto auto auto !important;
           }
-          .portada-pagina .portada-boton-icono { grid-row: 1 / span 2; }
-          .portada-pagina .portada-boton-texto { grid-column: 2; grid-row: 1; }
-          .portada-boton-descripcion { grid-column: 2; grid-row: 2; }
-          .portada-boton-accion { grid-column: 2; grid-row: 3; }
+          .portada-pagina .portada-boton-icono { grid-column: 1; grid-row: 1; }
+          .portada-pagina .portada-boton-texto { grid-column: 1; grid-row: 2; }
+          .portada-boton-descripcion { grid-column: 1; grid-row: 3; }
+          .portada-boton-accion { grid-column: 1; grid-row: 4; }
         }
 
         /* Gestión Educativa · composición del Anexo 3 de Presidencia. Estas
@@ -5570,6 +5767,8 @@ def portada():
         "indicadores": "Indicadores",
         "presupuesto": "Ejecución Presupuestaria",
         "inventario": "Inventario de Información",
+        "obras": "Ejecución de Obras",
+        "fuentes": "Fuentes y Referencias",
         "documentacion": "Documentación",
     }
     iconos_portada = {
@@ -5577,6 +5776,8 @@ def portada():
         "indicadores": """<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64' fill='none' stroke='#4F449A' stroke-width='3' stroke-linecap='round' stroke-linejoin='round'><rect x='10' y='8' width='44' height='48' rx='5'/><path d='M20 21l3 3 6-7M34 21h11M20 35l3 3 6-7M34 35h11M20 49l3 3 6-7M34 49h11'/></svg>""",
         "presupuesto": """<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64' fill='none' stroke='#4F449A' stroke-width='3' stroke-linecap='round' stroke-linejoin='round'><path d='M9 53h46M14 48V29M25 48V37M36 48V23M47 48V14'/><path d='M14 21l11-7 11 3 14-9M43 8h7v7'/><circle cx='14' cy='21' r='2.5'/><circle cx='25' cy='14' r='2.5'/><circle cx='36' cy='17' r='2.5'/></svg>""",
         "inventario": """<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64' fill='none' stroke='#4F449A' stroke-width='3' stroke-linecap='round' stroke-linejoin='round'><path d='M7 20h20l5 6h25v27H7z'/><path d='M7 20v-8h19l5 6h20v8M17 35h12M17 43h22'/><circle cx='48' cy='43' r='7'/><path d='M53 48l5 5'/></svg>""",
+        "obras": """<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64' fill='none' stroke='#4F449A' stroke-width='3' stroke-linecap='round' stroke-linejoin='round'><path d='M8 51h48M13 51V27h38v24M20 27V15h24v12M17 35h10v8H17zM37 35h10v8H37z'/><path d='M26 15l6-7 6 7'/></svg>""",
+        "fuentes": """<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64' fill='none' stroke='#4F449A' stroke-width='3' stroke-linecap='round' stroke-linejoin='round'><ellipse cx='32' cy='14' rx='20' ry='7'/><path d='M12 14v12c0 4 9 7 20 7s20-3 20-7V14M12 26v12c0 4 9 7 20 7s20-3 20-7V26M12 38v12c0 4 9 7 20 7s20-3 20-7V38'/></svg>""",
         "documentacion": """<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64' fill='none' stroke='#4F449A' stroke-width='3' stroke-linecap='round' stroke-linejoin='round'><path d='M16 7h24l10 10v40H16z'/><path d='M40 7v12h12M24 30h18M24 39h18M24 48h12'/></svg>""",
     }
 
@@ -5585,6 +5786,8 @@ def portada():
         "indicadores": "Metas, avance y cumplimiento",
         "presupuesto": "Codificado, devengado y % de ejecución",
         "inventario": "Fuentes, bases y activos de datos",
+        "obras": "Avance físico, estado y detalle territorial",
+        "fuentes": "Origen, periodicidad y diccionario de datos",
         "documentacion": "Fichas metodológicas y guías",
     }
 
@@ -11200,6 +11403,351 @@ def contenido_inventario():
     ], className="indicator-content")
 
 
+def _filtrar_obras(df, entidad="Todas", intervencion="Todas", provincia="Todas"):
+    trabajo = df.copy()
+    filtros = [
+        ("Entidad responsable", entidad, "Todas"),
+        ("Intervención", intervencion, "Todas"),
+        ("Provincia", provincia, "Todas"),
+    ]
+    for columna, valor, todos in filtros:
+        if valor and valor != todos and columna in trabajo:
+            trabajo = trabajo.loc[trabajo[columna].astype(str) == str(valor)]
+    return trabajo
+
+
+def _figura_estados_obras(df):
+    conteo = (df["Estado"].replace("", "Sin estado").value_counts()
+              if not df.empty else pd.Series(dtype="int64"))
+    colores = ["#4F449A", "#6F63B7", "#8B83C7", "#F1B620", "#D8D4EB", "#446381"]
+    figura = go.Figure(go.Bar(
+        x=conteo.values, y=conteo.index, orientation="h",
+        marker={"color": colores[:len(conteo)]},
+        text=conteo.values, textposition="outside",
+        hovertemplate="%{y}: %{x}<extra></extra>",
+    ))
+    figura.update_layout(
+        title={"text": "Intervenciones por estado", "x": .02}, height=300,
+        margin=dict(l=35, r=35, t=52, b=28), paper_bgcolor="white", plot_bgcolor="white",
+        font={"family": "Arial", "color": "#232D5A"}, showlegend=False,
+    )
+    figura.update_xaxes(showgrid=True, gridcolor="#ECEEF4", rangemode="tozero")
+    figura.update_yaxes(autorange="reversed", showgrid=False)
+    return figura
+
+
+def _figura_mapa_obras(df):
+    serie = pd.Series(dtype="int64")
+    if not df.empty:
+        provincias = df["Provincia"].map(_provincia_homologada).dropna()
+        serie = provincias.value_counts()
+    geojson = _cargar_geojson_provincias()
+    figura = go.Figure()
+    if geojson:
+        nombres = [f["properties"]["nombre"] for f in geojson["features"]]
+        valores = [int(serie.get(_provincia_homologada(nombre), 0)) for nombre in nombres]
+        figura.add_trace(go.Choropleth(
+            geojson=geojson, locations=nombres, z=valores,
+            featureidkey="properties.nombre", colorscale=[[0, "#F1EEFA"], [1, "#4F449A"]],
+            marker_line_color="white", marker_line_width=.8,
+            colorbar={"title": "Obras", "thickness": 12},
+            hovertemplate="%{location}: %{z} intervenciones<extra></extra>",
+        ))
+        figura.update_geos(fitbounds="locations", visible=False)
+    else:
+        figura.add_annotation(text="Agregue provincias_ecuador.geojson para visualizar el mapa.",
+                              x=.5, y=.5, showarrow=False)
+    figura.update_layout(
+        title={"text": "Distribución territorial de intervenciones", "x": .02},
+        height=390, margin=dict(l=8, r=8, t=52, b=8), paper_bgcolor="white",
+        font={"family": "Arial", "color": "#232D5A"},
+    )
+    return figura
+
+
+def _figura_cronograma_obras(df):
+    fechas = df["Fecha inauguración"].dropna() if not df.empty else pd.Series(dtype="datetime64[ns]")
+    if fechas.empty:
+        conteo = pd.Series(dtype="int64")
+    else:
+        conteo = fechas.dt.to_period("M").astype(str).value_counts().sort_index()
+    figura = go.Figure(go.Bar(
+        x=list(conteo.index), y=list(conteo.values), marker_color="#4F449A",
+        text=list(conteo.values), textposition="outside",
+        hovertemplate="%{x}: %{y} inauguraciones<extra></extra>",
+    ))
+    figura.update_layout(
+        title={"text": "Cronograma de posibles inauguraciones", "x": .02}, height=390,
+        margin=dict(l=42, r=20, t=52, b=65), paper_bgcolor="white", plot_bgcolor="white",
+        font={"family": "Arial", "color": "#232D5A"}, showlegend=False,
+    )
+    figura.update_xaxes(tickangle=-35, showgrid=False)
+    figura.update_yaxes(title="Intervenciones", rangemode="tozero", gridcolor="#ECEEF4")
+    return figura
+
+
+def _resumen_obras(df):
+    intervenciones = len(df)
+    if df.empty:
+        provincias = 0
+    else:
+        provincias_homologadas = df["Provincia"].map(_provincia_homologada).dropna().nunique()
+        provincias_crudas = (df["Provincia"].fillna("").astype(str).str.strip()
+                              .replace("", pd.NA).dropna().nunique())
+        # Si la matriz contiene exactamente las 24 provincias pero una llega
+        # con una variante todavía no homologada, no se pierde cobertura en
+        # el resumen. Valores adicionales (zonas, nacional, etc.) no se cuentan.
+        provincias = 24 if provincias_crudas == 24 else provincias_homologadas
+    avance = df["Avance físico"].mean() if not df.empty else float("nan")
+    hoy = pd.Timestamp.now().normalize()
+    futuras = int(df["Fecha inauguración"].between(hoy, hoy + pd.Timedelta(days=90)).sum()) if not df.empty else 0
+    return intervenciones, provincias, avance, futuras
+
+
+def _tarjetas_resumen_obras(df):
+    intervenciones, provincias, avance, futuras = _resumen_obras(df)
+    datos = [
+        ("Intervenciones", formato_valor(intervenciones), "Obras incluidas en el corte"),
+        ("Provincias", formato_valor(provincias), "Provincias con intervenciones registradas"),
+        ("Avance físico promedio", "—" if pd.isna(avance) else f"{avance:.1f}%".replace(".", ","),
+         "Promedio de las intervenciones con dato"),
+        ("Posibles inauguraciones", formato_valor(futuras), "Programadas para los próximos 90 días"),
+    ]
+    return [html.Article([html.Span(titulo), html.Strong(valor), html.P(nota)],
+                         className="works-kpi-card") for titulo, valor, nota in datos]
+
+
+def _opciones_obras(columna, etiqueta_todas):
+    valores = [] if DATA_OBRAS.empty else sorted(
+        x for x in DATA_OBRAS[columna].dropna().astype(str).str.strip().unique() if x
+    )
+    return [{"label": etiqueta_todas, "value": etiqueta_todas}] + [
+        {"label": valor, "value": valor} for valor in valores
+    ]
+
+
+def contenido_obras():
+    """Tablero de obras conectado directamente con la matriz institucional en OneDrive."""
+    if ERROR_OBRAS or DATA_OBRAS.empty:
+        return html.Div([
+            html.Div([html.P("EJECUCIÓN DE OBRAS", className="content-kicker"),
+                      html.H1("Seguimiento de obras e intervenciones"),
+                      html.P("La estructura queda disponible y se activará al leer la matriz institucional.")],
+                     className="content-heading institutional-landing-header"),
+            html.Div([html.H2("Conexión pendiente"), html.P(ERROR_OBRAS or "La matriz no contiene registros."),
+                      html.P("Compruebe que el vínculo permita descargar el Excel sin iniciar sesión.")],
+                     className="load-error"),
+        ], className="indicator-content works-page")
+
+    base = DATA_OBRAS.copy()
+    detalle_columnas = ["Código de obra", "Entidad responsable", "Tipo de obra", "Intervención",
+                        "Provincia", "Cantón", "Avance físico", "Estado", "Fecha inauguración", "Alerta"]
+    detalle = base[detalle_columnas].copy()
+    detalle["Avance físico"] = detalle["Avance físico"].map(
+        lambda v: "—" if pd.isna(v) else f"{v:.1f}%".replace(".", ","))
+    detalle["Fecha inauguración"] = detalle["Fecha inauguración"].dt.strftime("%d/%m/%Y").fillna("—")
+
+    filtros = html.Section([
+        html.Div([html.Label("Entidad responsable"), dcc.Dropdown(
+            id="works-filter-entity", options=_opciones_obras("Entidad responsable", "Todas"), value="Todas")]),
+        html.Div([html.Label("Nombre de intervención"), dcc.Dropdown(
+            id="works-filter-intervention", options=_opciones_obras("Intervención", "Todas"), value="Todas")]),
+        html.Div([html.Label("Provincia"), dcc.Dropdown(
+            id="works-filter-province", options=_opciones_obras("Provincia", "Todas"), value="Todas")]),
+    ], className="works-filters")
+
+    resumen = html.Div([
+        html.Div(_tarjetas_resumen_obras(base), id="works-kpi-grid", className="works-kpi-grid"),
+        html.Div([
+            html.Div(dcc.Graph(id="works-state-chart", figure=_figura_estados_obras(base),
+                               config={"displayModeBar": False, "responsive": True}), className="works-panel"),
+            html.Div(dcc.Graph(id="works-map", figure=_figura_mapa_obras(base),
+                               config={"displayModeBar": False, "responsive": True}), className="works-panel"),
+            html.Div(dcc.Graph(id="works-timeline", figure=_figura_cronograma_obras(base),
+                               config={"displayModeBar": False, "responsive": True}), className="works-panel"),
+        ], className="works-visual-grid"),
+    ])
+    reporte = html.Div([
+        html.Div([html.H2("Reporte detallado"), html.Span(f"{len(detalle):,} registros".replace(",", "."),
+                                                           id="works-table-count")], className="works-table-heading"),
+        dash_table.DataTable(
+            id="works-detail-table", data=detalle.to_dict("records"),
+            columns=[{"name": c, "id": c} for c in detalle.columns], page_size=20,
+            sort_action="native", filter_action="native", fixed_rows={"headers": True},
+            style_table={"overflowX": "auto", "maxHeight": "650px"},
+            style_cell={"fontFamily": "Arial", "fontSize": "13px", "lineHeight": "1.4", "padding": "10px",
+                        "textAlign": "left", "whiteSpace": "normal", "minWidth": "120px", "maxWidth": "300px"},
+            style_header={"backgroundColor": "#232D5A", "color": "white", "fontWeight": "800",
+                          "fontFamily": "Arial", "fontSize": "13px"},
+            style_data_conditional=[{"if": {"row_index": "odd"}, "backgroundColor": "#F7F7FB"}],
+        ),
+    ], className="works-table-card")
+
+    return html.Div([
+        html.Div([html.P("EJECUCIÓN DE OBRAS", className="content-kicker"),
+                  html.H1("Obras PAI y priorizadas"),
+                  html.P("Seguimiento ejecutivo del avance físico, estado, territorio y posibles inauguraciones."),
+                  html.Span(f"Fuente: {OBRAS_META.get('origen', 'OneDrive')} · {OBRAS_META.get('archivo', '')}",
+                            className="works-source")], className="content-heading institutional-landing-header"),
+        filtros,
+        dcc.Tabs(id="works-tabs", value="resumen", className="works-tabs", children=[
+            dcc.Tab(label="Resumen Ejecutivo", value="resumen", children=resumen),
+            dcc.Tab(label="Reporte Detallado", value="detalle", children=reporte),
+        ]),
+    ], className="indicator-content works-page")
+
+
+def _ultimo_periodo_fuente(df):
+    """Último período visible de una matriz de indicadores."""
+    if df is None or df.empty:
+        return "Sin registros disponibles"
+    ordenado = df.sort_values("_orden_periodo") if "_orden_periodo" in df else df
+    for columna in ("Periodo", "Año", "Fecha de Corte", "Fecha de Transferencia"):
+        if columna in ordenado:
+            valores = ordenado[columna].dropna().astype(str).str.strip()
+            valores = valores.loc[~valores.isin(["", "nan", "NaT", "<NA>"])]
+            if not valores.empty:
+                return valores.iloc[-1]
+    return "Último archivo publicado"
+
+
+def _fecha_meta_fuente(meta, defecto="Último archivo publicado"):
+    crudo = str((meta or {}).get("fecha") or "").strip()
+    if not crudo:
+        return defecto
+    try:
+        fecha = parsedate_to_datetime(crudo)
+        return fecha.strftime("%d/%m/%Y")
+    except (TypeError, ValueError):
+        return crudo.split(" ")[0] if crudo else defecto
+
+
+def fuentes_dashboard():
+    """Inventario integral de las fuentes utilizadas por todos los módulos."""
+    return [
+        ("F01", "Indicadores_PND version 1.xlsx", "MINEDEC / unidades responsables", "Plan Nacional de Desarrollo: metas, estimadores, alertas y observaciones", "OneDrive"),
+        ("F02", "kpi_estratégicos.xlsx", "MINEDEC / planificación institucional", "KPI estratégicos y su evolución por período", "OneDrive"),
+        ("F03", "KPI_INSTITUCIONALES.xlsx", "MINEDEC / unidades responsables", "KPI institucionales, metas, ejecución y observaciones", "OneDrive"),
+        ("F04", "ESIGEF_actual.xlsx", "MINEDEC / administración financiera", "Codificado, certificado, comprometido, devengado, saldo y ejecución", "OneDrive"),
+        ("F05", "Matriz de Ejecución de Obras", "MINEDEC / fuente institucional", "Intervenciones, estado, avance físico, territorio e inauguraciones", "OneDrive"),
+        ("F06", "Registros administrativos de Educación Media", "MINEDEC", "Instituciones educativas, estudiantes, docentes y escolaridad inconclusa", "Consolidado institucional"),
+        ("F07", "Registros de programas de Gestión Educativa", "MINEDEC", "SAFPI, NAP, reinserción, aulas hospitalarias y servicios educativos", "Consolidado institucional"),
+        ("F08", "Bases de recursos educativos", "MINEDEC / áreas responsables", "Alimentación, uniformes, textos, mobiliario y transporte escolar", "Local y OneDrive"),
+        ("F09", "Matrices de Educación Superior", "MINEDEC / Educación Superior", "Instituciones, estudiantes, docentes, programas y servicios", "Consolidado institucional"),
+        ("F10", "Registros administrativos de Deporte", "MINEDEC / Viceministerio del Deporte", "Alto rendimiento, deporte formativo, organismos, infraestructura y servicios", "Consolidado institucional"),
+        ("F11", "RUAC y registros administrativos de Cultura", "MINEDEC / Viceministerio de Cultura", "Artistas, gestores, organizaciones, espacios, visitas, fomento y festivales", "Consolidado institucional"),
+        ("F12", "Portales oficiales de datos abiertos", "MINEDEC, Educación Superior y Cultura", "Inventario de recursos, bases y portales públicos", "Fuentes públicas"),
+        ("F13", "Entregables de formalización", "MINEDEC / DAEI", "Manual, diccionario, fichas metodológicas y ficha de formalización", "Repositorio documental"),
+    ]
+
+
+def actualizacion_dashboard():
+    """Cortes y reglas de actualización de cada ámbito del panel."""
+    return [
+        ("F01", "Plan Nacional de Desarrollo", _ultimo_periodo_fuente(DATA_PND), "Según periodicidad del indicador", "Actualización del Excel publicado en OneDrive"),
+        ("F02", "KPI estratégicos", _ultimo_periodo_fuente(DATA_KPI), "Según periodicidad del indicador", "Actualización del Excel publicado en OneDrive"),
+        ("F03", "KPI institucionales", _ultimo_periodo_fuente(DATA_KPI_INST), "Mensual, semestral o anual según indicador", "Actualización del Excel publicado en OneDrive"),
+        ("F04", "Ejecución presupuestaria", _fecha_meta_fuente(PRESUPUESTO_META), "Diaria", "Último reporte ESIGEF disponible"),
+        ("F05", "Ejecución de Obras", _fecha_meta_fuente(OBRAS_META), "Según actualización de la matriz institucional", "Descarga directa desde OneDrive"),
+        ("F06", "Educación Media", "Año lectivo 2025–2026", "Marzo de cada año", "Consolidación de registros administrativos"),
+        ("F07", "SAFPI y NAP", "Año lectivo 2026–2027", "Julio y diciembre de cada año", "Registros administrativos MINEDEC"),
+        ("F08", "Recursos educativos y complementarios", "Año lectivo 2025–2026", "Según remisión de las áreas responsables", "Bases operativas de cada servicio"),
+        ("F09", "Universidades y escuelas politécnicas", "Año 2025", "Septiembre de cada año", "Matriz institucional de Educación Superior"),
+        ("F10", "Institutos técnicos y tecnológicos", "II semestre 2025", "Junio de cada año", "Matriz institucional de Educación Superior"),
+        ("F11", "Deporte", "Último reporte institucional disponible", "Según reporte del área responsable", "Registros administrativos"),
+        ("F12", "Cultura: RUAC y Línea de Fomento", "21/10/2026", "Permanente o según convocatorias", "Registros administrativos"),
+        ("F13", "Cultura: repositorios y Festival de Loja", "Diciembre de 2025", "Trimestral o anual según producto", "Registros administrativos"),
+        ("F14", "Inventario y Documentación", "Versión publicada del panel", "Cuando cambia una fuente, enlace o entregable", "Actualización administrada por DAEI"),
+    ]
+
+
+DICCIONARIO_DASHBOARD = [
+    ("MINEDEC", "Ministerio de Educación, Deporte y Cultura."),
+    ("DAEI", "Dirección de Análisis y Estudios de Información."),
+    ("PND", "Plan Nacional de Desarrollo."),
+    ("KPI", "Indicador clave de desempeño utilizado para monitorear el cumplimiento institucional."),
+    ("IE", "Institución Educativa."),
+    ("AMIE", "Archivo Maestro de Instituciones Educativas; identifica y caracteriza a las instituciones del sistema educativo."),
+    ("SAFPI", "Servicio de Atención Familiar para la Primera Infancia, dirigido a niñas y niños de 3 y 4 años que no asisten a una institución educativa."),
+    ("NAP", "Nivelación y Aceleración Pedagógica; servicio para estudiantes con rezago o escolaridad inconclusa que facilita su reinserción al grado correspondiente."),
+    ("EPJA", "Educación para Personas Jóvenes y Adultas."),
+    ("NEE", "Necesidades Educativas Especiales."),
+    ("ITTS", "Institutos Superiores Técnicos y Tecnológicos."),
+    ("UEP", "Universidades y Escuelas Politécnicas."),
+    ("RUAC", "Registro Único de Artistas y Gestores Culturales."),
+    ("FIAVL", "Festival Internacional de Artes Vivas de Loja."),
+    ("PAI", "Plan Anual de Inversiones."),
+    ("POA", "Plan Operativo Anual."),
+    ("ESIGEF", "Sistema Integrado de Gestión Financiera utilizado para el seguimiento presupuestario."),
+    ("SERCOP", "Servicio Nacional de Contratación Pública."),
+    ("CUP", "Código Único de Proyecto que identifica una inversión pública."),
+    ("CUCP", "Código Único de Contratación Pública asociado a un proceso."),
+    ("Línea base", "Valor inicial de referencia desde el cual se mide la evolución de un indicador."),
+    ("Meta", "Valor que se espera alcanzar en un período determinado."),
+    ("Estimador", "Valor observado o calculado que muestra el avance alcanzado por el indicador."),
+    ("Numerador", "Cantidad que representa los casos que cumplen la condición definida por el indicador."),
+    ("Denominador", "Población o total de referencia sobre el cual se calcula el indicador."),
+    ("Periodicidad", "Frecuencia con la que se calcula o reporta un indicador."),
+    ("Fecha de corte", "Fecha hasta la cual se encuentra consolidada la información mostrada."),
+    ("Fecha de reporte", "Fecha en la que la unidad responsable remite o publica la información."),
+    ("Año lectivo", "Período académico que puede abarcar dos años calendario consecutivos."),
+    ("Sostenimiento", "Tipo de financiamiento o administración de una institución: fiscal, fiscomisional, municipal o particular."),
+    ("Régimen Costa-Galápagos", "Calendario escolar aplicado en las provincias de la Costa y Galápagos."),
+    ("Régimen Sierra-Amazonía", "Calendario escolar aplicado en las provincias de la Sierra y Amazonía."),
+    ("Codificado", "Presupuesto vigente luego de las reformas presupuestarias."),
+    ("Certificado", "Monto reservado mediante certificación presupuestaria para respaldar una obligación futura."),
+    ("Comprometido", "Monto de obligaciones contraídas y registradas."),
+    ("Devengado", "Monto correspondiente a bienes, servicios u obras efectivamente recibidos y reconocidos."),
+    ("Saldo disponible", "Recursos codificados que permanecen disponibles para su utilización."),
+    ("Ejecución presupuestaria", "Relación porcentual entre el monto devengado y el presupuesto codificado."),
+    ("Intervención", "Obra o actuación registrada para seguimiento institucional."),
+    ("Avance físico", "Porcentaje de ejecución material reportado para una intervención u obra."),
+    ("Posible inauguración", "Intervención con fecha prevista de inauguración dentro del horizonte de seguimiento."),
+    ("Código de obra", "Identificador institucional de la obra o intervención."),
+    ("ID único", "Clave técnica que permite relacionar registros de diferentes fuentes."),
+]
+
+
+def _tabla_institucional(datos, columnas, identificador):
+    registros = [dict(zip(columnas, fila)) for fila in datos]
+    return dash_table.DataTable(
+        id=identificador, data=registros, columns=[{"name": c, "id": c} for c in columnas],
+        page_action="none", style_table={"overflowX": "auto"},
+        style_cell={"fontFamily": "Arial", "fontSize": "13px", "lineHeight": "1.4", "padding": "11px",
+                    "textAlign": "left", "whiteSpace": "normal", "minWidth": "120px"},
+        style_header={"backgroundColor": "#232D5A", "color": "white", "fontWeight": "800",
+                      "fontFamily": "Arial", "fontSize": "13px"},
+        style_data_conditional=[{"if": {"row_index": "odd"}, "backgroundColor": "#F7F7FB"}],
+    )
+
+
+def contenido_fuentes():
+    """Inventario, actualización y diccionario de las fuentes del tablero."""
+    return html.Div([
+        html.Div([html.P("GOBERNANZA DE DATOS", className="content-kicker"),
+                  html.H1("Fuentes y Referencias"),
+                  html.P("Trazabilidad de las bases, periodicidad de actualización y definiciones utilizadas en el panel.")],
+                 className="content-heading institutional-landing-header"),
+        dcc.Tabs(className="works-tabs source-tabs", value="inventario", children=[
+            dcc.Tab(label="Inventario de fuentes", value="inventario", children=html.Div([
+                html.H2("Fuentes institucionales y públicas"),
+                _tabla_institucional(fuentes_dashboard(),
+                    ["Código", "Fuente", "Responsable", "Información aportada", "Estado"], "source-inventory-table"),
+            ], className="source-section")),
+            dcc.Tab(label="Actualización de información", value="actualizacion", children=html.Div([
+                html.H2("Frecuencia y mecanismo de actualización"),
+                _tabla_institucional(actualizacion_dashboard(),
+                    ["Código", "Módulo / información", "Corte visible", "Frecuencia", "Mecanismo"],
+                    "source-update-table"),
+            ], className="source-section")),
+            dcc.Tab(label="Diccionario de datos", value="diccionario", children=html.Div([
+                html.H2("Términos y siglas de todo el dashboard"),
+                _tabla_institucional(DICCIONARIO_DASHBOARD, ["Término", "Definición"], "source-dictionary-table"),
+            ], className="source-section")),
+        ]),
+    ], className="indicator-content sources-page")
+
+
 def contenido_documentacion():
     """Repositorio documental exigido para el entregable E-02 (DP-SI-020)."""
     icono_documento = (
@@ -11289,6 +11837,10 @@ def contenido_seccion(seccion, vice=None, indicador=None):
         return contenido_presupuesto(vice)
     if seccion == "inventario":
         return contenido_inventario()
+    if seccion == "obras":
+        return contenido_obras()
+    if seccion == "fuentes":
+        return contenido_fuentes()
     if seccion == "documentacion":
         return contenido_documentacion()
     return html.Div([html.H1(dict(SECCIONES).get(seccion, "Módulo")),
@@ -11302,7 +11854,7 @@ def modulo_seccion(seccion, vice=None, indicador=None):
     # reducía el ancho útil de las tarjetas y contradecía el Anexo 2. Por eso
     # esta sección se presenta a todo el ancho; los demás módulos conservan su
     # menú lateral y el botón móvil.
-    if seccion == "vision":
+    if seccion in {"vision", "obras", "fuentes"}:
         return html.Div([
             html.Div(
                 html.Button(
@@ -11319,7 +11871,7 @@ def modulo_seccion(seccion, vice=None, indicador=None):
             html.Main(
                 contenido_seccion(seccion, vice, indicador),
                 id="module-detail",
-                className="module-main vision-module-main",
+                className="module-main vision-module-main" + (" works-module-main" if seccion in {"obras", "fuentes"} else ""),
             )
         ], className="module-layout vision-module-layout")
     return html.Div([
@@ -11346,7 +11898,8 @@ app.layout = html.Div([
                                         "kpi-institucionales": VERSION_KPI_INST,
                                         "gestion-educativa": VERSION_GESTION_EDUCATIVA,
                                         "vision": VERSION_VISION,
-                                        "presupuesto": VERSION_PRESUPUESTO}),
+                                        "presupuesto": VERSION_PRESUPUESTO,
+                                        "obras": VERSION_OBRAS}),
     # Una comprobación por minuto evita despertar al servidor cada 15 segundos.
     # Las fuentes remotas se actualizan en el intervalo 15 (cada 15 minutos).
     dcc.Interval(id="excel-watcher", interval=60000, n_intervals=0),
@@ -11507,6 +12060,31 @@ def mostrar_pantalla(seccion, vice, indicador, _version):
 
 
 @app.callback(
+    Output("works-kpi-grid", "children"),
+    Output("works-state-chart", "figure"),
+    Output("works-map", "figure"),
+    Output("works-timeline", "figure"),
+    Output("works-detail-table", "data"),
+    Output("works-table-count", "children"),
+    Input("works-filter-entity", "value"),
+    Input("works-filter-intervention", "value"),
+    Input("works-filter-province", "value"),
+)
+def filtrar_tablero_obras(entidad, intervencion, provincia):
+    filtrado = _filtrar_obras(DATA_OBRAS, entidad, intervencion, provincia)
+    columnas = ["Código de obra", "Entidad responsable", "Tipo de obra", "Intervención",
+                "Provincia", "Cantón", "Avance físico", "Estado", "Fecha inauguración", "Alerta"]
+    detalle = filtrado[columnas].copy()
+    detalle["Avance físico"] = detalle["Avance físico"].map(
+        lambda v: "—" if pd.isna(v) else f"{v:.1f}%".replace(".", ","))
+    detalle["Fecha inauguración"] = detalle["Fecha inauguración"].dt.strftime("%d/%m/%Y").fillna("—")
+    cantidad = f"{len(detalle):,} registros".replace(",", ".")
+    return (_tarjetas_resumen_obras(filtrado), _figura_estados_obras(filtrado),
+            _figura_mapa_obras(filtrado), _figura_cronograma_obras(filtrado),
+            detalle.to_dict("records"), cantidad)
+
+
+@app.callback(
     Output("budget-detail-table", "data"),
     Output("budget-detail-table", "columns"),
     Output("budget-table-count", "children"),
@@ -11602,6 +12180,7 @@ def actualizar_excel(_intervalo, version_actual):
     global DATA_KPI_INST, ERROR_KPI_INST, VERSION_KPI_INST
     global RESUMEN_GESTION_EDUCATIVA, PENDIENTES_GESTION_EDUCATIVA, VERSION_GESTION_EDUCATIVA
     global DATA_PRESUPUESTO, ERROR_PRESUPUESTO, VERSION_PRESUPUESTO
+    global DATA_OBRAS, ERROR_OBRAS, VERSION_OBRAS
     version_actual = dict(version_actual or {})
     cambio = False
 
@@ -11609,13 +12188,14 @@ def actualizar_excel(_intervalo, version_actual):
     # independientes y se ejecutan en paralelo para no sumar las esperas de
     # OneDrive/SharePoint ni inmovilizar el servidor durante varios minutos.
     if _intervalo % 15 == 0:
-        with ThreadPoolExecutor(max_workers=5) as ejecutor:
+        with ThreadPoolExecutor(max_workers=6) as ejecutor:
             tareas = {
                 "pnd": ejecutor.submit(cargar_base_pnd),
                 "kpi": ejecutor.submit(cargar_base_kpi),
                 "kpi_inst": ejecutor.submit(cargar_base_kpi_inst),
                 "gestion": ejecutor.submit(cargar_resumen_gestion_educativa),
                 "presupuesto": ejecutor.submit(cargar_base_presupuesto),
+                "obras": ejecutor.submit(cargar_base_obras),
             }
             resultados = {nombre: tarea.result() for nombre, tarea in tareas.items()}
 
@@ -11658,6 +12238,14 @@ def actualizar_excel(_intervalo, version_actual):
             DATA_PRESUPUESTO, ERROR_PRESUPUESTO = nueva_data, None
             VERSION_PRESUPUESTO = nueva_version
             version_actual["presupuesto"] = nueva_version
+            cambio = True
+
+        nueva_data, nuevo_error = resultados["obras"]
+        nueva_version_obras = version_obras()
+        if (not nuevo_error and not nueva_data.empty
+                and nueva_version_obras != version_actual.get("obras")):
+            DATA_OBRAS, ERROR_OBRAS, VERSION_OBRAS = nueva_data, None, nueva_version_obras
+            version_actual["obras"] = nueva_version_obras
             cambio = True
 
     return version_actual if cambio else no_update
