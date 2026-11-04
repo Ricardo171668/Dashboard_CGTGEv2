@@ -11473,33 +11473,16 @@ def _figura_mapa_obras(df):
     return figura
 
 
-def _fecha_referencia_obras(fila):
-    """Escoge la fecha que representa mejor el estado actual de cada obra."""
-    estado = _normalizar_encabezado_presupuesto(fila.get("Estado", ""))
-    if "FINALIZ" in estado:
-        columnas = ["Fecha finalización obra en ejecución", "Fecha finalización contractual",
-                    "Fecha inauguración"]
-    elif "EJECUC" in estado or "SUSPEND" in estado:
-        columnas = ["Fecha inicio obra en ejecución", "Fecha inicio obra",
-                    "Fecha finalización obra en ejecución"]
-    elif "RECEPC" in estado:
-        columnas = ["Fecha finalización obra en ejecución", "Fecha inauguración",
-                    "Fecha finalización contractual"]
-    else:
-        columnas = ["Fecha inauguración", "Fecha inicio obra", "Fecha finalización contractual"]
-    for columna in columnas:
-        valor = fila.get(columna)
-        if pd.notna(valor):
-            return valor
-    return pd.NaT
-
-
 def _figura_cronograma_obras(df):
+    """Cuenta las inauguraciones programadas por mes durante el año vigente."""
     anio = datetime.now().year
     if df.empty:
         conteo = pd.Series(dtype="int64")
     else:
-        fechas = pd.to_datetime(df.apply(_fecha_referencia_obras, axis=1), errors="coerce")
+        # El cronograma representa inauguraciones, por lo que siempre debe
+        # utilizar la variable Fecha inauguración. El estado solo actúa como
+        # filtro y no reemplaza esta fecha por el inicio o fin contractual.
+        fechas = pd.to_datetime(df["Fecha inauguración"], errors="coerce")
         fechas = fechas.loc[fechas.dt.year.eq(anio)]
         conteo = fechas.dt.month.value_counts().reindex(range(1, 13), fill_value=0)
     etiquetas = [MESES[mes - 1][:3] for mes in range(1, 13)]
@@ -11507,15 +11490,15 @@ def _figura_cronograma_obras(df):
     figura = go.Figure(go.Bar(
         x=etiquetas, y=valores, marker_color="#4F449A",
         text=[valor if valor else "" for valor in valores], textposition="outside",
-        hovertemplate="%{x}: %{y} intervenciones<extra></extra>",
+        hovertemplate="%{x}: %{y} inauguraciones<extra></extra>",
     ))
     figura.update_layout(
-        title={"text": f"Intervenciones por mes · {anio}", "x": .02}, height=390,
+        title={"text": f"Inauguraciones programadas por mes · {anio}", "x": .02}, height=390,
         margin=dict(l=42, r=20, t=52, b=45), paper_bgcolor="white", plot_bgcolor="white",
         font={"family": "Arial", "color": "#232D5A"}, showlegend=False,
     )
     figura.update_xaxes(showgrid=False, categoryorder="array", categoryarray=etiquetas)
-    figura.update_yaxes(title="Intervenciones", rangemode="tozero", gridcolor="#ECEEF4")
+    figura.update_yaxes(title="Inauguraciones", rangemode="tozero", gridcolor="#ECEEF4")
     return figura
 
 
