@@ -1087,33 +1087,49 @@ def cargar_base_obras():
         bruto = bruto.loc[:, ~bruto.columns.astype(str).str.startswith("Unnamed")].copy()
         mapa = {_normalizar_encabezado_presupuesto(c): c for c in bruto.columns}
         aliases = {
+            "Zona": ("ZONA",),
             "Categoría de intervención": ("CATEGORIA_INTERVENCION", "CATEGORIA", "TIPO_INTERVENCION"),
             "Entidad responsable": ("ENTIDAD_RESPONSABLE", "ENTIDAD", "RESPONSABLE"),
-            "Intervención": ("NOMBRE_INTERVENCION", "INTERVENCION", "NOMBRE_OBRA", "OBRA"),
+            "Institución educativa": ("NOMBRE_IE", "NOMBRE_INSTITUCION_EDUCATIVA", "INSTITUCION_EDUCATIVA"),
+            "Número de proceso": ("NRO_PROCESO", "NUMERO_PROCESO", "PROCESO"),
+            "Objeto del proceso": ("OBJETO_PROCESO", "OBJETO_DEL_PROCESO", "OBJETO"),
+            "Intervención": ("NOMBRE_INTERVENCION", "INTERVENCION", "NOMBRE_OBRA", "OBRA", "NOMBRE_IE"),
             "Compromiso": ("NOMBRE_COMPROMISO", "COMPROMISO", "COMPROMISO_PRESIDENCIAL"),
             "Provincia": ("PROVINCIA",),
             "Cantón": ("CANTON",),
-            "Estado": ("ESTADO_OBRA", "ESTADO_INTERVENCION", "ESTADO"),
-            "Avance físico": ("AVANCE_FISICO", "PORCENTAJE_AVANCE_FISICO", "AVANCE"),
+            "Estado": ("ESTADO_REAL_OBRA", "ESTADO_OBRA", "ESTADO_INTERVENCION", "ESTADO"),
+            "Avance físico": ("AVANCE_EJECUCION", "AVANCE_FISICO", "PORCENTAJE_AVANCE_FISICO", "AVANCE"),
+            "Fecha inicio obra": ("FECHA_INICIO_OBRA",),
+            "Fecha finalización contractual": ("FECHA_FINALIZACION_CONTRACTUAL",),
+            "Fecha inicio obra en ejecución": ("FECHA_INICIO_OBRA_EN_EJECUCION", "FECHA_INICIO_OBRA_EN"),
+            "Fecha finalización obra en ejecución": ("FECHA_FINALIZACION_OBRA_EN_EJECUCION", "FECHA_FINALIZACION_OBRA_EN"),
             "Fecha inauguración": ("FECHA_INAUGURACION", "POSIBLE_FECHA_INAUGURACION", "FECHA_FIN"),
             "Tipo de obra": ("TIPO_OBRA", "TIPO_INTERVENCION", "CATEGORIA_INTERVENCION"),
             "Código de obra": ("CODIGO_OBRA", "ID_UNICO", "CUP", "CUCP"),
             "Alerta": ("ALERTA", "OBSERVACION_SGG", "OBSERVACION", "RIESGO"),
-            "Monto obra": ("MONTO_OBRA_MM", "MONTO_OBRA", "MONTO"),
+            "Monto planificado total": ("MONTO_PLANIFICADO_TOTAL", "MONTO_OBRA_MM", "MONTO_OBRA", "MONTO"),
         }
         salida = pd.DataFrame(index=bruto.index)
         for destino, claves in aliases.items():
             original = _columna_obras(mapa, *claves)
             salida[destino] = bruto[original] if original else pd.NA
-        for col in ["Categoría de intervención", "Entidad responsable", "Intervención", "Compromiso",
+        for col in ["Zona", "Categoría de intervención", "Entidad responsable", "Institución educativa",
+                    "Número de proceso", "Objeto del proceso", "Intervención", "Compromiso",
                     "Provincia", "Cantón", "Estado", "Tipo de obra", "Código de obra", "Alerta"]:
             salida[col] = salida[col].fillna("").astype(str).str.strip()
         salida["Avance físico"] = salida["Avance físico"].map(_numero_obras)
         fracciones = salida["Avance físico"].notna() & salida["Avance físico"].between(0, 1)
         salida.loc[fracciones, "Avance físico"] *= 100
-        salida["Monto obra"] = salida["Monto obra"].map(_numero_obras)
-        salida["Fecha inauguración"] = pd.to_datetime(salida["Fecha inauguración"], errors="coerce", dayfirst=True)
-        salida = salida.loc[(salida["Intervención"] != "") | (salida["Compromiso"] != "")].copy()
+        salida["Monto planificado total"] = salida["Monto planificado total"].map(_numero_obras)
+        for col in ["Fecha inicio obra", "Fecha finalización contractual",
+                    "Fecha inicio obra en ejecución", "Fecha finalización obra en ejecución",
+                    "Fecha inauguración"]:
+            salida[col] = pd.to_datetime(salida[col], errors="coerce", dayfirst=True)
+        salida = salida.loc[
+            (salida["Intervención"] != "")
+            | (salida["Institución educativa"] != "")
+            | (salida["Objeto del proceso"] != "")
+        ].copy()
         OBRAS_META = meta
         return salida, None
     except Exception as exc:
@@ -3453,12 +3469,19 @@ app.index_string = """<!DOCTYPE html>
         .works-source { display: inline-block; margin-top: 8px; color: #69758E; font-size: 11px; }
         .works-filters {
           margin: 16px 0 20px; padding: 16px; display: grid;
-          grid-template-columns: repeat(3, minmax(220px, 1fr)); gap: 14px;
+          grid-template-columns: repeat(4, minmax(170px, 1fr)) minmax(150px, .55fr); gap: 14px;
           border: 1px solid #DFE3EC; border-radius: 16px; background: #FFFFFF;
           box-shadow: 0 6px 18px rgba(35,45,90,.06);
         }
         .works-filters > div { min-width: 0; }
         .works-filters label { display: block; margin: 0 0 7px; color: #44506C; font-size: 13px; font-weight: 800; }
+        .works-filter-count {
+          min-width: 0; min-height: 58px; padding: 8px 14px; display: flex; flex-direction: column;
+          align-items: center; justify-content: center; text-align: center; border-radius: 11px;
+          border: 1px solid #D8D4EB; border-top: 4px solid #4F449A; background: #F8F7FC;
+        }
+        .works-filter-count span { color: #66718A; font-size: 11px; font-weight: 800; text-transform: uppercase; }
+        .works-filter-count strong { margin-top: 3px; color: #232D5A; font-size: 27px; line-height: 1; }
         .works-tabs { margin-top: 10px; }
         .works-tabs .tab { padding: 14px 18px !important; color: #536079; font: 800 15px/1.25 Arial, sans-serif !important; }
         .works-tabs .tab--selected { color: #392A83 !important; border-top-color: #F1B620 !important; }
@@ -3474,7 +3497,6 @@ app.index_string = """<!DOCTYPE html>
         .works-kpi-card strong { margin-top: 8px; color: #232D5A; font-size: clamp(25px, 2.4vw, 38px); line-height: 1; }
         .works-kpi-card p { margin: 8px 0 0; color: #7A849A; font-size: 12px; line-height: 1.4; }
         .works-visual-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px; }
-        .works-visual-grid .works-panel:first-child { grid-column: 1 / -1; }
         .works-panel, .works-table-card, .source-section {
           min-width: 0; padding: 12px; border: 1px solid #DFE3EC; border-radius: 16px;
           background: #FFFFFF; box-shadow: 0 6px 18px rgba(35,45,90,.07);
@@ -3483,6 +3505,10 @@ app.index_string = """<!DOCTYPE html>
         .works-table-heading { margin-bottom: 12px; display: flex; align-items: center; justify-content: space-between; gap: 12px; }
         .works-table-heading h2, .source-section h2 { margin: 0; color: #232D5A; font-size: 18px; }
         .works-table-heading span { color: #69758E; font-size: 12px; font-weight: 800; }
+        .works-update-note {
+          margin: 14px 2px 0; color: #66718A; font: italic 12px/1.5 Arial, sans-serif;
+          text-align: right;
+        }
         .source-section { margin-top: 18px; padding: 20px; }
         .source-section h2 { margin-bottom: 15px; }
 
@@ -3498,6 +3524,7 @@ app.index_string = """<!DOCTYPE html>
           .portada-menu > .portada-boton:nth-child(5) { grid-column: auto; }
           .portada-pagina .portada-boton { min-height: 138px !important; }
           .works-filters { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+          .works-filter-count { grid-column: 1 / -1; }
           .works-kpi-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
         }
         @media (max-width: 760px) {
@@ -3529,7 +3556,7 @@ app.index_string = """<!DOCTYPE html>
           .works-page, .sources-page { padding: 14px 10px 30px; }
           .works-filters { grid-template-columns: 1fr; padding: 12px; }
           .works-kpi-grid, .works-visual-grid { grid-template-columns: 1fr; }
-          .works-visual-grid .works-panel:first-child { grid-column: auto; }
+          .works-filter-count { grid-column: auto; }
           .works-tabs .tab { padding: 11px 8px !important; font-size: 11px !important; }
         }
         @media (max-width: 430px) {
@@ -11403,37 +11430,18 @@ def contenido_inventario():
     ], className="indicator-content")
 
 
-def _filtrar_obras(df, entidad="Todas", intervencion="Todas", provincia="Todas"):
+def _filtrar_obras(df, zona="Todas", provincia="Todas", canton="Todos", estado="Todos"):
     trabajo = df.copy()
     filtros = [
-        ("Entidad responsable", entidad, "Todas"),
-        ("Intervención", intervencion, "Todas"),
+        ("Zona", zona, "Todas"),
         ("Provincia", provincia, "Todas"),
+        ("Cantón", canton, "Todos"),
+        ("Estado", estado, "Todos"),
     ]
     for columna, valor, todos in filtros:
         if valor and valor != todos and columna in trabajo:
             trabajo = trabajo.loc[trabajo[columna].astype(str) == str(valor)]
     return trabajo
-
-
-def _figura_estados_obras(df):
-    conteo = (df["Estado"].replace("", "Sin estado").value_counts()
-              if not df.empty else pd.Series(dtype="int64"))
-    colores = ["#4F449A", "#6F63B7", "#8B83C7", "#F1B620", "#D8D4EB", "#446381"]
-    figura = go.Figure(go.Bar(
-        x=conteo.values, y=conteo.index, orientation="h",
-        marker={"color": colores[:len(conteo)]},
-        text=conteo.values, textposition="outside",
-        hovertemplate="%{y}: %{x}<extra></extra>",
-    ))
-    figura.update_layout(
-        title={"text": "Intervenciones por estado", "x": .02}, height=300,
-        margin=dict(l=35, r=35, t=52, b=28), paper_bgcolor="white", plot_bgcolor="white",
-        font={"family": "Arial", "color": "#232D5A"}, showlegend=False,
-    )
-    figura.update_xaxes(showgrid=True, gridcolor="#ECEEF4", rangemode="tozero")
-    figura.update_yaxes(autorange="reversed", showgrid=False)
-    return figura
 
 
 def _figura_mapa_obras(df):
@@ -11465,56 +11473,50 @@ def _figura_mapa_obras(df):
     return figura
 
 
+def _fecha_referencia_obras(fila):
+    """Escoge la fecha que representa mejor el estado actual de cada obra."""
+    estado = _normalizar_encabezado_presupuesto(fila.get("Estado", ""))
+    if "FINALIZ" in estado:
+        columnas = ["Fecha finalización obra en ejecución", "Fecha finalización contractual",
+                    "Fecha inauguración"]
+    elif "EJECUC" in estado or "SUSPEND" in estado:
+        columnas = ["Fecha inicio obra en ejecución", "Fecha inicio obra",
+                    "Fecha finalización obra en ejecución"]
+    elif "RECEPC" in estado:
+        columnas = ["Fecha finalización obra en ejecución", "Fecha inauguración",
+                    "Fecha finalización contractual"]
+    else:
+        columnas = ["Fecha inauguración", "Fecha inicio obra", "Fecha finalización contractual"]
+    for columna in columnas:
+        valor = fila.get(columna)
+        if pd.notna(valor):
+            return valor
+    return pd.NaT
+
+
 def _figura_cronograma_obras(df):
-    fechas = df["Fecha inauguración"].dropna() if not df.empty else pd.Series(dtype="datetime64[ns]")
-    if fechas.empty:
+    anio = datetime.now().year
+    if df.empty:
         conteo = pd.Series(dtype="int64")
     else:
-        conteo = fechas.dt.to_period("M").astype(str).value_counts().sort_index()
+        fechas = pd.to_datetime(df.apply(_fecha_referencia_obras, axis=1), errors="coerce")
+        fechas = fechas.loc[fechas.dt.year.eq(anio)]
+        conteo = fechas.dt.month.value_counts().reindex(range(1, 13), fill_value=0)
+    etiquetas = [MESES[mes - 1][:3] for mes in range(1, 13)]
+    valores = [int(conteo.get(mes, 0)) for mes in range(1, 13)]
     figura = go.Figure(go.Bar(
-        x=list(conteo.index), y=list(conteo.values), marker_color="#4F449A",
-        text=list(conteo.values), textposition="outside",
-        hovertemplate="%{x}: %{y} inauguraciones<extra></extra>",
+        x=etiquetas, y=valores, marker_color="#4F449A",
+        text=[valor if valor else "" for valor in valores], textposition="outside",
+        hovertemplate="%{x}: %{y} intervenciones<extra></extra>",
     ))
     figura.update_layout(
-        title={"text": "Cronograma de posibles inauguraciones", "x": .02}, height=390,
-        margin=dict(l=42, r=20, t=52, b=65), paper_bgcolor="white", plot_bgcolor="white",
+        title={"text": f"Intervenciones por mes · {anio}", "x": .02}, height=390,
+        margin=dict(l=42, r=20, t=52, b=45), paper_bgcolor="white", plot_bgcolor="white",
         font={"family": "Arial", "color": "#232D5A"}, showlegend=False,
     )
-    figura.update_xaxes(tickangle=-35, showgrid=False)
+    figura.update_xaxes(showgrid=False, categoryorder="array", categoryarray=etiquetas)
     figura.update_yaxes(title="Intervenciones", rangemode="tozero", gridcolor="#ECEEF4")
     return figura
-
-
-def _resumen_obras(df):
-    intervenciones = len(df)
-    if df.empty:
-        provincias = 0
-    else:
-        provincias_homologadas = df["Provincia"].map(_provincia_homologada).dropna().nunique()
-        provincias_crudas = (df["Provincia"].fillna("").astype(str).str.strip()
-                              .replace("", pd.NA).dropna().nunique())
-        # Si la matriz contiene exactamente las 24 provincias pero una llega
-        # con una variante todavía no homologada, no se pierde cobertura en
-        # el resumen. Valores adicionales (zonas, nacional, etc.) no se cuentan.
-        provincias = 24 if provincias_crudas == 24 else provincias_homologadas
-    avance = df["Avance físico"].mean() if not df.empty else float("nan")
-    hoy = pd.Timestamp.now().normalize()
-    futuras = int(df["Fecha inauguración"].between(hoy, hoy + pd.Timedelta(days=90)).sum()) if not df.empty else 0
-    return intervenciones, provincias, avance, futuras
-
-
-def _tarjetas_resumen_obras(df):
-    intervenciones, provincias, avance, futuras = _resumen_obras(df)
-    datos = [
-        ("Intervenciones", formato_valor(intervenciones), "Obras incluidas en el corte"),
-        ("Provincias", formato_valor(provincias), "Provincias con intervenciones registradas"),
-        ("Avance físico promedio", "—" if pd.isna(avance) else f"{avance:.1f}%".replace(".", ","),
-         "Promedio de las intervenciones con dato"),
-        ("Posibles inauguraciones", formato_valor(futuras), "Programadas para los próximos 90 días"),
-    ]
-    return [html.Article([html.Span(titulo), html.Strong(valor), html.P(nota)],
-                         className="works-kpi-card") for titulo, valor, nota in datos]
 
 
 def _opciones_obras(columna, etiqueta_todas):
@@ -11524,6 +11526,25 @@ def _opciones_obras(columna, etiqueta_todas):
     return [{"label": etiqueta_todas, "value": etiqueta_todas}] + [
         {"label": valor, "value": valor} for valor in valores
     ]
+
+
+COLUMNAS_DETALLE_OBRAS = [
+    "Institución educativa", "Número de proceso", "Objeto del proceso", "Estado",
+    "Avance físico", "Monto planificado total", "Fecha inicio obra",
+    "Fecha finalización contractual", "Fecha inicio obra en ejecución",
+    "Fecha finalización obra en ejecución", "Fecha inauguración",
+]
+
+
+def _detalle_obras(df):
+    detalle = df[COLUMNAS_DETALLE_OBRAS].copy()
+    detalle["Avance físico"] = detalle["Avance físico"].map(
+        lambda v: "—" if pd.isna(v) else f"{v:.1f}%".replace(".", ","))
+    detalle["Monto planificado total"] = detalle["Monto planificado total"].map(
+        lambda v: "—" if pd.isna(v) else "$ " + f"{v:,.2f}".replace(",", "X").replace(".", ",").replace("X", "."))
+    for columna in [c for c in COLUMNAS_DETALLE_OBRAS if c.startswith("Fecha")]:
+        detalle[columna] = detalle[columna].dt.strftime("%d/%m/%Y").fillna("—")
+    return detalle
 
 
 def contenido_obras():
@@ -11540,27 +11561,24 @@ def contenido_obras():
         ], className="indicator-content works-page")
 
     base = DATA_OBRAS.copy()
-    detalle_columnas = ["Código de obra", "Entidad responsable", "Tipo de obra", "Intervención",
-                        "Provincia", "Cantón", "Avance físico", "Estado", "Fecha inauguración", "Alerta"]
-    detalle = base[detalle_columnas].copy()
-    detalle["Avance físico"] = detalle["Avance físico"].map(
-        lambda v: "—" if pd.isna(v) else f"{v:.1f}%".replace(".", ","))
-    detalle["Fecha inauguración"] = detalle["Fecha inauguración"].dt.strftime("%d/%m/%Y").fillna("—")
+    detalle = _detalle_obras(base)
 
     filtros = html.Section([
-        html.Div([html.Label("Entidad responsable"), dcc.Dropdown(
-            id="works-filter-entity", options=_opciones_obras("Entidad responsable", "Todas"), value="Todas")]),
-        html.Div([html.Label("Nombre de intervención"), dcc.Dropdown(
-            id="works-filter-intervention", options=_opciones_obras("Intervención", "Todas"), value="Todas")]),
+        html.Div([html.Label("Zona"), dcc.Dropdown(
+            id="works-filter-zone", options=_opciones_obras("Zona", "Todas"), value="Todas")]),
         html.Div([html.Label("Provincia"), dcc.Dropdown(
             id="works-filter-province", options=_opciones_obras("Provincia", "Todas"), value="Todas")]),
+        html.Div([html.Label("Cantón"), dcc.Dropdown(
+            id="works-filter-canton", options=_opciones_obras("Cantón", "Todos"), value="Todos")]),
+        html.Div([html.Label("Estado de la intervención"), dcc.Dropdown(
+            id="works-filter-state", options=_opciones_obras("Estado", "Todos"), value="Todos")]),
+        html.Article([html.Span("Intervenciones"),
+                      html.Strong(formato_valor(len(base)), id="works-intervention-count")],
+                     className="works-filter-count"),
     ], className="works-filters")
 
     resumen = html.Div([
-        html.Div(_tarjetas_resumen_obras(base), id="works-kpi-grid", className="works-kpi-grid"),
         html.Div([
-            html.Div(dcc.Graph(id="works-state-chart", figure=_figura_estados_obras(base),
-                               config={"displayModeBar": False, "responsive": True}), className="works-panel"),
             html.Div(dcc.Graph(id="works-map", figure=_figura_mapa_obras(base),
                                config={"displayModeBar": False, "responsive": True}), className="works-panel"),
             html.Div(dcc.Graph(id="works-timeline", figure=_figura_cronograma_obras(base),
@@ -11594,6 +11612,8 @@ def contenido_obras():
             dcc.Tab(label="Resumen Ejecutivo", value="resumen", children=resumen),
             dcc.Tab(label="Reporte Detallado", value="detalle", children=reporte),
         ]),
+        html.P("Esta información está sujeta a actualizaciones conforme a la ejecución de obras.",
+               className="works-update-note"),
     ], className="indicator-content works-page")
 
 
@@ -12060,27 +12080,22 @@ def mostrar_pantalla(seccion, vice, indicador, _version):
 
 
 @app.callback(
-    Output("works-kpi-grid", "children"),
-    Output("works-state-chart", "figure"),
+    Output("works-intervention-count", "children"),
     Output("works-map", "figure"),
     Output("works-timeline", "figure"),
     Output("works-detail-table", "data"),
     Output("works-table-count", "children"),
-    Input("works-filter-entity", "value"),
-    Input("works-filter-intervention", "value"),
+    Input("works-filter-zone", "value"),
     Input("works-filter-province", "value"),
+    Input("works-filter-canton", "value"),
+    Input("works-filter-state", "value"),
 )
-def filtrar_tablero_obras(entidad, intervencion, provincia):
-    filtrado = _filtrar_obras(DATA_OBRAS, entidad, intervencion, provincia)
-    columnas = ["Código de obra", "Entidad responsable", "Tipo de obra", "Intervención",
-                "Provincia", "Cantón", "Avance físico", "Estado", "Fecha inauguración", "Alerta"]
-    detalle = filtrado[columnas].copy()
-    detalle["Avance físico"] = detalle["Avance físico"].map(
-        lambda v: "—" if pd.isna(v) else f"{v:.1f}%".replace(".", ","))
-    detalle["Fecha inauguración"] = detalle["Fecha inauguración"].dt.strftime("%d/%m/%Y").fillna("—")
+def filtrar_tablero_obras(zona, provincia, canton, estado):
+    filtrado = _filtrar_obras(DATA_OBRAS, zona, provincia, canton, estado)
+    detalle = _detalle_obras(filtrado)
     cantidad = f"{len(detalle):,} registros".replace(",", ".")
-    return (_tarjetas_resumen_obras(filtrado), _figura_estados_obras(filtrado),
-            _figura_mapa_obras(filtrado), _figura_cronograma_obras(filtrado),
+    return (formato_valor(len(filtrado)), _figura_mapa_obras(filtrado),
+            _figura_cronograma_obras(filtrado),
             detalle.to_dict("records"), cantidad)
 
 
