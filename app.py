@@ -5800,6 +5800,9 @@ app.index_string = """<!DOCTYPE html>
           box-shadow: 0 14px 25px rgba(35,45,90,.15) !important;
           outline: 3px solid rgba(79,68,154,.14) !important;
         }
+        .inventario-landing .inventario-portada-card {
+          text-decoration: none !important;
+        }
         .indicador-card-top {
           min-height: 76px;
           padding: 14px 15px;
@@ -11818,21 +11821,90 @@ def contenido_presupuesto(vice=None):
 def contenido_inventario():
     """Enlaces directos a los portales de datos abiertos por ámbito."""
     enlaces = [
-        ("Educación Media", "https://educacion.gob.ec/datos-abiertos-minedec/"),
-        ("Educación Superior", "https://siau.senescyt.gob.ec/portal-de-indicadores-de-educacion-superior/"),
-        ("Cultura", "https://siic.culturaypatrimonio.gob.ec/que-es-la-cultura-en-cifras/"),
+        (
+            "Educación Media", "DATOS ABIERTOS MINEDEC", "▤",
+            ["Instituciones educativas", "Estudiantes y docentes",
+             "Oferta y estadísticas educativas"],
+            "https://educacion.gob.ec/datos-abiertos-minedec/",
+        ),
+        (
+            "Educación Superior", "PORTAL DE INDICADORES", "◇",
+            ["Instituciones de educación superior", "Oferta académica",
+             "Indicadores y estadísticas"],
+            "https://siau.senescyt.gob.ec/portal-de-indicadores-de-educacion-superior/",
+        ),
+        (
+            "Cultura", "CULTURA EN CIFRAS", "◫",
+            ["Artistas y gestores culturales", "Infraestructura y espacios",
+             "Estadísticas e indicadores culturales"],
+            "https://siic.culturaypatrimonio.gob.ec/que-es-la-cultura-en-cifras/",
+        ),
     ]
-    return html.Div([
-        html.Div([html.P("INVENTARIO Y RECURSO DE INFORMACIÓN", className="content-kicker"),
-                  html.H1("Recursos de información abiertos"),
-                  html.P("Seleccione un ámbito para abrir su portal de datos en una pestaña nueva.")],
-                 className="content-heading institutional-landing-header"),
-        html.Div([
-            html.A(nombre, href=url, target="_blank", rel="noopener noreferrer",
-                   className="institutional-access-card")
-            for nombre, url in enlaces
-        ], className="institutional-access-grid"),
-    ], className="indicator-content")
+
+    def tarjeta(numero, nombre, etiqueta, icono, contenidos, url):
+        return html.A(
+            [
+                html.Div([
+                    html.Span(icono, className="indicador-card-icono",
+                              **{"aria-hidden": "true"}),
+                    html.Span(f"{numero:02d}", className="indicador-card-numero"),
+                ], className="indicador-card-top"),
+                html.Div([
+                    html.Span(etiqueta, className="indicador-card-kicker"),
+                    html.Strong(nombre, className="indicador-card-titulo"),
+                    html.Ul(
+                        [html.Li(texto) for texto in contenidos],
+                        className="indicador-card-bullets indicador-card-lista-real",
+                    ),
+                ], className="indicador-card-cuerpo"),
+                html.Span("Explorar  →", className="indicador-card-accion"),
+            ],
+            href=url,
+            target="_blank",
+            rel="noopener noreferrer",
+            className=(f"indicador-portada-boton indicador-card-{numero} "
+                       "inventario-portada-card"),
+            title=f"Abrir el portal de {nombre}",
+        )
+
+    return html.Main(
+        className="indicadores-pagina indicadores-landing inventario-landing",
+        children=[
+            html.Div(
+                html.Button(
+                    [html.Span("←", **{"aria-hidden": "true"}),
+                     html.Span("Volver al panel principal")],
+                    id="btn-volver-portada",
+                    className="vision-back-button btn-volver-portada",
+                    n_clicks=0,
+                    type="button",
+                    title="Volver al panel principal",
+                ),
+                className="indicadores-top-actions",
+            ),
+            html.Section(
+                className="indicadores-cabecera institutional-landing-header",
+                children=[
+                    html.Div([
+                        html.P("INVENTARIO Y RECURSOS DE INFORMACIÓN",
+                               className="content-kicker indicadores-etiqueta"),
+                        html.H1("Recursos de información abiertos",
+                                className="indicadores-landing-title"),
+                        html.P("Seleccione el ámbito de información que desea consultar."),
+                    ], className="indicadores-cabecera-texto"),
+                ],
+            ),
+            html.Section(
+                [tarjeta(numero, *datos)
+                 for numero, datos in enumerate(enlaces, start=1)],
+                className="indicadores-opciones",
+            ),
+            html.P(
+                "ⓘ Cada tarjeta abre el portal oficial correspondiente en una pestaña nueva.",
+                className="indicadores-landing-nota",
+            ),
+        ],
+    )
 
 
 def _filtrar_obras(df, zona="Todas", provincia="Todas", canton="Todos", estado="Todos",
@@ -12605,6 +12677,8 @@ def mostrar_pantalla(seccion, vice, indicador, _version):
         return portada()
     if seccion == "indicadores":
         return portada_indicadores()
+    if seccion == "inventario":
+        return contenido_inventario()
     return modulo_seccion(seccion, vice, indicador)
 
 
