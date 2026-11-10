@@ -27,25 +27,19 @@ NOMBRES_ENTREGABLES = {
     "E-06_Anexo4_Ficha_formalizacion.docx",
 }
 
-# Fuentes individuales de OneDrive. Se leen por HTTPS tanto localmente como
+# Fuentes individuales de Google Drive. Se leen por HTTPS tanto localmente como
 # desde el servidor publicado a partir de GitHub.
 PND_DOWNLOAD_URL = (
-    "https://educacionec-my.sharepoint.com/:x:/g/personal/"
-    "ricardo_castellanos_educacion_gob_ec/"
-    "IQDzi44ILLX-SK4FCICFqdzTAdE_QO0OSjNVppH-qRznzq0"
-    "?e=TkTQu5&download=1"
+    "https://docs.google.com/spreadsheets/d/"
+    "16F3YPjdWLTBhDWMWQXJteZGTpdCoWsFS/export?format=xlsx"
 )
 KPI_ESTRATEGICOS_DOWNLOAD_URL = (
-    "https://educacionec-my.sharepoint.com/:x:/g/personal/"
-    "ricardo_castellanos_educacion_gob_ec/"
-    "IQAhMnqcBe4IQJP7ewr3ZObQAalNMmiIpYKi3jcTS3DuJpQ"
-    "?e=4Tfw34&download=1"
+    "https://docs.google.com/spreadsheets/d/"
+    "1ZcHQ59NVpOTLR3GV71NN140z1OIFbRlf/export?format=xlsx"
 )
 KPI_INSTITUCIONALES_DOWNLOAD_URL = (
-    "https://educacionec-my.sharepoint.com/:x:/g/personal/"
-    "ricardo_castellanos_educacion_gob_ec/"
-    "IQB3pmjVw-PZT5WJKBhUWYHlAcKdvPZcKeloHyma2JtFrwY"
-    "?e=xsKWf6&download=1"
+    "https://docs.google.com/spreadsheets/d/"
+    "1KjWk2lFzFqjAGfXcPjbwuTO3VGb9xvAu/export?format=xlsx"
 )
 VERSIONES_INDICADORES_REMOTOS = {}
 _RUTAS_EXCEL_CACHE = {}
@@ -306,16 +300,16 @@ def etiqueta_mes(valor):
     return str(texto)
 
 
-def _origen_indicador_onedrive(url, nombre_archivo):
+def _origen_indicador_google(url, nombre_archivo):
     """Descarga una matriz de indicadores y registra su hash de contenido."""
     try:
-        origen, version, _ = _descargar_excel_onedrive(url, nombre_archivo)
+        origen, version, _ = _descargar_excel_google(url, nombre_archivo)
         VERSIONES_INDICADORES_REMOTOS[nombre_archivo] = version
-        print(f"[OneDrive] {nombre_archivo}: descarga correcta ({version[:12]}).")
+        print(f"[Google Drive] {nombre_archivo}: descarga correcta ({version[:12]}).")
         return origen, None
     except Exception as exc:
-        mensaje = f"No fue posible descargar '{nombre_archivo}' desde OneDrive: {exc}"
-        print(f"[OneDrive] ERROR: {mensaje}")
+        mensaje = f"No fue posible descargar '{nombre_archivo}' desde Google Drive: {exc}"
+        print(f"[Google Drive] ERROR: {mensaje}")
         return None, mensaje
 
 
@@ -327,7 +321,7 @@ def cargar_base_pnd():
     # La matriz vigente indicada por el usuario es "Indicadores_PND version 1".
     # Se conserva el nombre anterior únicamente como respaldo para despliegues
     # donde todavía no se haya reemplazado el archivo.
-    archivo, error_origen = _origen_indicador_onedrive(
+    archivo, error_origen = _origen_indicador_google(
         PND_DOWNLOAD_URL, "Indicadores_PND version 1.xlsx"
     )
     if error_origen:
@@ -401,7 +395,7 @@ MES_ORDEN = {mes.lower(): i for i, mes in enumerate(MESES, start=1)}
 
 def cargar_base_tipo_pnd(prefijo, nombre_legible, url=None):
     if url:
-        archivo, error_origen = _origen_indicador_onedrive(url, nombre_legible)
+        archivo, error_origen = _origen_indicador_google(url, nombre_legible)
         if error_origen:
             return pd.DataFrame(), error_origen
     else:
@@ -917,21 +911,23 @@ PRESUPUESTO_MONETARIAS = [
 PRESUPUESTO_META = {"archivo": "", "fecha": "", "origen": ""}
 
 
-ESIGEF_DOWNLOAD_URL = os.getenv(
-    "ESIGEF_DOWNLOAD_URL",
-    "https://educacionec-my.sharepoint.com/:x:/g/personal/"
-    "ricardo_castellanos_educacion_gob_ec/"
-    "IQCIs7P5gRv3RbMPaTt_tCufAeiAcJdopSUXr5tr1kiTToA"
-    "?e=0KSa78&download=1",
+ESIGEF_GOOGLE_DRIVE_URL = os.getenv(
+    "ESIGEF_GOOGLE_DRIVE_URL",
+    "https://docs.google.com/spreadsheets/d/"
+    "1uofdFD_rZKYkywoRCfhJqAlCk3qz3T1-/export?format=xlsx",
 ).strip()
 
-OBRAS_DOWNLOAD_URL = os.getenv(
-    "OBRAS_DOWNLOAD_URL",
-    "https://educacionec-my.sharepoint.com/:x:/g/personal/"
-    "ricardo_castellanos_educacion_gob_ec/"
-    "cQrJ_zE_7mp0TbQ-6qVX9qEQEgUCM7w29_ZtRQEH4oPEfVAq2A?download=1",
+OBRAS_GOOGLE_DRIVE_URL = os.getenv(
+    "OBRAS_GOOGLE_DRIVE_URL",
+    "https://docs.google.com/spreadsheets/d/"
+    "1IBh12qjG6P396_xCbXnqNjlQd-_V83EL/export?format=xlsx",
 ).strip()
-OBRAS_META = {"archivo": "Ejecucion_de_Obras.xlsx", "fecha": "", "origen": "OneDrive", "version": ""}
+OBRAS_META = {
+    "archivo": "Catastro_inauguraciones_AMIE.xlsx",
+    "fecha": "",
+    "origen": "Google Drive",
+    "version": "",
+}
 
 # Vínculos "Copiar vínculo" de OneDrive para las bases de Gestión Educativa
 # que continúan siendo remotas. Alimentación Escolar no consta aquí porque su
@@ -990,15 +986,38 @@ def _descargar_excel_onedrive(url, nombre_archivo):
     return BytesIO(contenido), version, ultima_modificacion
 
 
+def _descargar_excel_google(url, nombre_archivo):
+    """Descarga como XLSX una hoja de Google Drive compartida para consulta."""
+    separador_cache = "&" if "?" in url else "?"
+    respuesta = requests.get(
+        f"{url}{separador_cache}_ts={int(datetime.now().timestamp())}",
+        headers={"User-Agent": "Mozilla/5.0", "Cache-Control": "no-cache"},
+        timeout=120,
+        allow_redirects=True,
+    )
+    respuesta.raise_for_status()
+    contenido = respuesta.content
+    if not contenido.startswith(b"PK"):
+        raise ValueError(
+            f"El enlace de {nombre_archivo} no devolvió un Excel. "
+            "Compruebe que el archivo de Google Drive esté compartido para lectura."
+        )
+    return (
+        BytesIO(contenido),
+        hashlib.sha256(contenido).hexdigest(),
+        respuesta.headers.get("Last-Modified", ""),
+    )
+
+
 def _descargar_esigef_actual():
-    """Descarga el archivo presupuestario vigente desde OneDrive."""
-    origen, version, ultima_modificacion = _descargar_excel_onedrive(
-        ESIGEF_DOWNLOAD_URL, "ESIGEF_actual.xlsx"
+    """Descarga el archivo presupuestario vigente desde Google Drive."""
+    origen, version, ultima_modificacion = _descargar_excel_google(
+        ESIGEF_GOOGLE_DRIVE_URL, "ESIGEF_actual.xlsx"
     )
     return origen, {
         "archivo": "ESIGEF_actual.xlsx",
         "fecha": ultima_modificacion or datetime.now().strftime("%d/%m/%Y %H:%M"),
-        "origen": "OneDrive",
+        "origen": "Google Drive",
         "version": version,
     }
 
@@ -1034,7 +1053,7 @@ def _leer_excel_obras(origen):
     claves = {
         "PROVINCIA", "CANTON", "ESTADO", "AVANCE_FISICO", "NOMBRE_OBRA",
         "NOMBRE_INTERVENCION", "NOMBRE_COMPROMISO", "ENTIDAD_RESPONSABLE",
-        "FECHA_INAUGURACION", "CODIGO_OBRA", "CUP", "CUCP",
+        "FECHA_INAUGURACION", "CODIGO_OBRA", "CUP", "CUCP", "NOMBRE_IE_AMIE",
     }
     for hoja in libro.sheet_names:
         vista = pd.read_excel(libro, sheet_name=hoja, header=None, nrows=60, engine="openpyxl")
@@ -1062,20 +1081,21 @@ def _columna_obras(mapa, *claves):
 
 
 def cargar_base_obras():
-    """Descarga y homologa la matriz de Ejecución de Obras publicada en OneDrive."""
+    """Descarga y homologa Catastro_inauguraciones_AMIE desde Google Drive."""
     global OBRAS_META
     try:
         try:
-            origen, version, fecha = _descargar_excel_onedrive(
-                OBRAS_DOWNLOAD_URL, "Ejecucion_de_Obras.xlsx"
+            origen, version, fecha = _descargar_excel_google(
+                OBRAS_GOOGLE_DRIVE_URL, "Catastro_inauguraciones_AMIE.xlsx"
             )
-            meta = {"archivo": "Ejecucion_de_Obras.xlsx", "fecha": fecha,
-                    "origen": "OneDrive", "version": version}
+            meta = {"archivo": "Catastro_inauguraciones_AMIE.xlsx", "fecha": fecha,
+                    "origen": "Google Drive", "version": version}
         except Exception as error_remoto:
             locales = [p for p in BASE_DIR.rglob("*.xlsx")
-                       if "obra" in _normalizar_encabezado_presupuesto(p.stem).lower()]
+                       if "CATRASTRO_INAUGURACIONES_AMIE"
+                       in _normalizar_encabezado_presupuesto(p.stem)]
             if not locales:
-                raise ValueError(f"No se pudo descargar la matriz de OneDrive: {error_remoto}")
+                raise ValueError(f"No se pudo descargar la matriz de Google Drive: {error_remoto}")
             archivo = max(locales, key=lambda p: p.stat().st_mtime_ns)
             origen = archivo
             meta = {"archivo": archivo.name,
@@ -1090,7 +1110,8 @@ def cargar_base_obras():
             "Zona": ("ZONA",),
             "Categoría de intervención": ("CATEGORIA_INTERVENCION", "CATEGORIA", "TIPO_INTERVENCION"),
             "Entidad responsable": ("ENTIDAD_RESPONSABLE", "ENTIDAD", "RESPONSABLE"),
-            "Institución educativa": ("NOMBRE_IE", "NOMBRE_INSTITUCION_EDUCATIVA", "INSTITUCION_EDUCATIVA"),
+            "Nombre_IE_AMIE": ("NOMBRE_IE_AMIE",),
+            "Institución educativa": ("NOMBRE_IE_AMIE", "NOMBRE_IE", "NOMBRE_INSTITUCION_EDUCATIVA", "INSTITUCION_EDUCATIVA"),
             "Número de proceso": ("NRO_PROCESO", "NUMERO_PROCESO", "PROCESO"),
             "Objeto del proceso": ("OBJETO_PROCESO", "OBJETO_DEL_PROCESO", "OBJETO"),
             "Intervención": ("NOMBRE_INTERVENCION", "INTERVENCION", "NOMBRE_OBRA", "OBRA", "NOMBRE_IE"),
@@ -1113,10 +1134,11 @@ def cargar_base_obras():
         for destino, claves in aliases.items():
             original = _columna_obras(mapa, *claves)
             salida[destino] = bruto[original] if original else pd.NA
-        for col in ["Zona", "Categoría de intervención", "Entidad responsable", "Institución educativa",
+        for col in ["Zona", "Categoría de intervención", "Entidad responsable", "Nombre_IE_AMIE", "Institución educativa",
                     "Número de proceso", "Objeto del proceso", "Intervención", "Compromiso",
                     "Provincia", "Cantón", "Estado", "Tipo de obra", "Código de obra", "Alerta"]:
             salida[col] = salida[col].fillna("").astype(str).str.strip()
+        salida.loc[salida["Nombre_IE_AMIE"].eq(""), "Nombre_IE_AMIE"] = salida["Institución educativa"]
         salida["Avance físico"] = salida["Avance físico"].map(_numero_obras)
         fracciones = salida["Avance físico"].notna() & salida["Avance físico"].between(0, 1)
         salida.loc[fracciones, "Avance físico"] *= 100
@@ -1127,7 +1149,7 @@ def cargar_base_obras():
             salida[col] = pd.to_datetime(salida[col], errors="coerce", dayfirst=True)
         salida = salida.loc[
             (salida["Intervención"] != "")
-            | (salida["Institución educativa"] != "")
+            | (salida["Nombre_IE_AMIE"] != "")
             | (salida["Objeto del proceso"] != "")
         ].copy()
         OBRAS_META = meta
@@ -3468,20 +3490,51 @@ app.index_string = """<!DOCTYPE html>
         }
         .works-source { display: inline-block; margin-top: 8px; color: #69758E; font-size: 11px; }
         .works-filters {
-          margin: 16px 0 20px; padding: 16px; display: grid;
-          grid-template-columns: repeat(4, minmax(170px, 1fr)) minmax(150px, .55fr); gap: 14px;
+          margin: 16px 0 20px; padding: 18px;
           border: 1px solid #DFE3EC; border-radius: 16px; background: #FFFFFF;
           box-shadow: 0 6px 18px rgba(35,45,90,.06);
         }
-        .works-filters > div { min-width: 0; }
-        .works-filters label { display: block; margin: 0 0 7px; color: #44506C; font-size: 13px; font-weight: 800; }
-        .works-filter-count {
-          min-width: 0; min-height: 58px; padding: 8px 14px; display: flex; flex-direction: column;
-          align-items: center; justify-content: center; text-align: center; border-radius: 11px;
-          border: 1px solid #D8D4EB; border-top: 4px solid #4F449A; background: #F8F7FC;
+        .works-filter-heading {
+          margin-bottom: 14px; display: flex; align-items: flex-end; justify-content: space-between; gap: 18px;
         }
-        .works-filter-count span { color: #66718A; font-size: 11px; font-weight: 800; text-transform: uppercase; }
-        .works-filter-count strong { margin-top: 3px; color: #232D5A; font-size: 27px; line-height: 1; }
+        .works-filter-heading span {
+          display: block; margin-bottom: 3px; color: #F1A900; font-size: 10px; font-weight: 900;
+          letter-spacing: .14em;
+        }
+        .works-filter-heading h2 { margin: 0; color: #232D5A; font-size: 17px; line-height: 1.2; }
+        .works-filter-heading p { margin: 0; color: #778198; font-size: 11px; text-align: right; }
+        .works-filter-heading-actions { display: flex; align-items: center; gap: 12px; }
+        .works-clear-button {
+          min-height: 34px; padding: 7px 13px; border: 1px solid #4F449A; border-radius: 9px;
+          color: #4F449A; background: #FFFFFF; font: 800 11px/1.2 Arial, sans-serif;
+          white-space: nowrap; cursor: pointer;
+        }
+        .works-clear-button:hover { color: #FFFFFF; background: #4F449A; }
+        .works-filter-grid {
+          display: grid; grid-template-columns: repeat(5, minmax(155px, 1fr)) minmax(145px, .72fr); gap: 11px;
+          align-items: end;
+        }
+        .works-filter-grid > div { min-width: 0; }
+        .works-filter-field {
+          padding: 9px 10px 10px; border: 1px solid #E4E6EF; border-radius: 12px; background: #F8F9FC;
+        }
+        .works-period-filter { border-color: #E1DDF2; background: #F7F5FD; }
+        .works-filters label { display: block; margin: 0 0 6px; color: #44506C; font-size: 11px; font-weight: 800; }
+        .works-filter-field .Select-control {
+          height: 38px; border: 0 !important; border-radius: 9px !important; background: #FFFFFF !important;
+          box-shadow: 0 1px 4px rgba(35,45,90,.08);
+        }
+        .works-filter-field .Select-placeholder,
+        .works-filter-field .Select-value { line-height: 38px !important; }
+        .works-filter-field .Select-input { height: 38px !important; }
+        .works-filter-field .Select-value-label { color: #232D5A !important; font-size: 12px; font-weight: 700; }
+        .works-filter-count {
+          min-width: 0; min-height: 69px; padding: 8px 14px; display: flex; flex-direction: column;
+          align-items: center; justify-content: center; text-align: center; border-radius: 11px;
+          border: 1px solid #44378E; border-top: 4px solid #F1B620; background: #302571;
+        }
+        .works-filter-count span { color: #DCD8F0; font-size: 10px; font-weight: 800; text-transform: uppercase; }
+        .works-filter-count strong { margin-top: 4px; color: #FFFFFF; font-size: 27px; line-height: 1; }
         .works-tabs { margin-top: 10px; }
         .works-tabs .tab { padding: 14px 18px !important; color: #536079; font: 800 15px/1.25 Arial, sans-serif !important; }
         .works-tabs .tab--selected { color: #392A83 !important; border-top-color: #F1B620 !important; }
@@ -3505,6 +3558,36 @@ app.index_string = """<!DOCTYPE html>
         .works-table-heading { margin-bottom: 12px; display: flex; align-items: center; justify-content: space-between; gap: 12px; }
         .works-table-heading h2, .source-section h2 { margin: 0; color: #232D5A; font-size: 18px; }
         .works-table-heading span { color: #69758E; font-size: 12px; font-weight: 800; }
+        .works-table-date-filters {
+          margin: 0 0 12px auto; width: min(560px, 100%); padding: 10px 12px; display: grid;
+          grid-template-columns: auto repeat(2, minmax(150px, 1fr)); align-items: end; gap: 10px;
+          border: 1px solid #E1DDF2; border-radius: 12px; background: #F7F5FD;
+        }
+        .works-table-date-title {
+          align-self: center; color: #5C6680; font-size: 10px; font-weight: 800; line-height: 1.3;
+        }
+        .works-table-date-field { min-width: 0; }
+        .works-table-date-field label {
+          display: block; margin: 0 0 5px; color: #44506C; font-size: 10px; font-weight: 800;
+        }
+        .works-table-date-field .Select-control {
+          height: 36px; border: 1px solid #D8D4EB !important; border-radius: 8px !important;
+          background: #FFFFFF !important;
+        }
+        .works-table-date-field .Select-placeholder,
+        .works-table-date-field .Select-value { line-height: 34px !important; }
+        .works-table-date-field .Select-input { height: 34px !important; }
+        .works-table-date-field .Select-value-label { color: #232D5A !important; font-size: 11px; font-weight: 700; }
+        .works-table-actions {
+          margin-top: 14px; display: flex; align-items: center; justify-content: space-between; gap: 14px;
+        }
+        .works-table-actions span { color: #69758E; font-size: 11px; }
+        .works-download-button {
+          min-height: 40px; padding: 9px 16px; border: 0; border-radius: 10px; color: #FFFFFF;
+          background: #4F449A; font: 800 12px/1.2 Arial, sans-serif; cursor: pointer;
+          box-shadow: 0 5px 12px rgba(79,68,154,.22);
+        }
+        .works-download-button:hover { background: #392A83; }
         .works-update-note {
           margin: 14px 2px 0; color: #66718A; font: italic 12px/1.5 Arial, sans-serif;
           text-align: right;
@@ -3523,8 +3606,8 @@ app.index_string = """<!DOCTYPE html>
           .portada-menu > .portada-boton,
           .portada-menu > .portada-boton:nth-child(5) { grid-column: auto; }
           .portada-pagina .portada-boton { min-height: 138px !important; }
-          .works-filters { grid-template-columns: repeat(2, minmax(0, 1fr)); }
-          .works-filter-count { grid-column: 1 / -1; }
+          .works-filter-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+          .works-filter-count { grid-column: auto; }
           .works-kpi-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
         }
         @media (max-width: 760px) {
@@ -3554,9 +3637,16 @@ app.index_string = """<!DOCTYPE html>
           .portada-menu-cabecera { align-items: flex-start; }
           .portada-corte { max-width: 115px; text-align: right; }
           .works-page, .sources-page { padding: 14px 10px 30px; }
-          .works-filters { grid-template-columns: 1fr; padding: 12px; }
+          .works-filters { padding: 13px; }
+          .works-filter-heading { align-items: flex-start; flex-direction: column; gap: 5px; }
+          .works-filter-heading p { text-align: left; }
+          .works-filter-heading-actions { width: 100%; justify-content: space-between; }
+          .works-filter-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
           .works-kpi-grid, .works-visual-grid { grid-template-columns: 1fr; }
-          .works-filter-count { grid-column: auto; }
+          .works-filter-count { grid-column: 1 / -1; }
+          .works-table-actions { align-items: stretch; flex-direction: column; }
+          .works-table-date-filters { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+          .works-table-date-title { grid-column: 1 / -1; }
           .works-tabs .tab { padding: 11px 8px !important; font-size: 11px !important; }
         }
         @media (max-width: 430px) {
@@ -3571,6 +3661,10 @@ app.index_string = """<!DOCTYPE html>
             grid-template-columns: minmax(0, 1fr) !important;
             grid-template-rows: auto auto auto auto !important;
           }
+          .works-filter-grid { grid-template-columns: 1fr; }
+          .works-filter-count { grid-column: auto; }
+          .works-table-date-filters { grid-template-columns: 1fr; }
+          .works-table-date-title { grid-column: auto; }
           .portada-pagina .portada-boton-icono { grid-column: 1; grid-row: 1; }
           .portada-pagina .portada-boton-texto { grid-column: 1; grid-row: 2; }
           .portada-boton-descripcion { grid-column: 1; grid-row: 3; }
@@ -5600,6 +5694,268 @@ app.index_string = """<!DOCTYPE html>
             font-size: 28px;
           }
         }
+
+        /* Indicadores · misma composición visual de la portada de Visión
+           Ejecutiva. Se conservan los identificadores funcionales de las
+           tarjetas para no modificar los callbacks de navegación. */
+        .indicadores-pagina.indicadores-landing {
+          min-height: calc(100vh - 92px) !important;
+          padding: 10px 26px 30px !important;
+          display: flex !important;
+          flex-direction: column !important;
+          gap: 0 !important;
+          box-sizing: border-box !important;
+          color: #232d5a !important;
+          background: #f5f6fa !important;
+        }
+        .indicadores-top-actions {
+          width: min(100%, 1510px);
+          margin: 0 auto;
+          display: flex;
+          justify-content: flex-end;
+        }
+        .indicadores-top-actions .btn-volver-portada {
+          width: auto !important;
+          margin: 0 !important;
+          padding: 10px 15px !important;
+          display: inline-flex !important;
+          align-items: center !important;
+          gap: 7px !important;
+          border: 1px solid #d8d3eb !important;
+          border-radius: 9px !important;
+          color: #fff !important;
+          background: #4f449a !important;
+          font-size: 11px !important;
+          font-weight: 900 !important;
+          box-shadow: 0 5px 12px rgba(35,45,90,.13) !important;
+        }
+        .indicadores-top-actions .btn-volver-portada:hover,
+        .indicadores-top-actions .btn-volver-portada:focus-visible {
+          transform: translateY(-2px);
+          outline: 3px solid rgba(79,68,154,.16) !important;
+        }
+        .indicadores-landing .indicadores-cabecera {
+          width: min(100%, 1510px) !important;
+          margin: 0 auto !important;
+          padding: 32px 4px 16px !important;
+          display: block !important;
+          color: #232d5a !important;
+          background: transparent !important;
+          border: 0 !important;
+          border-radius: 0 !important;
+          box-shadow: none !important;
+          text-align: left !important;
+        }
+        .indicadores-cabecera-texto { max-width: 900px; }
+        .indicadores-landing .indicadores-etiqueta {
+          margin: 0 0 5px !important;
+          color: #4f449a !important;
+          font-size: 11px !important;
+          font-weight: 900 !important;
+          letter-spacing: .12em !important;
+        }
+        .indicadores-landing .indicadores-cabecera .indicadores-landing-title {
+          margin: 0 !important;
+          color: #17245b !important;
+          font-size: clamp(25px, 2.15vw, 37px) !important;
+          font-weight: 900 !important;
+          line-height: 1.08 !important;
+          letter-spacing: .01em !important;
+        }
+        .indicadores-cabecera-texto > p:last-child {
+          margin: 6px 0 0 !important;
+          color: #66708d !important;
+          font-size: 12px !important;
+          line-height: 1.35 !important;
+        }
+        .indicadores-landing .indicadores-opciones {
+          width: min(100%, 1180px) !important;
+          max-width: 1180px !important;
+          margin: 28px auto 12px !important;
+          display: grid !important;
+          grid-template-columns: repeat(3, minmax(0, 1fr)) !important;
+          gap: 18px !important;
+        }
+        .indicadores-landing .indicador-portada-boton {
+          min-width: 0 !important;
+          height: 440px !important;
+          min-height: 440px !important;
+          padding: 0 !important;
+          display: flex !important;
+          flex-direction: column !important;
+          overflow: hidden !important;
+          border: 1px solid #dfe3ed !important;
+          border-top: 0 !important;
+          border-radius: 14px !important;
+          color: #17245b !important;
+          background: #fff !important;
+          box-shadow: 0 8px 18px rgba(35,45,90,.09) !important;
+          text-align: left !important;
+          cursor: pointer !important;
+          transition: transform .18s ease, box-shadow .18s ease !important;
+        }
+        .indicadores-landing .indicador-portada-boton:hover,
+        .indicadores-landing .indicador-portada-boton:focus-visible {
+          transform: translateY(-4px);
+          box-shadow: 0 14px 25px rgba(35,45,90,.15) !important;
+          outline: 3px solid rgba(79,68,154,.14) !important;
+        }
+        .indicador-card-top {
+          min-height: 76px;
+          padding: 14px 15px;
+          display: flex;
+          align-items: flex-start;
+          justify-content: space-between;
+          box-sizing: border-box;
+          color: #fff;
+          background: linear-gradient(135deg, #4f449a, #392986);
+        }
+        .indicador-card-2 .indicador-card-top {
+          background: linear-gradient(135deg, #317be8, #1f5bc2);
+        }
+        .indicador-card-3 .indicador-card-top {
+          background: linear-gradient(135deg, #1caf9a, #087f71);
+        }
+        .indicador-card-icono {
+          width: 38px;
+          height: 38px;
+          display: inline-flex;
+          align-items: center;
+          justify-content: center;
+          border: 1px solid rgba(255,255,255,.28);
+          border-radius: 11px;
+          color: #fff;
+          background: rgba(255,255,255,.14);
+          font-size: 20px;
+          font-weight: 800;
+        }
+        .indicador-card-numero {
+          color: rgba(255,255,255,.72);
+          font-size: 13px;
+          font-weight: 900;
+        }
+        .indicador-card-cuerpo {
+          flex: 1 1 auto;
+          width: 100%;
+          padding: 17px 18px 9px;
+          display: flex;
+          flex-direction: column;
+          min-height: 0;
+          box-sizing: border-box;
+        }
+        .indicador-card-kicker {
+          display: block;
+          margin-bottom: 3px;
+          color: #80899e;
+          font-size: 8.5px;
+          font-weight: 900;
+          letter-spacing: .08em;
+        }
+        .indicador-card-titulo {
+          display: block;
+          margin: 0 0 10px;
+          color: #17245b;
+          font-size: 17px;
+          font-weight: 900;
+          line-height: 1.15;
+        }
+        .indicador-card-bullets {
+          margin: 0;
+          padding: 0;
+          list-style: none;
+          color: #59647e;
+          font-size: 11.5px;
+          font-weight: 700;
+          line-height: 1.65;
+        }
+        .indicador-card-lista-real {
+          flex: 1 1 auto;
+          min-height: 0;
+          padding-right: 7px;
+          overflow-x: hidden;
+          overflow-y: auto;
+          scrollbar-width: thin;
+          scrollbar-color: #b8b2d8 #f1f2f7;
+        }
+        .indicador-card-lista-real li {
+          margin-bottom: 7px;
+          padding-bottom: 7px;
+          border-bottom: 1px solid #edf0f5;
+          line-height: 1.34;
+        }
+        .indicador-card-lista-real li:last-child {
+          margin-bottom: 0;
+          border-bottom: 0;
+        }
+        .indicador-card-bullets li::before {
+          content: "•";
+          margin-right: 8px;
+          color: #80bbbf;
+        }
+        .indicador-card-accion {
+          margin: 0 11px 11px;
+          padding: 9px 11px;
+          border-radius: 8px;
+          color: #4f449a;
+          background: #eeeafd;
+          font-size: 10.5px;
+          font-weight: 900;
+        }
+        .indicador-card-2 .indicador-card-accion {
+          color: #2365c9;
+          background: #edf4ff;
+        }
+        .indicador-card-3 .indicador-card-accion {
+          color: #087f71;
+          background: #e9f8f5;
+        }
+        .indicadores-landing-nota {
+          width: min(100%, 1180px);
+          margin: 0 auto !important;
+          color: #747d95;
+          font-size: 9.5px;
+          line-height: 1.35;
+        }
+        @media (max-width: 900px) {
+          .indicadores-landing .indicadores-opciones {
+            grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+          }
+          .indicadores-landing .indicador-portada-boton:last-child {
+            grid-column: 1 / -1;
+            width: calc(50% - 9px);
+            justify-self: center;
+          }
+        }
+        @media (max-width: 600px) {
+          .indicadores-pagina.indicadores-landing {
+            min-height: calc(100vh - 62px) !important;
+            padding: 8px 10px 24px !important;
+          }
+          .indicadores-top-actions { padding-top: 2px; }
+          .indicadores-top-actions .btn-volver-portada {
+            padding: 8px 11px !important;
+            font-size: 10px !important;
+          }
+          .indicadores-landing .indicadores-cabecera {
+            padding: 22px 4px 10px !important;
+          }
+          .indicadores-landing-title { font-size: 27px !important; }
+          .indicadores-cabecera-texto > p:last-child { font-size: 12px !important; }
+          .indicadores-landing .indicadores-opciones {
+            grid-template-columns: minmax(0, 1fr) !important;
+            gap: 11px !important;
+            margin-top: 18px !important;
+          }
+          .indicadores-landing .indicador-portada-boton,
+          .indicadores-landing .indicador-portada-boton:last-child {
+            grid-column: 1 !important;
+            width: 100% !important;
+            height: 390px !important;
+            min-height: 390px !important;
+          }
+          .indicador-card-cuerpo { padding: 14px 15px 7px; }
+          .indicador-card-titulo { font-size: 16px; }
+        }
         </style>
         <script>
         window.MathJax = {
@@ -5905,47 +6261,96 @@ def portada_indicadores():
         "kpi-institucionales": "◫",
     }
 
-    def opcion(codigo, nombre):
+    fuentes = {
+        "pnd": DATA_PND,
+        "kpi-estrategicos": DATA_KPI,
+        "kpi-institucionales": DATA_KPI_INST,
+    }
+    etiquetas = {
+        "pnd": "PLAN NACIONAL DE DESARROLLO",
+        "kpi-estrategicos": "KPI ESTRATÉGICOS",
+        "kpi-institucionales": "KPI INSTITUCIONALES",
+    }
+
+    def indicadores_disponibles(codigo):
+        """Nombres reales, en el orden de la matriz descargada de OneDrive."""
+        df = fuentes[codigo]
+        columna = "NOMBRE DEL INDICADOR"
+        if df is None or df.empty or columna not in df.columns:
+            return ["Información no disponible"]
+        nombres = []
+        vistos = set()
+        for valor in df[columna].dropna():
+            nombre = " ".join(str(valor).strip().split())
+            if nombre and nombre.lower() not in {"nan", "none"} and nombre not in vistos:
+                nombres.append(nombre)
+                vistos.add(nombre)
+        return nombres or ["Información no disponible"]
+
+    def opcion(numero, codigo, nombre):
+        indicadores = indicadores_disponibles(codigo)
+        cantidad = len(indicadores) if indicadores != ["Información no disponible"] else 0
         return html.Button(
             [
-                html.Span(iconos[codigo], className="portada-boton-icono"),
-                html.Span(nombre, className="portada-boton-texto"),
-                html.Span("›", className="portada-boton-flecha"),
+                html.Div([
+                    html.Span(iconos[codigo], className="indicador-card-icono",
+                              **{"aria-hidden": "true"}),
+                    html.Span(f"{numero:02d}", className="indicador-card-numero"),
+                ], className="indicador-card-top"),
+                html.Div([
+                    html.Span(
+                        f"{etiquetas[codigo]} · {cantidad} "
+                        f"{'INDICADOR' if cantidad == 1 else 'INDICADORES'}",
+                        className="indicador-card-kicker",
+                    ),
+                    html.Strong(nombre, className="indicador-card-titulo"),
+                    html.Ul(
+                        [html.Li(texto, title=texto) for texto in indicadores],
+                        className="indicador-card-bullets indicador-card-lista-real",
+                    ),
+                ], className="indicador-card-cuerpo"),
+                html.Span("Explorar  →", className="indicador-card-accion"),
             ],
             id={"type": "indicator-home-card", "index": codigo},
-            className="portada-boton indicador-portada-boton",
+            className=f"indicador-portada-boton indicador-card-{numero}",
             n_clicks=0,
             type="button",
         )
 
     return html.Main(
-        className="indicadores-pagina",
+        className="indicadores-pagina indicadores-landing",
         children=[
+            html.Div(
+                html.Button(
+                    [html.Span("←", **{"aria-hidden": "true"}),
+                     html.Span("Volver al panel principal")],
+                    id="btn-volver-portada",
+                    className="vision-back-button btn-volver-portada",
+                    n_clicks=0,
+                    type="button",
+                    title="Volver al panel principal",
+                ),
+                className="indicadores-top-actions",
+            ),
             html.Section(
-                className="indicadores-cabecera",
+                className="indicadores-cabecera institutional-landing-header",
                 children=[
-                    html.Button(
-                        "← Volver a la portada",
-                        id="btn-volver-portada",
-                        className="btn-volver-portada",
-                        n_clicks=0,
-                    ),
                     html.Div([
-                        html.Span("INDICADORES", className="indicadores-etiqueta"),
-                        html.H2("Seguimiento de indicadores institucionales"),
+                        html.P("INDICADORES", className="content-kicker indicadores-etiqueta"),
+                        html.H1("Seguimiento de indicadores institucionales",
+                                className="indicadores-landing-title"),
                         html.P("Seleccione el grupo de indicadores que desea consultar."),
-                    ]),
-                    html.Img(
-                        src=app.get_asset_url("logo-minedec.png"),
-                        className="indicadores-logo",
-                        alt="MINEDEC",
-                    ),
+                    ], className="indicadores-cabecera-texto"),
                 ],
             ),
             html.Section(
-                [opcion(codigo, nombre)
-                 for codigo, nombre in SECCIONES_INDICADORES],
+                [opcion(numero, codigo, nombre)
+                 for numero, (codigo, nombre) in enumerate(SECCIONES_INDICADORES, start=1)],
                 className="indicadores-opciones",
+            ),
+            html.P(
+                "ⓘ Seleccione una tarjeta para consultar el listado y el detalle de sus indicadores.",
+                className="indicadores-landing-nota",
             ),
         ],
     )
@@ -11430,7 +11835,8 @@ def contenido_inventario():
     ], className="indicator-content")
 
 
-def _filtrar_obras(df, zona="Todas", provincia="Todas", canton="Todos", estado="Todos"):
+def _filtrar_obras(df, zona="Todas", provincia="Todas", canton="Todos", estado="Todos",
+                   anio="Todos", mes_inicio="Todos", mes_inauguracion="Todos"):
     trabajo = df.copy()
     filtros = [
         ("Zona", zona, "Todas"),
@@ -11441,6 +11847,16 @@ def _filtrar_obras(df, zona="Todas", provincia="Todas", canton="Todos", estado="
     for columna, valor, todos in filtros:
         if valor and valor != todos and columna in trabajo:
             trabajo = trabajo.loc[trabajo[columna].astype(str) == str(valor)]
+    fechas = pd.to_datetime(trabajo.get("Fecha inauguración"), errors="coerce")
+    if anio and anio != "Todos":
+        trabajo = trabajo.loc[fechas.dt.year.eq(int(anio))]
+        fechas = fechas.loc[trabajo.index]
+    if mes_inauguracion and mes_inauguracion != "Todos":
+        trabajo = trabajo.loc[fechas.dt.month.eq(int(mes_inauguracion))]
+        fechas = fechas.loc[trabajo.index]
+    if mes_inicio and mes_inicio != "Todos":
+        fechas_inicio = pd.to_datetime(trabajo["Fecha inicio obra"], errors="coerce")
+        trabajo = trabajo.loc[fechas_inicio.dt.month.eq(int(mes_inicio))]
     return trabajo
 
 
@@ -11457,7 +11873,7 @@ def _figura_mapa_obras(df):
         figura.add_trace(go.Choropleth(
             geojson=geojson, locations=nombres, z=valores,
             featureidkey="properties.nombre", colorscale=[[0, "#F1EEFA"], [1, "#4F449A"]],
-            marker_line_color="white", marker_line_width=.8,
+            marker_line_color="#232D5A", marker_line_width=1.15,
             colorbar={"title": "Obras", "thickness": 12},
             hovertemplate="%{location}: %{z} intervenciones<extra></extra>",
         ))
@@ -11473,9 +11889,8 @@ def _figura_mapa_obras(df):
     return figura
 
 
-def _figura_cronograma_obras(df):
-    """Cuenta las inauguraciones programadas por mes durante el año vigente."""
-    anio = datetime.now().year
+def _figura_cronograma_obras(df, anio="Todos"):
+    """Cuenta inauguraciones por mes respetando el período seleccionado."""
     if df.empty:
         conteo = pd.Series(dtype="int64")
     else:
@@ -11483,17 +11898,18 @@ def _figura_cronograma_obras(df):
         # utilizar la variable Fecha inauguración. El estado solo actúa como
         # filtro y no reemplaza esta fecha por el inicio o fin contractual.
         fechas = pd.to_datetime(df["Fecha inauguración"], errors="coerce")
-        fechas = fechas.loc[fechas.dt.year.eq(anio)]
         conteo = fechas.dt.month.value_counts().reindex(range(1, 13), fill_value=0)
-    etiquetas = [MESES[mes - 1][:3] for mes in range(1, 13)]
-    valores = [int(conteo.get(mes, 0)) for mes in range(1, 13)]
+    meses_visibles = list(range(1, 13))
+    etiquetas = [MESES[numero - 1][:3] for numero in meses_visibles]
+    valores = [int(conteo.get(numero, 0)) for numero in meses_visibles]
+    periodo = str(anio) if anio and anio != "Todos" else "Todos los años"
     figura = go.Figure(go.Bar(
         x=etiquetas, y=valores, marker_color="#4F449A",
         text=[valor if valor else "" for valor in valores], textposition="outside",
         hovertemplate="%{x}: %{y} inauguraciones<extra></extra>",
     ))
     figura.update_layout(
-        title={"text": f"Inauguraciones programadas por mes · {anio}", "x": .02}, height=390,
+        title={"text": f"Inauguraciones programadas · {periodo}", "x": .02}, height=390,
         margin=dict(l=42, r=20, t=52, b=45), paper_bgcolor="white", plot_bgcolor="white",
         font={"family": "Arial", "color": "#232D5A"}, showlegend=False,
     )
@@ -11511,27 +11927,81 @@ def _opciones_obras(columna, etiqueta_todas):
     ]
 
 
+def _opciones_periodo_obras():
+    fechas = pd.to_datetime(DATA_OBRAS.get("Fecha inauguración"), errors="coerce")
+    anios = sorted({int(valor) for valor in fechas.dt.year.dropna()}, reverse=True)
+    opciones_anio = [{"label": "Todos los años", "value": "Todos"}] + [
+        {"label": str(valor), "value": valor} for valor in anios
+    ]
+    return opciones_anio
+
+
+def _opciones_meses_obras():
+    return [{"label": "Todos los meses", "value": "Todos"}] + [
+        {"label": nombre, "value": numero}
+        for numero, nombre in enumerate(MESES, start=1)
+    ]
+
+
 COLUMNAS_DETALLE_OBRAS = [
-    "Institución educativa", "Número de proceso", "Objeto del proceso", "Estado",
-    "Avance físico", "Monto planificado total", "Fecha inicio obra",
-    "Fecha finalización contractual", "Fecha inicio obra en ejecución",
-    "Fecha finalización obra en ejecución", "Fecha inauguración",
+    "Nombre_IE_AMIE", "Intervención", "Estado", "Avance físico",
+    "Monto planificado total", "Fecha inicio obra", "Fecha inauguración",
 ]
 
 
+def _resumir_objeto_proceso(valor):
+    """Reduce el objeto contractual a los tipos de trabajo que contiene."""
+    texto = _normalizar_encabezado_presupuesto(valor)
+    catalogo = [
+        ("INTERVENCION", "Intervención"), ("MANTENIMIENTO", "Mantenimiento"),
+        ("MEJORAMIENTO", "Mejoramiento"), ("ADECENTAMIENTO", "Adecentamiento"),
+        ("REPARACION", "Reparación"), ("READECUACION", "Readecuación"),
+        ("REHABILITACION", "Rehabilitación"), ("REMODELACION", "Remodelación"),
+        ("REESTRUCTURACION", "Reestructuración"), ("RECONSTRUCCION", "Reconstrucción"),
+        ("CONSTRUCCION", "Construcción"), ("AMPLIACION", "Ampliación"),
+        ("TRASLADO", "Traslado"), ("DEMOLICION", "Demolición"),
+    ]
+    encontrados = sorted(
+        ((texto.find(clave), etiqueta) for clave, etiqueta in catalogo if clave in texto),
+        key=lambda item: item[0],
+    )
+    etiquetas = []
+    for _, etiqueta in encontrados:
+        if etiqueta not in etiquetas:
+            etiquetas.append(etiqueta)
+    if not etiquetas:
+        return "Otra intervención"
+    if len(etiquetas) == 1:
+        return etiquetas[0]
+    return ", ".join(etiquetas[:-1]) + " y " + etiquetas[-1]
+
+
 def _detalle_obras(df):
-    detalle = df[COLUMNAS_DETALLE_OBRAS].copy()
+    columnas_base = COLUMNAS_DETALLE_OBRAS + ["Zona", "Provincia", "Cantón"]
+    detalle = df[columnas_base].copy()
+    detalle["Intervención"] = df["Objeto del proceso"].map(_resumir_objeto_proceso)
+    detalle = detalle.sort_values(
+        ["Fecha inauguración", "Fecha inicio obra"], ascending=[True, True], na_position="last"
+    )
+    detalle["id"] = detalle.index.astype(str)
+    detalle["_Zona"] = detalle.pop("Zona")
+    detalle["_Provincia"] = detalle.pop("Provincia")
+    detalle["_Cantón"] = detalle.pop("Cantón")
+    detalle["_Estado"] = detalle["Estado"]
+    detalle["_Año"] = detalle["Fecha inauguración"].dt.year.astype("Int64").astype(str)
+    detalle["_Mes_inicio"] = detalle["Fecha inicio obra"].dt.month.astype("Int64").astype(str)
+    detalle["_Mes_inauguracion"] = detalle["Fecha inauguración"].dt.month.astype("Int64").astype(str)
     detalle["Avance físico"] = detalle["Avance físico"].map(
         lambda v: "—" if pd.isna(v) else f"{v:.1f}%".replace(".", ","))
     detalle["Monto planificado total"] = detalle["Monto planificado total"].map(
         lambda v: "—" if pd.isna(v) else "$ " + f"{v:,.2f}".replace(",", "X").replace(".", ",").replace("X", "."))
-    for columna in [c for c in COLUMNAS_DETALLE_OBRAS if c.startswith("Fecha")]:
+    for columna in ["Fecha inicio obra", "Fecha inauguración"]:
         detalle[columna] = detalle[columna].dt.strftime("%d/%m/%Y").fillna("—")
     return detalle
 
 
 def contenido_obras():
-    """Tablero de obras conectado directamente con la matriz institucional en OneDrive."""
+    """Tablero de obras conectado con Catastro_inauguraciones_AMIE en Google Drive."""
     if ERROR_OBRAS or DATA_OBRAS.empty:
         return html.Div([
             html.Div([html.P("EJECUCIÓN DE OBRAS", className="content-kicker"),
@@ -11545,19 +12015,38 @@ def contenido_obras():
 
     base = DATA_OBRAS.copy()
     detalle = _detalle_obras(base)
+    opciones_anio = _opciones_periodo_obras()
+    opciones_meses = _opciones_meses_obras()
 
     filtros = html.Section([
-        html.Div([html.Label("Zona"), dcc.Dropdown(
-            id="works-filter-zone", options=_opciones_obras("Zona", "Todas"), value="Todas")]),
-        html.Div([html.Label("Provincia"), dcc.Dropdown(
-            id="works-filter-province", options=_opciones_obras("Provincia", "Todas"), value="Todas")]),
-        html.Div([html.Label("Cantón"), dcc.Dropdown(
-            id="works-filter-canton", options=_opciones_obras("Cantón", "Todos"), value="Todos")]),
-        html.Div([html.Label("Estado de la intervención"), dcc.Dropdown(
-            id="works-filter-state", options=_opciones_obras("Estado", "Todos"), value="Todos")]),
-        html.Article([html.Span("Intervenciones"),
-                      html.Strong(formato_valor(len(base)), id="works-intervention-count")],
-                     className="works-filter-count"),
+        html.Div([
+            html.Div([html.Span("CONSULTA TERRITORIAL"), html.H2("Filtros de intervenciones")]),
+            html.Div([
+                html.P("Seleccione uno o varios criterios para actualizar toda la información."),
+                html.Button("Limpiar filtros", id="works-clear-filters", n_clicks=0,
+                            className="works-clear-button"),
+            ], className="works-filter-heading-actions"),
+        ], className="works-filter-heading"),
+        html.Div([
+            html.Div([html.Label("Zona"), dcc.Dropdown(
+                id="works-filter-zone", options=_opciones_obras("Zona", "Todas"), value="Todas",
+                clearable=False)], className="works-filter-field"),
+            html.Div([html.Label("Provincia"), dcc.Dropdown(
+                id="works-filter-province", options=_opciones_obras("Provincia", "Todas"), value="Todas",
+                clearable=False)], className="works-filter-field"),
+            html.Div([html.Label("Cantón"), dcc.Dropdown(
+                id="works-filter-canton", options=_opciones_obras("Cantón", "Todos"), value="Todos",
+                clearable=False)], className="works-filter-field"),
+            html.Div([html.Label("Estado de la intervención"), dcc.Dropdown(
+                id="works-filter-state", options=_opciones_obras("Estado", "Todos"), value="Todos",
+                clearable=False)], className="works-filter-field"),
+            html.Div([html.Label("Año de inauguración"), dcc.Dropdown(
+                id="works-filter-year", options=opciones_anio, value="Todos", clearable=False)],
+                className="works-filter-field works-period-filter"),
+            html.Article([html.Span("Intervenciones"),
+                          html.Strong(formato_valor(len(base)), id="works-intervention-count")],
+                         className="works-filter-count"),
+        ], className="works-filter-grid"),
     ], className="works-filters")
 
     resumen = html.Div([
@@ -11571,24 +12060,44 @@ def contenido_obras():
     reporte = html.Div([
         html.Div([html.H2("Reporte detallado"), html.Span(f"{len(detalle):,} registros".replace(",", "."),
                                                            id="works-table-count")], className="works-table-heading"),
+        html.Div([
+            html.Span("Filtrar las columnas de fecha por mes", className="works-table-date-title"),
+            html.Div([html.Label("Fecha inicio obra"), dcc.Dropdown(
+                id="works-filter-start-month", options=opciones_meses, value="Todos",
+                clearable=False)], className="works-table-date-field"),
+            html.Div([html.Label("Fecha inauguración"), dcc.Dropdown(
+                id="works-filter-opening-month", options=opciones_meses, value="Todos",
+                clearable=False)], className="works-table-date-field"),
+        ], className="works-table-date-filters"),
         dash_table.DataTable(
             id="works-detail-table", data=detalle.to_dict("records"),
-            columns=[{"name": c, "id": c} for c in detalle.columns], page_size=20,
+            columns=[{"name": c, "id": c} for c in COLUMNAS_DETALLE_OBRAS], page_size=20,
             sort_action="native", filter_action="native", fixed_rows={"headers": True},
+            cell_selectable=True,
             style_table={"overflowX": "auto", "maxHeight": "650px"},
             style_cell={"fontFamily": "Arial", "fontSize": "13px", "lineHeight": "1.4", "padding": "10px",
                         "textAlign": "left", "whiteSpace": "normal", "minWidth": "120px", "maxWidth": "300px"},
             style_header={"backgroundColor": "#232D5A", "color": "white", "fontWeight": "800",
                           "fontFamily": "Arial", "fontSize": "13px"},
-            style_data_conditional=[{"if": {"row_index": "odd"}, "backgroundColor": "#F7F7FB"}],
+            style_data_conditional=[
+                {"if": {"row_index": "odd"}, "backgroundColor": "#F7F7FB"},
+                {"if": {"state": "active"}, "backgroundColor": "#E8E4FA",
+                 "border": "1px solid #4F449A"},
+            ],
         ),
+        html.Div([
+            html.Span("Seleccione una fila para ubicar la intervención en los filtros superiores."),
+            html.Button("Descargar tabla en Excel", id="works-download-button", n_clicks=0,
+                        className="works-download-button"),
+            dcc.Download(id="works-download"),
+        ], className="works-table-actions"),
     ], className="works-table-card")
 
     return html.Div([
         html.Div([html.P("EJECUCIÓN DE OBRAS", className="content-kicker"),
                   html.H1("Obras PAI y priorizadas"),
                   html.P("Seguimiento ejecutivo del avance físico, estado, territorio y posibles inauguraciones."),
-                  html.Span(f"Fuente: {OBRAS_META.get('origen', 'OneDrive')} · {OBRAS_META.get('archivo', '')}",
+                  html.Span(f"Fuente: {OBRAS_META.get('origen', 'Google Drive')} · {OBRAS_META.get('archivo', '')}",
                             className="works-source")], className="content-heading institutional-landing-header"),
         filtros,
         dcc.Tabs(id="works-tabs", value="resumen", className="works-tabs", children=[
@@ -11600,17 +12109,52 @@ def contenido_obras():
     ], className="indicator-content works-page")
 
 
+def _formato_corte_fuente(valor):
+    """Presenta fechas y períodos con una convención única y legible."""
+    texto = str(valor or "").strip()
+    if texto in {"", "nan", "NaT", "<NA>"}:
+        return "Sin fecha de corte registrada"
+
+    meses = {
+        "ene": "Enero", "enero": "Enero", "feb": "Febrero", "febrero": "Febrero",
+        "mar": "Marzo", "marzo": "Marzo", "abr": "Abril", "abril": "Abril",
+        "may": "Mayo", "mayo": "Mayo", "jun": "Junio", "junio": "Junio",
+        "jul": "Julio", "julio": "Julio", "ago": "Agosto", "agosto": "Agosto",
+        "sep": "Septiembre", "sept": "Septiembre", "septiembre": "Septiembre",
+        "oct": "Octubre", "octubre": "Octubre", "nov": "Noviembre",
+        "noviembre": "Noviembre", "dic": "Diciembre", "diciembre": "Diciembre",
+    }
+    periodo_mes = re.fullmatch(
+        r"(?i)(ene(?:ro)?|feb(?:rero)?|mar(?:zo)?|abr(?:il)?|may(?:o)?|jun(?:io)?|"
+        r"jul(?:io)?|ago(?:sto)?|sep(?:t(?:iembre)?)?|oct(?:ubre)?|nov(?:iembre)?|"
+        r"dic(?:iembre)?)\s+(?:de\s+)?(\d{4})",
+        texto,
+    )
+    if periodo_mes:
+        return f"{meses[periodo_mes.group(1).lower()]} {periodo_mes.group(2)}"
+
+    if re.fullmatch(r"\d{4}[-–]\d{4}", texto):
+        return f"Periodo {texto.replace('-', '–')}"
+    if re.fullmatch(r"\d{4}", texto):
+        return f"Año {texto}"
+
+    fecha = pd.to_datetime(texto, errors="coerce", dayfirst=True)
+    if pd.notna(fecha) and any(separador in texto for separador in ("/", "-")):
+        return fecha.strftime("%d/%m/%Y")
+    return texto
+
+
 def _ultimo_periodo_fuente(df):
     """Último período visible de una matriz de indicadores."""
     if df is None or df.empty:
         return "Sin registros disponibles"
     ordenado = df.sort_values("_orden_periodo") if "_orden_periodo" in df else df
-    for columna in ("Periodo", "Año", "Fecha de Corte", "Fecha de Transferencia"):
+    for columna in ("Fecha de Corte", "Fecha de Reporte", "Fecha de Transferencia", "Periodo", "Año"):
         if columna in ordenado:
             valores = ordenado[columna].dropna().astype(str).str.strip()
             valores = valores.loc[~valores.isin(["", "nan", "NaT", "<NA>"])]
             if not valores.empty:
-                return valores.iloc[-1]
+                return _formato_corte_fuente(valores.iloc[-1])
     return "Último archivo publicado"
 
 
@@ -11622,45 +12166,45 @@ def _fecha_meta_fuente(meta, defecto="Último archivo publicado"):
         fecha = parsedate_to_datetime(crudo)
         return fecha.strftime("%d/%m/%Y")
     except (TypeError, ValueError):
-        return crudo.split(" ")[0] if crudo else defecto
+        return _formato_corte_fuente(crudo) if crudo else defecto
 
 
 def fuentes_dashboard():
     """Inventario integral de las fuentes utilizadas por todos los módulos."""
     return [
-        ("F01", "Indicadores_PND version 1.xlsx", "MINEDEC / unidades responsables", "Plan Nacional de Desarrollo: metas, estimadores, alertas y observaciones", "OneDrive"),
-        ("F02", "kpi_estratégicos.xlsx", "MINEDEC / planificación institucional", "KPI estratégicos y su evolución por período", "OneDrive"),
-        ("F03", "KPI_INSTITUCIONALES.xlsx", "MINEDEC / unidades responsables", "KPI institucionales, metas, ejecución y observaciones", "OneDrive"),
-        ("F04", "ESIGEF_actual.xlsx", "MINEDEC / administración financiera", "Codificado, certificado, comprometido, devengado, saldo y ejecución", "OneDrive"),
-        ("F05", "Matriz de Ejecución de Obras", "MINEDEC / fuente institucional", "Intervenciones, estado, avance físico, territorio e inauguraciones", "OneDrive"),
-        ("F06", "Registros administrativos de Educación Media", "MINEDEC", "Instituciones educativas, estudiantes, docentes y escolaridad inconclusa", "Consolidado institucional"),
-        ("F07", "Registros de programas de Gestión Educativa", "MINEDEC", "SAFPI, NAP, reinserción, aulas hospitalarias y servicios educativos", "Consolidado institucional"),
-        ("F08", "Bases de recursos educativos", "MINEDEC / áreas responsables", "Alimentación, uniformes, textos, mobiliario y transporte escolar", "Local y OneDrive"),
-        ("F09", "Matrices de Educación Superior", "MINEDEC / Educación Superior", "Instituciones, estudiantes, docentes, programas y servicios", "Consolidado institucional"),
-        ("F10", "Registros administrativos de Deporte", "MINEDEC / Viceministerio del Deporte", "Alto rendimiento, deporte formativo, organismos, infraestructura y servicios", "Consolidado institucional"),
-        ("F11", "RUAC y registros administrativos de Cultura", "MINEDEC / Viceministerio de Cultura", "Artistas, gestores, organizaciones, espacios, visitas, fomento y festivales", "Consolidado institucional"),
-        ("F12", "Portales oficiales de datos abiertos", "MINEDEC, Educación Superior y Cultura", "Inventario de recursos, bases y portales públicos", "Fuentes públicas"),
-        ("F13", "Entregables de formalización", "MINEDEC / DAEI", "Manual, diccionario, fichas metodológicas y ficha de formalización", "Repositorio documental"),
+        ("F01", "Indicadores_PND version 1.xlsx", "MINEDEC / unidades responsables", "Plan Nacional de Desarrollo: metas, estimadores, alertas y observaciones", "Google Drive"),
+        ("F02", "kpi_estratégicos.xlsx", "MINEDEC / planificación institucional", "KPI estratégicos y su evolución por período", "Google Drive"),
+        ("F03", "KPI_INSTITUCIONALES.xlsx", "MINEDEC / unidades responsables", "KPI institucionales, metas, ejecución y observaciones", "Google Drive"),
+        ("F04", "ESIGEF_actual.xlsx", "MINEDEC / administración financiera", "Codificado, certificado, comprometido, devengado, saldo y ejecución", "Google Drive"),
+        ("F05", "Catastro_inauguraciones_AMIE.xlsx", "MINEDEC / fuente institucional", "Intervenciones, estado, avance físico, territorio e inauguraciones", "Google Drive"),
+        ("F06", "Registros administrativos de Educación Media", "MINEDEC", "Instituciones educativas, estudiantes, docentes y escolaridad inconclusa", "Información integrada en el panel"),
+        ("F07", "Registros de programas de Gestión Educativa", "MINEDEC", "SAFPI, NAP, reinserción, aulas hospitalarias y servicios educativos", "Información integrada en el panel"),
+        ("F08", "Bases de recursos educativos", "MINEDEC / áreas responsables", "Alimentación, uniformes, textos, mobiliario y transporte escolar", "Archivos institucionales y OneDrive"),
+        ("F09", "Matrices de Educación Superior", "MINEDEC / Educación Superior", "Instituciones, estudiantes, docentes, programas y servicios", "Información integrada en el panel"),
+        ("F10", "Registros administrativos de Deporte", "MINEDEC / Viceministerio del Deporte", "Alto rendimiento, deporte formativo, organismos, infraestructura y servicios", "Información integrada en el panel"),
+        ("F11", "RUAC y registros administrativos de Cultura", "MINEDEC / Viceministerio de Cultura", "Artistas, gestores, organizaciones, espacios, visitas, fomento y festivales", "Información integrada en el panel"),
+        ("F12", "Portales oficiales de datos abiertos", "MINEDEC, Educación Superior y Cultura", "Inventario de recursos, bases y portales públicos", "Portales públicos oficiales"),
+        ("F13", "Entregables de formalización", "MINEDEC / DAEI", "Manual, diccionario, fichas metodológicas y ficha de formalización", "Documentos técnicos disponibles en el panel"),
     ]
 
 
 def actualizacion_dashboard():
     """Cortes y reglas de actualización de cada ámbito del panel."""
     return [
-        ("F01", "Plan Nacional de Desarrollo", _ultimo_periodo_fuente(DATA_PND), "Según periodicidad del indicador", "Actualización del Excel publicado en OneDrive"),
-        ("F02", "KPI estratégicos", _ultimo_periodo_fuente(DATA_KPI), "Según periodicidad del indicador", "Actualización del Excel publicado en OneDrive"),
-        ("F03", "KPI institucionales", _ultimo_periodo_fuente(DATA_KPI_INST), "Mensual, semestral o anual según indicador", "Actualización del Excel publicado en OneDrive"),
-        ("F04", "Ejecución presupuestaria", _fecha_meta_fuente(PRESUPUESTO_META), "Diaria", "Último reporte ESIGEF disponible"),
-        ("F05", "Ejecución de Obras", _fecha_meta_fuente(OBRAS_META), "Según actualización de la matriz institucional", "Descarga directa desde OneDrive"),
-        ("F06", "Educación Media", "Año lectivo 2025–2026", "Marzo de cada año", "Consolidación de registros administrativos"),
-        ("F07", "SAFPI y NAP", "Año lectivo 2026–2027", "Julio y diciembre de cada año", "Registros administrativos MINEDEC"),
-        ("F08", "Recursos educativos y complementarios", "Año lectivo 2025–2026", "Según remisión de las áreas responsables", "Bases operativas de cada servicio"),
+        ("F01", "Plan Nacional de Desarrollo", _ultimo_periodo_fuente(DATA_PND), "Según periodicidad del indicador", "Actualización del Excel publicado en Google Drive"),
+        ("F02", "KPI estratégicos", _ultimo_periodo_fuente(DATA_KPI), "Según periodicidad del indicador", "Actualización del Excel publicado en Google Drive"),
+        ("F03", "KPI institucionales", _ultimo_periodo_fuente(DATA_KPI_INST), "Mensual, semestral o anual según indicador", "Actualización del Excel publicado en Google Drive"),
+        ("F04", "Ejecución presupuestaria", _fecha_meta_fuente(PRESUPUESTO_META), "Diaria", "Descarga del último ESIGEF publicado en Google Drive"),
+        ("F05", "Ejecución de Obras", _fecha_meta_fuente(OBRAS_META), "Según actualización de la matriz institucional", "Descarga directa desde Google Drive"),
+        ("F06", "Educación Media", "Periodo lectivo 2025–2026", "Marzo de cada año", "Integración de registros administrativos"),
+        ("F07", "SAFPI y NAP", "Periodo lectivo 2026–2027", "Julio y diciembre de cada año", "Registros administrativos MINEDEC"),
+        ("F08", "Recursos educativos y complementarios", "Periodo lectivo 2025–2026", "Según remisión de las áreas responsables", "Bases operativas de cada servicio"),
         ("F09", "Universidades y escuelas politécnicas", "Año 2025", "Septiembre de cada año", "Matriz institucional de Educación Superior"),
-        ("F10", "Institutos técnicos y tecnológicos", "II semestre 2025", "Junio de cada año", "Matriz institucional de Educación Superior"),
-        ("F11", "Deporte", "Último reporte institucional disponible", "Según reporte del área responsable", "Registros administrativos"),
+        ("F10", "Institutos técnicos y tecnológicos", "Segundo semestre 2025", "Junio de cada año", "Matriz institucional de Educación Superior"),
+        ("F11", "Deporte", "Sin fecha de corte registrada", "Según reporte del área responsable", "Registros administrativos"),
         ("F12", "Cultura: RUAC y Línea de Fomento", "21/10/2026", "Permanente o según convocatorias", "Registros administrativos"),
-        ("F13", "Cultura: repositorios y Festival de Loja", "Diciembre de 2025", "Trimestral o anual según producto", "Registros administrativos"),
-        ("F14", "Inventario y Documentación", "Versión publicada del panel", "Cuando cambia una fuente, enlace o entregable", "Actualización administrada por DAEI"),
+        ("F13", "Cultura: repositorios y Festival de Loja", "Diciembre 2025", "Trimestral o anual según producto", "Registros administrativos"),
+        ("F14", "Inventario y Documentación", "Versión vigente del panel", "Cuando cambia una fuente, enlace o entregable", "Actualización administrada por DAEI"),
     ]
 
 
@@ -11735,12 +12279,12 @@ def contenido_fuentes():
             dcc.Tab(label="Inventario de fuentes", value="inventario", children=html.Div([
                 html.H2("Fuentes institucionales y públicas"),
                 _tabla_institucional(fuentes_dashboard(),
-                    ["Código", "Fuente", "Responsable", "Información aportada", "Estado"], "source-inventory-table"),
+                    ["Código", "Fuente", "Responsable", "Información aportada", "Origen / disponibilidad"], "source-inventory-table"),
             ], className="source-section")),
             dcc.Tab(label="Actualización de información", value="actualizacion", children=html.Div([
                 html.H2("Frecuencia y mecanismo de actualización"),
                 _tabla_institucional(actualizacion_dashboard(),
-                    ["Código", "Módulo / información", "Corte visible", "Frecuencia", "Mecanismo"],
+                    ["Código", "Módulo / información", "Último corte disponible", "Frecuencia", "Mecanismo"],
                     "source-update-table"),
             ], className="source-section")),
             dcc.Tab(label="Diccionario de datos", value="diccionario", children=html.Div([
@@ -12068,18 +12612,84 @@ def mostrar_pantalla(seccion, vice, indicador, _version):
     Output("works-timeline", "figure"),
     Output("works-detail-table", "data"),
     Output("works-table-count", "children"),
+    Output("works-detail-table", "filter_query"),
+    Output("works-filter-zone", "value"),
+    Output("works-filter-province", "value"),
+    Output("works-filter-canton", "value"),
+    Output("works-filter-state", "value"),
+    Output("works-filter-year", "value"),
+    Output("works-filter-start-month", "value"),
+    Output("works-filter-opening-month", "value"),
     Input("works-filter-zone", "value"),
     Input("works-filter-province", "value"),
     Input("works-filter-canton", "value"),
     Input("works-filter-state", "value"),
+    Input("works-filter-year", "value"),
+    Input("works-filter-start-month", "value"),
+    Input("works-filter-opening-month", "value"),
+    Input("works-detail-table", "active_cell"),
+    Input("works-clear-filters", "n_clicks"),
+    State("works-detail-table", "data"),
 )
-def filtrar_tablero_obras(zona, provincia, canton, estado):
-    filtrado = _filtrar_obras(DATA_OBRAS, zona, provincia, canton, estado)
+def filtrar_tablero_obras(zona, provincia, canton, estado, anio, mes_inicio,
+                          mes_inauguracion, celda_activa, _limpiar, datos_tabla):
+    salidas_filtros = [no_update] * 7
+    salida_filtro_tabla = no_update
+    if ctx.triggered_id == "works-clear-filters":
+        zona, provincia, canton = "Todas", "Todas", "Todos"
+        estado, anio = "Todos", "Todos"
+        mes_inicio = mes_inauguracion = "Todos"
+        salidas_filtros = [
+            zona, provincia, canton, estado, anio, mes_inicio, mes_inauguracion
+        ]
+        salida_filtro_tabla = ""
+    elif ctx.triggered_id == "works-detail-table" and celda_activa and datos_tabla:
+        id_fila = str(celda_activa.get("row_id", ""))
+        fila = next((registro for registro in datos_tabla
+                     if str(registro.get("id", "")) == id_fila), None)
+        if fila is None and isinstance(celda_activa.get("row"), int):
+            posicion = celda_activa["row"]
+            fila = datos_tabla[posicion] if 0 <= posicion < len(datos_tabla) else None
+        if fila:
+            zona = fila.get("_Zona") or "Todas"
+            provincia = fila.get("_Provincia") or "Todas"
+            canton = fila.get("_Cantón") or "Todos"
+            estado = fila.get("_Estado") or "Todos"
+            anio_fila = fila.get("_Año")
+            anio = int(anio_fila) if str(anio_fila).isdigit() else "Todos"
+            mes_inicio_fila = fila.get("_Mes_inicio")
+            mes_inauguracion_fila = fila.get("_Mes_inauguracion")
+            mes_inicio = int(mes_inicio_fila) if str(mes_inicio_fila).isdigit() else "Todos"
+            mes_inauguracion = (int(mes_inauguracion_fila)
+                                if str(mes_inauguracion_fila).isdigit() else "Todos")
+            salidas_filtros = [
+                zona, provincia, canton, estado, anio, mes_inicio, mes_inauguracion
+            ]
+
+    filtrado = _filtrar_obras(
+        DATA_OBRAS, zona, provincia, canton, estado, anio, mes_inicio, mes_inauguracion
+    )
     detalle = _detalle_obras(filtrado)
     cantidad = f"{len(detalle):,} registros".replace(",", ".")
     return (formato_valor(len(filtrado)), _figura_mapa_obras(filtrado),
-            _figura_cronograma_obras(filtrado),
-            detalle.to_dict("records"), cantidad)
+            _figura_cronograma_obras(filtrado, anio),
+            detalle.to_dict("records"), cantidad, salida_filtro_tabla, *salidas_filtros)
+
+
+@app.callback(
+    Output("works-download", "data"),
+    Input("works-download-button", "n_clicks"),
+    State("works-detail-table", "data"),
+    prevent_initial_call=True,
+)
+def descargar_tabla_obras(n_clicks, datos_tabla):
+    if not n_clicks or not datos_tabla:
+        return no_update
+    descarga = pd.DataFrame(datos_tabla)
+    descarga = descarga[[c for c in COLUMNAS_DETALLE_OBRAS if c in descarga.columns]]
+    return dcc.send_data_frame(
+        descarga.to_excel, "reporte_obras_filtrado.xlsx", index=False, sheet_name="Obras"
+    )
 
 
 @app.callback(
