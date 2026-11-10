@@ -11980,8 +11980,10 @@ def _detalle_obras(df):
     columnas_base = COLUMNAS_DETALLE_OBRAS + ["Zona", "Provincia", "Cantón"]
     detalle = df[columnas_base].copy()
     detalle["Intervención"] = df["Objeto del proceso"].map(_resumir_objeto_proceso)
+    # Ordenar principalmente por el inicio de la obra, desde la fecha más
+    # reciente, y conservar el mismo orden después de aplicar filtros.
     detalle = detalle.sort_values(
-        ["Fecha inauguración", "Fecha inicio obra"], ascending=[True, True], na_position="last"
+        ["Fecha inicio obra", "Fecha inauguración"], ascending=[False, False], na_position="last"
     )
     detalle["id"] = detalle.index.astype(str)
     detalle["_Zona"] = detalle.pop("Zona")
